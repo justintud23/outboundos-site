@@ -29,7 +29,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'File must be a .csv' }, { status: 400 })
   }
 
-  const csvContent = await file.text()
+  let csvContent: string
+  try {
+    csvContent = await file.text()
+  } catch {
+    return NextResponse.json({ error: 'Failed to read file contents' }, { status: 400 })
+  }
 
   if (!csvContent.trim()) {
     return NextResponse.json({ error: 'CSV file is empty' }, { status: 400 })
