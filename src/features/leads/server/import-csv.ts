@@ -37,7 +37,7 @@ export async function importCsv({
 
   if (rows.length === 0) {
     const updatedBatch = await prisma.importBatch.update({
-      where: { id: batch.id },
+      where: { id: batch.id, organizationId },
       data: { status: 'FAILED', errorLog: [{ row: 0, message: 'CSV file contains no data rows' }] },
     })
     return {
@@ -128,7 +128,7 @@ export async function importCsv({
 
   // Update batch with final counts
   const updatedBatch = await prisma.importBatch.update({
-    where: { id: batch.id },
+    where: { id: batch.id, organizationId },
     data: {
       successCount: leads.length,
       errorCount: errors.length,

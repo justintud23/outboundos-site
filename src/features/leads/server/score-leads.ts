@@ -69,6 +69,7 @@ export async function scoreLeads({
       })
       results.push({ ...score, success: true })
     } catch (err) {
+      console.error('Failed to persist score for lead', score.leadId, err)
       results.push({
         leadId: score.leadId,
         score: score.score,

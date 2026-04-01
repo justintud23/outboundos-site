@@ -43,7 +43,10 @@ Respond with ONLY the JSON array. No markdown, no explanation.`
       if (!Array.isArray(raw)) {
         throw new SyntaxError('Expected JSON array, got: ' + typeof raw)
       }
-      return raw as LeadScoreOutput[]
+      return (raw as LeadScoreOutput[]).map((item) => ({
+        ...item,
+        score: Math.max(0, Math.min(100, item.score)),
+      }))
     } catch (err) {
       // Fallback: return 0 score for all leads so import never hard-fails
       return leads.map((l) => ({
