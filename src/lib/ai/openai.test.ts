@@ -121,3 +121,76 @@ describe('getAIProvider', () => {
     if (original !== undefined) process.env['OPENAI_API_KEY'] = original
   })
 })
+
+describe('OpenAIProvider.classifyReply', () => {
+  let provider: OpenAIProvider
+  let mockCreate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    provider = new OpenAIProvider('test-key', 'gpt-4o')
+    const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
+      chat: { completions: { create: ReturnType<typeof vi.fn> } }
+    }
+    mockCreate = client.chat.completions.create
+  })
+
+  it('returns classification and confidence from AI response', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ classification: 'POSITIVE', confidence: 0.95 }) } }],
+    })
+
+    const result = await provider.classifyReply({ rawBody: 'I am very interested!' }, 'classify prompt')
+
+    expect(result).toEqual({ classification: 'POSITIVE', confidence: 0.95 })
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ temperature: 0.1 }))
+  })
+
+  it('returns UNKNOWN with 0 confidence on parse failure', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: 'not json' } }],
+    })
+
+    const result = await provider.classifyReply({ rawBody: 'some reply' }, 'classify prompt')
+
+    expect(result).toEqual({ classification: 'UNKNOWN', confidence: 0 })
+  })
+
+  it('returns UNKNOWN with 0 confidence on unrecognised classification value', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ classification: 'GIBBERISH', confidence: 0.9 }) } }],
+    })
+
+    const result = await provider.classifyReply({ rawBody: 'some reply' }, 'classify prompt')
+
+    expect(result).toEqual({ classification: 'UNKNOWN', confidence: 0 })
+  })
+
+  it('clamps confidence to 0–1 range', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ classification: 'NEGATIVE', confidence: 1.5 }) } }],
+    })
+
+    const result = await provider.classifyReply({ rawBody: 'Not interested' }, 'classify prompt')
+
+    expect(result.confidence).toBe(1)
+    expect(result.classification).toBe('NEGATIVE')
+  })
+
+  it('passes rawBody as user message and promptTemplate as system message', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ classification: 'OUT_OF_OFFICE', confidence: 0.99 }) } }],
+    })
+
+    await provider.classifyReply({ rawBody: 'I am on holiday' }, 'system prompt here')
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          { role: 'system', content: 'system prompt here' },
+          { role: 'user', content: 'I am on holiday' },
+        ]),
+      }),
+    )
+  })
+})

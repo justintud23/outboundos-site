@@ -27,6 +27,24 @@ export interface EmailDraftOutput {
   body: string
 }
 
+export interface ReplyClassifyInput {
+  rawBody: string
+}
+
+export type ReplyClassificationValue =
+  | 'POSITIVE'
+  | 'NEUTRAL'
+  | 'NEGATIVE'
+  | 'OUT_OF_OFFICE'
+  | 'UNSUBSCRIBE_REQUEST'
+  | 'REFERRAL'
+  | 'UNKNOWN'
+
+export interface ReplyClassifyOutput {
+  classification: ReplyClassificationValue
+  confidence: number  // 0–1
+}
+
 export interface AIProvider {
   scoreLeads(
     leads: LeadScoreInput[],
@@ -37,4 +55,9 @@ export interface AIProvider {
     lead: EmailDraftInput,
     promptTemplate: string,
   ): Promise<EmailDraftOutput>
+
+  classifyReply(
+    input: ReplyClassifyInput,
+    promptTemplate: string,
+  ): Promise<ReplyClassifyOutput>
 }

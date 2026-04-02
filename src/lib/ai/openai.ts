@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput } from './provider'
+import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
@@ -88,6 +88,49 @@ No markdown, no explanation.`
     } catch (err) {
       console.warn('[OpenAIProvider.draftEmail] fallback triggered', err)
       return { subject: `Draft for ${lead.email}`, body: '' }
+    }
+  }
+
+  async classifyReply(
+    input: ReplyClassifyInput,
+    promptTemplate: string,
+  ): Promise<ReplyClassifyOutput> {
+    const VALID: ReplyClassificationValue[] = [
+      'POSITIVE', 'NEUTRAL', 'NEGATIVE', 'OUT_OF_OFFICE',
+      'UNSUBSCRIBE_REQUEST', 'REFERRAL', 'UNKNOWN',
+    ]
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: promptTemplate },
+          { role: 'user', content: input.rawBody },
+        ],
+        temperature: 0.1,
+      })
+
+      const content = response.choices[0]?.message.content ?? ''
+      const raw = JSON.parse(content) as { classification?: unknown; confidence?: unknown }
+
+      if (
+        typeof raw.classification !== 'string' ||
+        !VALID.includes(raw.classification as ReplyClassificationValue)
+      ) {
+        throw new SyntaxError(`Invalid classification: ${raw.classification}`)
+      }
+
+      const confidence = typeof raw.confidence === 'number'
+        ? Math.max(0, Math.min(1, raw.confidence))
+        : 0.5
+
+      return {
+        classification: raw.classification as ReplyClassificationValue,
+        confidence,
+      }
+    } catch (err) {
+      console.warn('[OpenAIProvider.classifyReply] fallback triggered', err)
+      return { classification: 'UNKNOWN', confidence: 0 }
     }
   }
 }

@@ -5,4 +5,7 @@ export type {
   LeadScoreOutput,
   EmailDraftInput,
   EmailDraftOutput,
+  ReplyClassifyInput,
+  ReplyClassifyOutput,
+  ReplyClassificationValue,
 } from './provider'
