@@ -51,3 +51,11 @@ export class DraftNotFoundError extends Error {
     this.name = 'DraftNotFoundError'
   }
 }
+
+export class LeadNotFoundError extends Error {
+  constructor() {
+    super('Lead not found.')
+    Object.setPrototypeOf(this, LeadNotFoundError.prototype)
+    this.name = 'LeadNotFoundError'
+  }
+}

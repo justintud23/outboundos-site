@@ -15,7 +15,7 @@ vi.mock('@/lib/ai', () => ({
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { generateDraft } from './generate-draft'
-import { PendingDraftExistsError } from '../types'
+import { PendingDraftExistsError, LeadNotFoundError } from '../types'
 
 const mockPrisma = prisma as unknown as {
   lead: { findFirst: ReturnType<typeof vi.fn> }
@@ -131,11 +131,12 @@ describe('generateDraft', () => {
     )
 
     await expect(generateDraft(input)).rejects.toBeInstanceOf(PendingDraftExistsError)
+    expect(mockDraftEmail).toHaveBeenCalledTimes(1)
   })
 
   it('throws if lead is not found', async () => {
     mockPrisma.lead.findFirst.mockResolvedValue(null)
 
-    await expect(generateDraft(input)).rejects.toThrow('Lead not found')
+    await expect(generateDraft(input)).rejects.toBeInstanceOf(LeadNotFoundError)
   })
 })

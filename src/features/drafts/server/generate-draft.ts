@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import type { DraftDTO } from '../types'
-import { PendingDraftExistsError } from '../types'
+import { PendingDraftExistsError, LeadNotFoundError } from '../types'
 
 const FALLBACK_DRAFT_PROMPT = `You are a personalized outbound sales email writer. Write a short, direct cold email for the lead provided. Be conversational and focus on value. Keep it under 150 words. Return only valid JSON.`
 
@@ -30,7 +30,7 @@ export async function generateDraft({
   })
 
   if (!lead) {
-    throw new Error('Lead not found')
+    throw new LeadNotFoundError()
   }
 
   // Fetch active EMAIL_DRAFT template; null = use fallback
