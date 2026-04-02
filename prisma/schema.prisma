@@ -368,6 +368,7 @@ model MessageEvent {
   outboundMessageId String
   outboundMessage   OutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
 
+  sgEventId         String?         @unique
   eventType         MessageEventType
   providerEventType String?
   providerTimestamp DateTime?
