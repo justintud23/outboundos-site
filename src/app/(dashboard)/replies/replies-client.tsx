@@ -38,11 +38,13 @@ export function RepliesClient({ initialReplies, initialTotal }: RepliesClientPro
       ? initialReplies
       : initialReplies.filter((r) => r.classification === filter)
 
+  const displayCount = filter === 'ALL' ? initialTotal : filtered.length
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <span className="text-[#94a3b8] text-sm">
-          {initialTotal.toLocaleString()} repl{initialTotal !== 1 ? 'ies' : 'y'}
+          {displayCount.toLocaleString()} repl{displayCount !== 1 ? 'ies' : 'y'}
         </span>
 
         <select

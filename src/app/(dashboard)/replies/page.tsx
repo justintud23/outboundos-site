@@ -13,7 +13,7 @@ export default async function RepliesPage() {
   }
 
   const org = await resolveOrganization(orgId)
-  const { replies, total } = await getReplies({ organizationId: org.id })
+  const { replies, total } = await getReplies({ organizationId: org.id, limit: 200 })
 
   return (
     <>
