@@ -21,6 +21,7 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
   const [draftsByLeadId, setDraftsByLeadId] = useState<Map<string, DraftDTO>>(new Map())
   const [reviewingDraft, setReviewingDraft] = useState<DraftDTO | null>(null)
   const [generatingLeadId, setGeneratingLeadId] = useState<string | null>(null)
+  const [generationError, setGenerationError] = useState<string | null>(null)
 
   // pendingDrafts: leadId → draftId (passed to table for display logic)
   const pendingDrafts = new Map(
@@ -41,6 +42,7 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
 
   async function handleGenerateDraft(leadId: string) {
     setGeneratingLeadId(leadId)
+    setGenerationError(null)
     try {
       const res = await fetch('/api/drafts/generate', {
         method: 'POST',
@@ -77,7 +79,11 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
         return
       }
 
-      if (!res.ok) return
+      if (!res.ok) {
+        const errData = (await res.json().catch(() => null)) as { error?: string } | null
+        setGenerationError(errData?.error ?? 'Failed to generate draft. Please try again.')
+        return
+      }
 
       const draft = data as DraftDTO
       setDraftsByLeadId((prev) => new Map(prev).set(leadId, draft))
@@ -115,6 +121,9 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
               <span className="text-[#10b981] text-xs">
                 + {lastBatch.successCount} imported
               </span>
+            )}
+            {generationError && (
+              <span className="text-[#ef4444] text-xs">{generationError}</span>
             )}
           </div>
           <CsvUploadForm onSuccess={handleImportSuccess} />
