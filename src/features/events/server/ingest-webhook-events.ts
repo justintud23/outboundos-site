@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import type { SendGridRawEvent } from '../types'
 import { mapEventType } from './map-event-type'
@@ -18,13 +19,13 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
     const eventType = mapEventType(event.event)
     if (!eventType) { skipped++; continue }
 
-    const message = await prisma.outboundMessage.findFirst({
+    const message = await prisma.outboundMessage.findUnique({
       where: { draftId: event.draftId },
       select: { id: true, organizationId: true },
     })
 
     if (!message) {
-      console.warn(`[ingestWebhookEvents] OutboundMessage not found for draftId=${event.draftId}, sgEventId=${event.sg_event_id}`)
+      console.error(`[ingestWebhookEvents] OutboundMessage not found for draftId=${event.draftId}, sgEventId=${event.sg_event_id}`)
       skipped++
       continue
     }
@@ -42,7 +43,7 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
         eventType,
         providerEventType: event.event,
         providerTimestamp,
-        rawPayload:        event as object,
+        rawPayload:        event as unknown as Prisma.InputJsonValue,
       },
       update: {},
     })

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    outboundMessage: { findFirst: vi.fn() },
+    outboundMessage: { findUnique: vi.fn() },
     messageEvent:    { upsert: vi.fn() },
   },
 }))
@@ -10,7 +10,7 @@ vi.mock('@/lib/db/prisma', () => ({
 import { prisma } from '@/lib/db/prisma'
 import { ingestWebhookEvents } from './ingest-webhook-events'
 
-const mockFindFirst = prisma.outboundMessage.findFirst as ReturnType<typeof vi.fn>
+const mockFindUnique = prisma.outboundMessage.findUnique as ReturnType<typeof vi.fn>
 const mockUpsert    = prisma.messageEvent.upsert    as ReturnType<typeof vi.fn>
 
 const baseMessage = {
@@ -22,7 +22,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('ingestWebhookEvents', () => {
   it('creates a MessageEvent for a valid delivered event', async () => {
-    mockFindFirst.mockResolvedValue(baseMessage)
+    mockFindUnique.mockResolvedValue(baseMessage)
     mockUpsert.mockResolvedValue({})
 
     const result = await ingestWebhookEvents([
@@ -35,7 +35,7 @@ describe('ingestWebhookEvents', () => {
     ])
 
     expect(result).toEqual({ processed: 1, skipped: 0 })
-    expect(mockFindFirst).toHaveBeenCalledWith({
+    expect(mockFindUnique).toHaveBeenCalledWith({
       where: { draftId: 'draft-1' },
       select: { id: true, organizationId: true },
     })
@@ -63,24 +63,24 @@ describe('ingestWebhookEvents', () => {
   it('skips events with no draftId', async () => {
     const result = await ingestWebhookEvents([{ event: 'delivered', sg_event_id: 'evt-2' }])
     expect(result).toEqual({ processed: 0, skipped: 1 })
-    expect(mockFindFirst).not.toHaveBeenCalled()
+    expect(mockFindUnique).not.toHaveBeenCalled()
   })
 
   it('skips events with unknown event type', async () => {
     const result = await ingestWebhookEvents([{ event: 'processed', sg_event_id: 'evt-3', draftId: 'draft-1' }])
     expect(result).toEqual({ processed: 0, skipped: 1 })
-    expect(mockFindFirst).not.toHaveBeenCalled()
+    expect(mockFindUnique).not.toHaveBeenCalled()
   })
 
   it('skips events where OutboundMessage is not found', async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindUnique.mockResolvedValue(null)
     const result = await ingestWebhookEvents([{ event: 'delivered', sg_event_id: 'evt-4', draftId: 'draft-missing' }])
     expect(result).toEqual({ processed: 0, skipped: 1 })
     expect(mockUpsert).not.toHaveBeenCalled()
   })
 
   it('processes multiple events and counts correctly', async () => {
-    mockFindFirst.mockResolvedValue(baseMessage)
+    mockFindUnique.mockResolvedValue(baseMessage)
     mockUpsert.mockResolvedValue({})
 
     const result = await ingestWebhookEvents([
@@ -93,7 +93,7 @@ describe('ingestWebhookEvents', () => {
   })
 
   it('stores the full raw payload in rawPayload', async () => {
-    mockFindFirst.mockResolvedValue(baseMessage)
+    mockFindUnique.mockResolvedValue(baseMessage)
     mockUpsert.mockResolvedValue({})
 
     const rawEvent = { event: 'click', sg_event_id: 'evt-8', draftId: 'draft-1', url: 'https://example.com', timestamp: 1700000003 }
@@ -102,6 +102,19 @@ describe('ingestWebhookEvents', () => {
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ rawPayload: rawEvent }),
+      }),
+    )
+  })
+
+  it('sets providerTimestamp to null when timestamp is absent', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([{ event: 'open', sg_event_id: 'evt-9', draftId: 'draft-1' }])
+
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ providerTimestamp: null }),
       }),
     )
   })
