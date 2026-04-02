@@ -53,7 +53,7 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
             ? 'No active mailbox configured. Add a mailbox in Settings.'
             : data?.code === 'DRAFT_ALREADY_SENT'
               ? 'This draft has already been sent.'
-              : 'Failed to send — please try again.'
+              : (data?.error ?? 'Failed to send — please try again.')
       setSendError(message)
       return
     }
