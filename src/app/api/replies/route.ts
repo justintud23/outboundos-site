@@ -14,8 +14,6 @@ export async function POST(request: Request) {
     )
   }
 
-  const org = await resolveOrganization(orgId)
-
   let body: unknown
   try {
     body = await request.json()
@@ -31,7 +29,25 @@ export async function POST(request: Request) {
       receivedAt?: string
     }
 
-  const receivedAt = receivedAtRaw !== undefined ? new Date(receivedAtRaw) : undefined
+  if (!fromEmail || typeof fromEmail !== 'string' || !rawBody || typeof rawBody !== 'string') {
+    return NextResponse.json(
+      { error: 'fromEmail and rawBody are required' },
+      { status: 400 },
+    )
+  }
+
+  let receivedAt: Date | undefined
+  if (receivedAtRaw !== undefined) {
+    receivedAt = new Date(receivedAtRaw)
+    if (isNaN(receivedAt.getTime())) {
+      return NextResponse.json(
+        { error: 'receivedAt must be a valid ISO 8601 date string' },
+        { status: 400 },
+      )
+    }
+  }
+
+  const org = await resolveOrganization(orgId)
 
   try {
     const reply = await ingestReply({

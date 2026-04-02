@@ -112,9 +112,33 @@ describe('POST /api/replies', () => {
     expect(res.status).toBe(500)
     const json = await res.json()
     expect(json).toHaveProperty('error')
-    expect(consoleSpy).toHaveBeenCalled()
+    expect(consoleSpy).toHaveBeenCalledWith('[POST /api/replies]', expect.any(Error))
 
     consoleSpy.mockRestore()
+  })
+
+  it('returns 400 when fromEmail is missing', async () => {
+    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id', userId: 'user-1' })
+
+    const req = makeRequest({ rawBody: 'hi' })
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json).toEqual({ error: 'fromEmail and rawBody are required' })
+    expect(mockResolveOrganization).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 when receivedAt is not a valid date string', async () => {
+    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id', userId: 'user-1' })
+
+    const req = makeRequest({ fromEmail: 'lead@acme.com', rawBody: 'hi', receivedAt: 'not-a-date' })
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json).toEqual({ error: 'receivedAt must be a valid ISO 8601 date string' })
+    expect(mockResolveOrganization).not.toHaveBeenCalled()
   })
 
   it('parses receivedAt ISO string to Date before passing to ingestReply', async () => {
