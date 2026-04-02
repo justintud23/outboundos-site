@@ -4,13 +4,15 @@ import type { DraftDTO, DraftWithLeadDTO } from '@/features/drafts/types'
 interface DraftsTableProps {
   drafts: DraftWithLeadDTO[]
   onReview: (draft: DraftWithLeadDTO) => void
+  onSend?: (draft: DraftWithLeadDTO) => Promise<void>
+  sendingDraftId?: string | null
 }
 
-export function DraftsTable({ drafts, onReview }: DraftsTableProps) {
+export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: DraftsTableProps) {
   if (drafts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-[#94a3b8] text-sm">No drafts pending review</p>
+        <p className="text-[#94a3b8] text-sm">No drafts</p>
       </div>
     )
   }
@@ -28,36 +30,51 @@ export function DraftsTable({ drafts, onReview }: DraftsTableProps) {
           </tr>
         </thead>
         <tbody>
-          {drafts.map((draft) => (
-            <tr key={draft.id} className="border-b border-[#1e2130] hover:bg-[#1a1d2e] transition-colors">
-              <td className="px-4 py-3">
-                <div className="text-[#e2e8f0]">
-                  {[draft.lead.firstName, draft.lead.lastName].filter(Boolean).join(' ') || draft.lead.email}
-                </div>
-                <div className="text-[#94a3b8] text-xs">{draft.lead.email}</div>
-              </td>
-              <td className="px-4 py-3">
-                <span className="text-[#e2e8f0] truncate block max-w-[200px]">{draft.subject}</span>
-              </td>
-              <td className="px-4 py-3">
-                <StatusBadge status={draft.status} />
-              </td>
-              <td className="px-4 py-3 text-[#94a3b8] hidden md:table-cell">
-                {new Date(draft.createdAt).toLocaleDateString('en-US')}
-              </td>
-              <td className="px-4 py-3">
-                {draft.status === 'PENDING_REVIEW' && (
-                  <button
-                    onClick={() => onReview(draft)}
-                    aria-label={`Review draft for ${[draft.lead.firstName, draft.lead.lastName].filter(Boolean).join(' ') || draft.lead.email}`}
-                    className="text-xs px-3 py-1 rounded bg-[#1e2130] hover:bg-[#6366f1] text-[#e2e8f0] transition-colors"
-                  >
-                    Review
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
+          {drafts.map((draft) => {
+            const displayName =
+              [draft.lead.firstName, draft.lead.lastName].filter(Boolean).join(' ') ||
+              draft.lead.email
+            const isSending = sendingDraftId === draft.id
+
+            return (
+              <tr key={draft.id} className="border-b border-[#1e2130] hover:bg-[#1a1d2e] transition-colors">
+                <td className="px-4 py-3">
+                  <div className="text-[#e2e8f0]">{displayName}</div>
+                  <div className="text-[#94a3b8] text-xs">{draft.lead.email}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="text-[#e2e8f0] truncate block max-w-[200px]">{draft.subject}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={draft.status} />
+                </td>
+                <td className="px-4 py-3 text-[#94a3b8] hidden md:table-cell">
+                  {new Date(draft.createdAt).toLocaleDateString('en-US')}
+                </td>
+                <td className="px-4 py-3">
+                  {draft.status === 'PENDING_REVIEW' && (
+                    <button
+                      onClick={() => onReview(draft)}
+                      aria-label={`Review draft for ${displayName}`}
+                      className="text-xs px-3 py-1 rounded bg-[#1e2130] hover:bg-[#6366f1] text-[#e2e8f0] transition-colors"
+                    >
+                      Review
+                    </button>
+                  )}
+                  {draft.status === 'APPROVED' && onSend && (
+                    <button
+                      onClick={() => void onSend(draft)}
+                      disabled={isSending}
+                      aria-label={`Send draft to ${displayName}`}
+                      className="text-xs px-3 py-1 rounded bg-[#1e3a2e] hover:bg-[#166534] text-[#4ade80] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSending ? 'Sending…' : 'Send'}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
