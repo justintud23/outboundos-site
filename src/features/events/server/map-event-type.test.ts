@@ -19,5 +19,7 @@ describe('mapEventType', () => {
     expect(mapEventType('processed')).toBeNull()
     expect(mapEventType('group_unsubscribe')).toBeNull()
     expect(mapEventType('')).toBeNull()
+    expect(mapEventType('Delivered')).toBeNull()
+    expect(mapEventType('OPEN')).toBeNull()
   })
 })

@@ -1,3 +1,5 @@
+import type { MessageEventType, Prisma } from '@prisma/client'
+
 // Raw shape of a single SendGrid event webhook payload.
 // customArgs (draftId, leadId) are merged into the top level by SendGrid.
 export interface SendGridRawEvent {
@@ -17,9 +19,9 @@ export interface MessageEventDTO {
   organizationId: string
   outboundMessageId: string
   sgEventId: string | null
-  eventType: string
+  eventType: MessageEventType
   providerEventType: string | null
   providerTimestamp: Date | null
-  rawPayload: unknown
+  rawPayload: Prisma.JsonValue
   createdAt: Date
 }
