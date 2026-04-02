@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     lead:            { findUnique: vi.fn() },
-    outboundMessage: { findUnique: vi.fn() },
+    outboundMessage: { findFirst: vi.fn() },
     promptTemplate:  { findFirst: vi.fn() },
     inboundReply:    { create: vi.fn() },
   },
@@ -19,7 +19,7 @@ import { ingestReply } from './ingest-reply'
 import { LeadNotFoundByEmailError } from '../types'
 
 const mockLeadFindUnique    = prisma.lead.findUnique            as ReturnType<typeof vi.fn>
-const mockMsgFindUnique     = prisma.outboundMessage.findUnique as ReturnType<typeof vi.fn>
+const mockMsgFindFirst      = prisma.outboundMessage.findFirst  as ReturnType<typeof vi.fn>
 const mockTemplateFindFirst = prisma.promptTemplate.findFirst   as ReturnType<typeof vi.fn>
 const mockReplyCreate       = prisma.inboundReply.create        as ReturnType<typeof vi.fn>
 const mockGetAIProvider     = getAIProvider                     as ReturnType<typeof vi.fn>
@@ -52,7 +52,7 @@ beforeEach(() => {
 describe('ingestReply', () => {
   it('creates an InboundReply with classification and outboundMessage link', async () => {
     mockLeadFindUnique.mockResolvedValue(baseLead)
-    mockMsgFindUnique.mockResolvedValue(baseMessage)
+    mockMsgFindFirst.mockResolvedValue(baseMessage)
     mockProvider('POSITIVE', 0.92)
     mockReplyCreate.mockResolvedValue(baseReply)
 
@@ -67,8 +67,8 @@ describe('ingestReply', () => {
       where: { organizationId_email: { organizationId: 'org-1', email: 'lead@acme.com' } },
       select: { id: true },
     })
-    expect(mockMsgFindUnique).toHaveBeenCalledWith({
-      where: { sgMessageId: 'sg-msg-abc' },
+    expect(mockMsgFindFirst).toHaveBeenCalledWith({
+      where: { sgMessageId: 'sg-msg-abc', organizationId: 'org-1' },
       select: { id: true },
     })
     expect(mockReplyCreate).toHaveBeenCalledWith({
@@ -100,7 +100,7 @@ describe('ingestReply', () => {
 
     await ingestReply({ organizationId: 'org-1', fromEmail: 'lead@acme.com', rawBody: 'Thanks' })
 
-    expect(mockMsgFindUnique).not.toHaveBeenCalled()
+    expect(mockMsgFindFirst).not.toHaveBeenCalled()
     expect(mockReplyCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ outboundMessageId: null }),
     })
@@ -108,7 +108,7 @@ describe('ingestReply', () => {
 
   it('sets outboundMessageId to null when sgMessageId does not match any message', async () => {
     mockLeadFindUnique.mockResolvedValue(baseLead)
-    mockMsgFindUnique.mockResolvedValue(null)
+    mockMsgFindFirst.mockResolvedValue(null)
     mockProvider('NEGATIVE', 0.88)
     mockReplyCreate.mockResolvedValue({ ...baseReply, outboundMessageId: null })
 

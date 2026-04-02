@@ -44,8 +44,8 @@ export async function ingestReply({
   // 2. Optionally link to outbound message
   let outboundMessageId: string | null = null
   if (inReplyToSgMessageId) {
-    const message = await prisma.outboundMessage.findUnique({
-      where: { sgMessageId: inReplyToSgMessageId },
+    const message = await prisma.outboundMessage.findFirst({
+      where: { sgMessageId: inReplyToSgMessageId, organizationId },
       select: { id: true },
     })
     outboundMessageId = message?.id ?? null
