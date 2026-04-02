@@ -153,6 +153,18 @@ describe('ingestReply', () => {
     expect(promptUsed).toContain('UNSUBSCRIBE_REQUEST')
   })
 
+  it('throws when rawBody exceeds 50000 characters', async () => {
+    mockLeadFindUnique.mockResolvedValue(baseLead)
+
+    await expect(
+      ingestReply({
+        organizationId: 'org-1',
+        fromEmail: 'lead@acme.com',
+        rawBody: 'x'.repeat(50_001),
+      }),
+    ).rejects.toThrow('Reply body exceeds maximum allowed length')
+  })
+
   it('stores receivedAt when provided', async () => {
     mockLeadFindUnique.mockResolvedValue(baseLead)
     mockProvider('OUT_OF_OFFICE', 0.99)

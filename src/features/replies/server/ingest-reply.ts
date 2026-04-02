@@ -16,7 +16,7 @@ Classify the reply into exactly one category:
 Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-1.0> }
 No markdown, no explanation.`
 
-interface IngestReplyInput {
+export interface IngestReplyInput {
   organizationId: string
   fromEmail: string
   rawBody: string
@@ -58,6 +58,9 @@ export async function ingestReply({
   const prompt = template?.body ?? FALLBACK_CLASSIFY_PROMPT
 
   // 4. AI classification — outside any transaction
+  if (rawBody.length > 50_000) {
+    throw new Error('Reply body exceeds maximum allowed length')
+  }
   const { classification, confidence } = await getAIProvider().classifyReply({ rawBody }, prompt)
 
   // 5. Persist
