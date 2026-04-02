@@ -3,14 +3,14 @@ import type { DraftWithLeadDTO } from '../types'
 
 interface GetDraftsInput {
   organizationId: string
-  status?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'
+  statuses?: ('PENDING_REVIEW' | 'APPROVED' | 'REJECTED')[]
   limit?: number
   offset?: number
 }
 
 export async function getDrafts({
   organizationId,
-  status = 'PENDING_REVIEW',
+  statuses = ['PENDING_REVIEW', 'APPROVED'],
   limit = 50,
   offset = 0,
 }: GetDraftsInput): Promise<{ drafts: DraftWithLeadDTO[]; total: number }> {
@@ -18,7 +18,7 @@ export async function getDrafts({
 
   const [rows, total] = await Promise.all([
     prisma.draft.findMany({
-      where: { organizationId, status },
+      where: { organizationId, status: { in: statuses } },
       include: {
         lead: {
           select: {
@@ -34,7 +34,7 @@ export async function getDrafts({
       take: cappedLimit,
       skip: offset,
     }),
-    prisma.draft.count({ where: { organizationId, status } }),
+    prisma.draft.count({ where: { organizationId, status: { in: statuses } } }),
   ])
 
   return {

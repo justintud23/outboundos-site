@@ -58,7 +58,7 @@ describe('getDrafts', () => {
     expect(result.drafts[0]?.subject).toBe('Hello Jane')
   })
 
-  it('defaults to PENDING_REVIEW status', async () => {
+  it('defaults to PENDING_REVIEW and APPROVED statuses', async () => {
     mockPrisma.draft.findMany.mockResolvedValue([])
     mockPrisma.draft.count.mockResolvedValue(0)
 
@@ -66,7 +66,24 @@ describe('getDrafts', () => {
 
     expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ status: 'PENDING_REVIEW' }),
+        where: expect.objectContaining({
+          status: { in: ['PENDING_REVIEW', 'APPROVED'] },
+        }),
+      }),
+    )
+  })
+
+  it('uses provided statuses array', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([])
+    mockPrisma.draft.count.mockResolvedValue(0)
+
+    await getDrafts({ organizationId: 'org-1', statuses: ['APPROVED'] })
+
+    expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ['APPROVED'] },
+        }),
       }),
     )
   })
