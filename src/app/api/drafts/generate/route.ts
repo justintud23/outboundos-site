@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { generateDraft } from '@/features/drafts/server/generate-draft'
 import { PendingDraftExistsError, LeadNotFoundError } from '@/features/drafts/types'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export async function POST(request: Request) {
   const { orgId, userId } = await auth()
@@ -31,8 +32,10 @@ export async function POST(request: Request) {
 
   const { leadId } = body as { leadId: string }
 
+  const org = await resolveOrganization(orgId)
+
   try {
-    const draft = await generateDraft({ organizationId: orgId, leadId, clerkUserId: userId })
+    const draft = await generateDraft({ organizationId: org.id, leadId, clerkUserId: userId })
     return NextResponse.json(draft, { status: 201 })
   } catch (err) {
     if (err instanceof PendingDraftExistsError) {

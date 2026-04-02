@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { sendDraft } from '@/features/messages/server/send-draft'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import {
   DraftNotApprovedError,
   DraftAlreadySentError,
@@ -23,9 +24,10 @@ export async function POST(
   }
 
   const { id: draftId } = await params
+  const org = await resolveOrganization(orgId)
 
   try {
-    const message = await sendDraft({ organizationId: orgId, draftId, clerkUserId: userId })
+    const message = await sendDraft({ organizationId: org.id, draftId, clerkUserId: userId })
     return NextResponse.json(message, { status: 201 })
   } catch (err) {
     if (err instanceof DraftNotFoundError) {
@@ -55,7 +57,13 @@ export async function POST(
         { status: 429 },
       )
     }
+    const message = err instanceof Error ? err.message : 'Internal server error'
     console.error('[POST /api/drafts/[id]/send]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: process.env.NODE_ENV === 'development' ? message : 'Internal server error',
+      },
+      { status: 500 },
+    )
   }
 }

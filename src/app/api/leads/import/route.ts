@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { importCsv } from '@/features/leads/server/import-csv'
 import { scoreLeads } from '@/features/leads/server/score-leads'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export async function POST(request: Request) {
   const { orgId } = await auth()
@@ -12,6 +13,8 @@ export async function POST(request: Request) {
       { status: 403 },
     )
   }
+
+  const org = await resolveOrganization(orgId)
 
   let formData: FormData
   try {
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
 
   // Import leads
   const importResult = await importCsv({
-    organizationId: orgId,
+    organizationId: org.id,
     csvContent,
     fileName: file.name,
   })
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
   if (importResult.leads.length > 0) {
     try {
       scoreResults = await scoreLeads({
-        organizationId: orgId,
+        organizationId: org.id,
         leadIds: importResult.leads.map((l) => l.id),
       })
     } catch (err) {

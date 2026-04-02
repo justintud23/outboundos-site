@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { DraftsClient } from './drafts-client'
 import { getDrafts } from '@/features/drafts/server/get-drafts'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export default async function DraftsPage() {
   const { orgId } = await auth()
@@ -11,7 +12,8 @@ export default async function DraftsPage() {
     redirect('/dashboard')
   }
 
-  const { drafts, total } = await getDrafts({ organizationId: orgId })
+  const org = await resolveOrganization(orgId)
+  const { drafts, total } = await getDrafts({ organizationId: org.id })
 
   return (
     <>

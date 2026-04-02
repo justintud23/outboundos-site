@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { reviewDraft } from '@/features/drafts/server/review-draft'
 import { DraftNotFoundError, DraftNotPendingError } from '@/features/drafts/types'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export async function PATCH(
   request: Request,
@@ -48,9 +49,11 @@ export async function PATCH(
     )
   }
 
+  const org = await resolveOrganization(orgId)
+
   try {
     const draft = await reviewDraft({
-      organizationId: orgId,
+      organizationId: org.id,
       draftId,
       clerkUserId: userId,
       action,

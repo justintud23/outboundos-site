@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { LeadsPageClient } from './leads-client'
 import { getLeads } from '@/features/leads/server/get-leads'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export default async function LeadsPage() {
   const { orgId } = await auth()
@@ -11,7 +12,8 @@ export default async function LeadsPage() {
     redirect('/dashboard')
   }
 
-  const { leads, total } = await getLeads({ organizationId: orgId })
+  const org = await resolveOrganization(orgId)
+  const { leads, total } = await getLeads({ organizationId: org.id })
 
   return (
     <>

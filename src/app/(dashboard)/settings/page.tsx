@@ -1,11 +1,25 @@
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/header'
+import { SettingsClient } from './settings-client'
+import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const { orgId } = await auth()
+
+  if (!orgId) {
+    redirect('/dashboard')
+  }
+
+  const org = await resolveOrganization(orgId)
+  const mailboxes = await getMailboxes(org.id)
+
   return (
     <>
       <Header title="Settings" />
       <div className="flex-1 p-6">
-        <p className="text-[#475569] text-sm">Settings — coming soon.</p>
+        <SettingsClient initialMailboxes={mailboxes} />
       </div>
     </>
   )
