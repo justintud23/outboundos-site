@@ -13,7 +13,7 @@ interface DraftsClientProps {
 export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps) {
   const [drafts, setDrafts] = useState<DraftWithLeadDTO[]>(initialDrafts)
   const [total, setTotal] = useState(initialTotal)
-  const [reviewingDraft, setReviewingDraft] = useState<DraftDTO | null>(null)
+  const [reviewingDraft, setReviewingDraft] = useState<DraftWithLeadDTO | null>(null)
 
   function handleReview(draft: DraftWithLeadDTO) {
     setReviewingDraft(draft)
@@ -21,7 +21,9 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
 
   function handleDraftReviewed(updatedDraft: DraftDTO) {
     setDrafts((prev) => prev.filter((d) => d.id !== updatedDraft.id))
-    setTotal((prev) => Math.max(0, prev - 1))
+    if (updatedDraft.status !== 'PENDING_REVIEW') {
+      setTotal((prev) => Math.max(0, prev - 1))
+    }
     setReviewingDraft(null)
   }
 
