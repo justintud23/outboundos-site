@@ -31,6 +31,7 @@ export interface DraftWithLeadDTO extends DraftDTO {
 export class PendingDraftExistsError extends Error {
   constructor(public readonly draftId: string) {
     super('A pending draft already exists for this lead.')
+    Object.setPrototypeOf(this, PendingDraftExistsError.prototype)
     this.name = 'PendingDraftExistsError'
   }
 }
@@ -38,6 +39,7 @@ export class PendingDraftExistsError extends Error {
 export class DraftNotPendingError extends Error {
   constructor(public readonly currentStatus: string) {
     super(`Draft is not pending review (status: ${currentStatus}).`)
+    Object.setPrototypeOf(this, DraftNotPendingError.prototype)
     this.name = 'DraftNotPendingError'
   }
 }
@@ -45,6 +47,7 @@ export class DraftNotPendingError extends Error {
 export class DraftNotFoundError extends Error {
   constructor() {
     super('Draft not found.')
+    Object.setPrototypeOf(this, DraftNotFoundError.prototype)
     this.name = 'DraftNotFoundError'
   }
 }
