@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { DraftDTO } from '../types'
 
 interface DraftReviewDrawerProps {
@@ -16,6 +16,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
   const [rejectionReason, setRejectionReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Reset form state when a new draft is opened
   useEffect(() => {
@@ -28,10 +29,30 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
     }
   }, [draft?.id])
 
+  // Escape key closes the drawer
+  useEffect(() => {
+    if (!draft) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !submitting) onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [draft, submitting, onClose])
+
+  // Cancel in-flight request on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
+
   if (!draft) return null
 
   async function handleApprove() {
     if (!draft) return
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setSubmitting(true)
     setError(null)
     try {
@@ -43,6 +64,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
           subject: subject !== draft.subject ? subject : undefined,
           body: body !== draft.body ? body : undefined,
         }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         const data = (await res.json()) as { message?: string; error?: string }
@@ -51,7 +73,8 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
       }
       const updated = (await res.json()) as DraftDTO
       onReviewed(updated)
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       setError('Network error. Please try again.')
     } finally {
       setSubmitting(false)
@@ -60,6 +83,9 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
 
   async function handleReject() {
     if (!draft) return
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setSubmitting(true)
     setError(null)
     try {
@@ -70,6 +96,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
           action: 'reject',
           rejectionReason: rejectionReason || undefined,
         }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         const data = (await res.json()) as { message?: string; error?: string }
@@ -78,7 +105,8 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
       }
       const updated = (await res.json()) as DraftDTO
       onReviewed(updated)
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       setError('Network error. Please try again.')
     } finally {
       setSubmitting(false)
@@ -90,18 +118,24 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/40 z-40"
-        onClick={onClose}
+        onClick={submitting ? undefined : onClose}
         aria-hidden="true"
       />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-[#13151c] border-l border-[#1e2130] z-50 flex flex-col shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="draft-review-title"
+        className="fixed right-0 top-0 h-full w-full max-w-lg bg-[#13151c] border-l border-[#1e2130] z-50 flex flex-col shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#1e2130]">
-          <h2 className="text-[#e2e8f0] font-semibold">Review Draft</h2>
+          <h2 id="draft-review-title" className="text-[#e2e8f0] font-semibold">Review Draft</h2>
           <button
-            onClick={onClose}
-            className="text-[#475569] hover:text-[#94a3b8] transition-colors text-lg leading-none"
+            onClick={submitting ? undefined : onClose}
+            disabled={submitting}
+            className="text-[#475569] hover:text-[#94a3b8] transition-colors text-lg leading-none disabled:opacity-50"
             aria-label="Close"
           >
             ✕
@@ -111,10 +145,14 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
-            <label className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1">
+            <label
+              htmlFor="draft-subject"
+              className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
+            >
               Subject
             </label>
             <input
+              id="draft-subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -124,10 +162,14 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
           </div>
 
           <div>
-            <label className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1">
+            <label
+              htmlFor="draft-body"
+              className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
+            >
               Body
             </label>
             <textarea
+              id="draft-body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={14}
@@ -138,10 +180,14 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
 
           {showRejectInput && (
             <div>
-              <label className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1">
+              <label
+                htmlFor="draft-rejection-reason"
+                className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
+              >
                 Rejection reason (optional)
               </label>
               <input
+                id="draft-rejection-reason"
                 type="text"
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
