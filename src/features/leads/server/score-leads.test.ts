@@ -10,6 +10,7 @@ vi.mock('@/lib/db/prisma', () => ({
 vi.mock('@/lib/ai', () => ({
   getAIProvider: vi.fn(() => ({
     scoreLeads: vi.fn(),
+    draftEmail: vi.fn(),
   })),
 }))
 
@@ -36,7 +37,7 @@ describe('scoreLeads', () => {
 
     const mockProvider = { scoreLeads: vi.fn().mockResolvedValueOnce([
       { leadId: 'lead-1', score: 80, reason: 'Senior title at known company' },
-    ])}
+    ]), draftEmail: vi.fn() }
     vi.mocked(getAIProvider).mockReturnValue(mockProvider)
     vi.mocked(prisma.lead.update).mockResolvedValue({} as never)
 
@@ -60,7 +61,7 @@ describe('scoreLeads', () => {
 
     const mockProvider = { scoreLeads: vi.fn().mockResolvedValueOnce([
       { leadId: 'lead-2', score: 40, reason: 'Limited info available' },
-    ])}
+    ]), draftEmail: vi.fn() }
     vi.mocked(getAIProvider).mockReturnValue(mockProvider)
     vi.mocked(prisma.lead.update).mockResolvedValue({} as never)
 

@@ -134,6 +134,37 @@ describe('reviewDraft', () => {
     expect(result.rejectionReason).toBe('Wrong tone')
   })
 
+  it('rejects a pending draft without a rejection reason', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(pendingDraft)
+    const rejectedDraft = { ...pendingDraft, status: 'REJECTED', rejectedAt: new Date(), rejectionReason: null }
+    let capturedAuditMetadata: unknown
+
+    mockPrisma.$transaction.mockImplementationOnce(
+      async (fn: (tx: unknown) => Promise<unknown>) => {
+        const mockAuditCreate = vi.fn().mockImplementation((args: unknown) => {
+          capturedAuditMetadata = (args as { data: { metadata: unknown } }).data.metadata
+          return Promise.resolve({})
+        })
+        const mockTx = {
+          draft: { update: vi.fn().mockResolvedValue(rejectedDraft) },
+          auditLog: { create: mockAuditCreate },
+        }
+        return fn(mockTx)
+      },
+    )
+
+    const result = await reviewDraft({
+      organizationId: 'org-1',
+      draftId: 'draft-1',
+      clerkUserId: 'user-1',
+      action: 'reject',
+      // no rejectionReason
+    })
+
+    expect(result.status).toBe('REJECTED')
+    expect((capturedAuditMetadata as { rejectionReason: unknown }).rejectionReason).toBeNull()
+  })
+
   it('throws DraftNotFoundError when draft does not exist', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(null)
 

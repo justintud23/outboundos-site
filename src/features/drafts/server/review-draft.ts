@@ -30,8 +30,8 @@ export async function reviewDraft({
     throw new DraftNotFoundError()
   }
 
-  if (String(existing.status) !== 'PENDING_REVIEW') {
-    throw new DraftNotPendingError(String(existing.status))
+  if (existing.status !== 'PENDING_REVIEW') {
+    throw new DraftNotPendingError(existing.status)
   }
 
   const now = new Date()
