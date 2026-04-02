@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   try {
     const draft = await generateDraft({ organizationId: orgId, leadId, clerkUserId: userId })
-    return NextResponse.json(draft)
+    return NextResponse.json(draft, { status: 201 })
   } catch (err) {
     if (err instanceof PendingDraftExistsError) {
       return NextResponse.json(
