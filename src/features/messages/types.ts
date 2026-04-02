@@ -42,7 +42,7 @@ export class MailboxLimitExceededError extends Error {
 }
 
 export class DraftAlreadySentError extends Error {
-  constructor(public readonly messageId: string) {
+  constructor(public readonly messageId?: string) {
     super('This draft has already been sent.')
     this.name = 'DraftAlreadySentError'
     Object.setPrototypeOf(this, DraftAlreadySentError.prototype)

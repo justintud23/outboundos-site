@@ -18,6 +18,7 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
   const [sendError, setSendError] = useState<string | null>(null)
 
   function handleReview(draft: DraftWithLeadDTO) {
+    setSendError(null)
     setReviewingDraft(draft)
   }
 

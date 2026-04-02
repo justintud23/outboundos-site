@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     draft: { findFirst: vi.fn() },
-    outboundMessage: { findFirst: vi.fn() },
     mailbox: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -13,6 +12,7 @@ vi.mock('@/lib/email', () => ({
   getEmailProvider: vi.fn(),
 }))
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { sendDraft } from './send-draft'
@@ -26,7 +26,6 @@ import { DraftNotFoundError } from '@/features/drafts/types'
 
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: ReturnType<typeof vi.fn> }
-  outboundMessage: { findFirst: ReturnType<typeof vi.fn> }
   mailbox: { findFirst: ReturnType<typeof vi.fn> }
   $transaction: ReturnType<typeof vi.fn>
 }
@@ -87,7 +86,6 @@ beforeEach(() => {
 describe('sendDraft', () => {
   it('sends the email and returns OutboundMessageDTO', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.outboundMessage.findFirst.mockResolvedValue(null)
     mockPrisma.mailbox.findFirst.mockResolvedValue(fakeMailbox)
     mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-abc-123' })
 
@@ -135,7 +133,14 @@ describe('sendDraft', () => {
 
   it('throws DraftAlreadySentError when OutboundMessage already exists for draft', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.outboundMessage.findFirst.mockResolvedValue({ id: 'msg-existing' })
+    mockPrisma.mailbox.findFirst.mockResolvedValue(fakeMailbox)
+    mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-abc' })
+
+    const prismaUniqueError = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      { code: 'P2002', clientVersion: '5.0.0', meta: { target: ['draftId'] } },
+    )
+    mockPrisma.$transaction.mockRejectedValueOnce(prismaUniqueError)
 
     await expect(
       sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' }),
@@ -144,7 +149,6 @@ describe('sendDraft', () => {
 
   it('throws NoActiveMailboxError when org has no active mailbox', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.outboundMessage.findFirst.mockResolvedValue(null)
     mockPrisma.mailbox.findFirst.mockResolvedValue(null)
 
     await expect(
@@ -154,7 +158,6 @@ describe('sendDraft', () => {
 
   it('throws MailboxLimitExceededError when daily limit is reached', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.outboundMessage.findFirst.mockResolvedValue(null)
     mockPrisma.mailbox.findFirst.mockResolvedValue({
       ...fakeMailbox,
       sentToday: 50,
@@ -171,7 +174,6 @@ describe('sendDraft', () => {
     yesterday.setDate(yesterday.getDate() - 1)
 
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.outboundMessage.findFirst.mockResolvedValue(null)
     mockPrisma.mailbox.findFirst.mockResolvedValue({
       ...fakeMailbox,
       sentToday: 50,
