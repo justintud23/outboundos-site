@@ -30,17 +30,16 @@ export async function reviewDraft({
     throw new DraftNotFoundError()
   }
 
-  if (existing.status !== 'PENDING_REVIEW') {
-    throw new DraftNotPendingError(existing.status)
-  }
-
-  const now = new Date()
-
   const updated = await prisma.$transaction(async (tx) => {
-    let draft
+    const now = new Date()
+
     if (action === 'approve') {
-      draft = await tx.draft.update({
-        where: { id: draftId },
+      const result = await tx.draft.updateMany({
+        where: {
+          id: draftId,
+          organizationId,
+          status: 'PENDING_REVIEW',
+        },
         data: {
           status: 'APPROVED',
           ...(subject !== undefined && { subject }),
@@ -49,15 +48,27 @@ export async function reviewDraft({
           approvedAt: now,
         },
       })
+
+      if (result.count === 0) {
+        throw new DraftNotPendingError(existing.status)
+      }
     } else {
-      draft = await tx.draft.update({
-        where: { id: draftId },
+      const result = await tx.draft.updateMany({
+        where: {
+          id: draftId,
+          organizationId,
+          status: 'PENDING_REVIEW',
+        },
         data: {
           status: 'REJECTED',
           rejectedAt: now,
           ...(rejectionReason !== undefined && { rejectionReason }),
         },
       })
+
+      if (result.count === 0) {
+        throw new DraftNotPendingError(existing.status)
+      }
     }
 
     await tx.auditLog.create({
@@ -74,8 +85,12 @@ export async function reviewDraft({
       },
     })
 
-    return draft
+    return tx.draft.findUnique({ where: { id: draftId } })
   })
+
+  if (!updated) {
+    throw new Error(`Draft ${draftId} not found after update`)
+  }
 
   return {
     id: updated.id,

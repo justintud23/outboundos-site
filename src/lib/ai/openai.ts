@@ -85,7 +85,8 @@ No markdown, no explanation.`
         throw new SyntaxError('Expected { subject, body } strings')
       }
       return { subject: raw.subject, body: raw.body }
-    } catch {
+    } catch (err) {
+      console.warn('[OpenAIProvider.draftEmail] fallback triggered', err)
       return { subject: `Draft for ${lead.email}`, body: '' }
     }
   }

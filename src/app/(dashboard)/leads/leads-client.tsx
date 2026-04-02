@@ -50,16 +50,19 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
         body: JSON.stringify({ leadId }),
       })
 
-      const data = (await res.json()) as
+      // Parse body once — stream can only be consumed once
+      const data = await res.json().catch(() => null) as
         | DraftDTO
         | { code: string; draftId: string; message: string }
+        | { error?: string }
+        | null
 
-      if (res.status === 409 && 'code' in data && data.code === 'PENDING_DRAFT_EXISTS') {
+      if (res.status === 409 && data && 'code' in data && data.code === 'PENDING_DRAFT_EXISTS') {
         // Already has a pending draft — update map with minimal placeholder so Review button appears
         setDraftsByLeadId((prev) => {
           const next = new Map(prev)
           next.set(leadId, {
-            id: data.draftId,
+            id: (data as { code: string; draftId: string; message: string }).draftId,
             organizationId: '',
             leadId,
             subject: '',
@@ -80,7 +83,7 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
       }
 
       if (!res.ok) {
-        const errData = (await res.json().catch(() => null)) as { error?: string } | null
+        const errData = data as { error?: string } | null
         setGenerationError(errData?.error ?? 'Failed to generate draft. Please try again.')
         return
       }

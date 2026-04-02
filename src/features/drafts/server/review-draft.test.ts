@@ -60,7 +60,10 @@ describe('reviewDraft', () => {
     mockPrisma.$transaction.mockImplementationOnce(
       async (fn: (tx: unknown) => Promise<unknown>) => {
         const mockTx = {
-          draft: { update: vi.fn().mockResolvedValue(approvedDraft) },
+          draft: {
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            findUnique: vi.fn().mockResolvedValue(approvedDraft),
+          },
           auditLog: { create: vi.fn().mockResolvedValue({}) },
         }
         return fn(mockTx)
@@ -80,12 +83,15 @@ describe('reviewDraft', () => {
 
     mockPrisma.$transaction.mockImplementationOnce(
       async (fn: (tx: unknown) => Promise<unknown>) => {
-        const mockUpdate = vi.fn().mockImplementation((args: unknown) => {
+        const mockUpdateMany = vi.fn().mockImplementation((args: unknown) => {
           capturedData = args
-          return Promise.resolve(approvedDraft)
+          return Promise.resolve({ count: 1 })
         })
         const mockTx = {
-          draft: { update: mockUpdate },
+          draft: {
+            updateMany: mockUpdateMany,
+            findUnique: vi.fn().mockResolvedValue(approvedDraft),
+          },
           auditLog: { create: vi.fn().mockResolvedValue({}) },
         }
         return fn(mockTx)
@@ -115,7 +121,10 @@ describe('reviewDraft', () => {
     mockPrisma.$transaction.mockImplementationOnce(
       async (fn: (tx: unknown) => Promise<unknown>) => {
         const mockTx = {
-          draft: { update: vi.fn().mockResolvedValue(rejectedDraft) },
+          draft: {
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            findUnique: vi.fn().mockResolvedValue(rejectedDraft),
+          },
           auditLog: { create: vi.fn().mockResolvedValue({}) },
         }
         return fn(mockTx)
@@ -146,7 +155,10 @@ describe('reviewDraft', () => {
           return Promise.resolve({})
         })
         const mockTx = {
-          draft: { update: vi.fn().mockResolvedValue(rejectedDraft) },
+          draft: {
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            findUnique: vi.fn().mockResolvedValue(rejectedDraft),
+          },
           auditLog: { create: mockAuditCreate },
         }
         return fn(mockTx)
@@ -176,6 +188,19 @@ describe('reviewDraft', () => {
       ...pendingDraft,
       status: 'APPROVED',
     })
+
+    mockPrisma.$transaction.mockImplementationOnce(
+      async (fn: (tx: unknown) => Promise<unknown>) => {
+        const mockTx = {
+          draft: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            findUnique: vi.fn(),
+          },
+          auditLog: { create: vi.fn() },
+        }
+        return fn(mockTx)
+      },
+    )
 
     await expect(reviewDraft(approveInput)).rejects.toBeInstanceOf(DraftNotPendingError)
   })
