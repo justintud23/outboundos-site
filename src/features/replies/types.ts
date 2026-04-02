@@ -12,6 +12,10 @@ export interface InboundReplyDTO {
   createdAt: Date
 }
 
+export interface ReplyWithLeadDTO extends InboundReplyDTO {
+  leadEmail: string
+}
+
 export class LeadNotFoundByEmailError extends Error {
   constructor(public readonly email: string) {
     super(`No lead found with email: ${email}`)
