@@ -9,12 +9,14 @@ import {
   BarChart2,
   FileText,
   Settings,
+  Mail,
 } from 'lucide-react'
 import { NavItem } from './nav-item'
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/leads', icon: Users, label: 'Leads' },
+  { href: '/drafts', icon: Mail, label: 'Drafts' },
   { href: '/campaigns', icon: Megaphone, label: 'Campaigns' },
   { href: '/sequences', icon: GitBranch, label: 'Sequences' },
   { href: '/inbox', icon: Inbox, label: 'Inbox' },
