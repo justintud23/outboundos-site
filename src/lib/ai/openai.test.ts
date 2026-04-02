@@ -23,6 +23,7 @@ describe('OpenAIProvider.scoreLeads', () => {
   let mockCreate: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
+    vi.clearAllMocks()
     provider = new OpenAIProvider('test-key', 'gpt-4o')
     const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
       chat: { completions: { create: ReturnType<typeof vi.fn> } }
@@ -64,6 +65,49 @@ describe('OpenAIProvider.scoreLeads', () => {
 
     expect(result[0]?.score).toBe(0)
     expect(result[0]?.reason).toContain('parse')
+  })
+})
+
+describe('OpenAIProvider.draftEmail', () => {
+  let provider: OpenAIProvider
+  let mockCreate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    provider = new OpenAIProvider('test-key', 'gpt-4o')
+    const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
+      chat: { completions: { create: ReturnType<typeof vi.fn> } }
+    }
+    mockCreate = client.chat.completions.create
+  })
+
+  it('returns subject and body from AI response', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [
+        { message: { content: JSON.stringify({ subject: 'Hello Jane', body: 'Hi Jane...' }) } },
+      ],
+    })
+
+    const result = await provider.draftEmail(
+      { id: 'lead-1', email: 'jane@acme.com', firstName: 'Jane', company: 'Acme' },
+      'You are a sales email writer.',
+    )
+
+    expect(result).toEqual({ subject: 'Hello Jane', body: 'Hi Jane...' })
+  })
+
+  it('returns fallback subject and empty body on parse failure', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: 'not valid json' } }],
+    })
+
+    const result = await provider.draftEmail(
+      { id: 'lead-1', email: 'jane@acme.com' },
+      'You are a sales email writer.',
+    )
+
+    expect(result.subject).toBe('Draft for jane@acme.com')
+    expect(result.body).toBe('')
   })
 })
 
