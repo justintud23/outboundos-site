@@ -290,6 +290,15 @@ async function main() {
   console.log(`  ✓ ${eventRows.length} message events`)
 
   // ── 9. Create InboundReplies (6 total, linked to first 6 leads + messages) ──
+  const REPLY_DATES = [
+    new Date('2026-03-26T10:00:00Z'),
+    new Date('2026-03-27T10:00:00Z'),
+    new Date('2026-03-28T10:00:00Z'),
+    new Date('2026-03-29T10:00:00Z'),
+    new Date('2026-03-30T10:00:00Z'),
+    new Date('2026-03-31T10:00:00Z'),
+  ]
+
   await prisma.inboundReply.createMany({
     data: INBOUND_REPLIES.map((r, i) => ({
       id:                       r.id,
@@ -299,7 +308,7 @@ async function main() {
       rawBody:                  r.body,
       classification:           r.classification,
       classificationConfidence: r.confidence,
-      receivedAt:               new Date(`2026-03-2${6 + i}T10:00:00Z`),
+      receivedAt:               REPLY_DATES[i],
     })),
   })
   console.log(`  ✓ ${INBOUND_REPLIES.length} inbound replies`)
