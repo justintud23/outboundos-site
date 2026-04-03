@@ -45,6 +45,11 @@ const STEP_ID     = 'seed_step_1'
 const LEAD_IDS = Array.from({ length: 12 }, (_, i) => `seed_lead_${i + 1}`)
 const MSG_IDS  = Array.from({ length: 12 }, (_, i) => `seed_msg_${i + 1}`)
 
+const DRAFT_ID_1 = 'seed_draft_1'
+const DRAFT_ID_2 = 'seed_draft_2'
+const DRAFT_ID_3 = 'seed_draft_3'
+const DRAFT_ID_4 = 'seed_draft_4'
+
 // ─── DEMO DATA ───────────────────────────────────────────────────
 
 const LEADS = [
@@ -316,6 +321,51 @@ async function main() {
     })),
   })
   console.log(`  ✓ ${INBOUND_REPLIES.length} inbound replies`)
+
+  // ── 10. Create Draft records ──
+  await prisma.draft.createMany({
+    data: [
+      {
+        id:             DRAFT_ID_1,
+        organizationId: org.id,
+        leadId:         LEAD_IDS[8]!,   // Iris Patel — score=null, NEW
+        campaignId:     CAMPAIGN_ID,
+        subject:        'Quick question about your growth stack',
+        body:           `Hi Iris,\n\nI came across your work at Vercel and noticed you're working on growth engineering — congrats on the role!\n\nWe've been helping teams like yours at fast-growing companies automate their outbound sequences and classify replies using AI, so your SDR team spends less time on busywork and more time closing.\n\nWould love to show you a quick demo — does 20 minutes this week work for you?\n\nBest,\nThe OutboundOS Team`,
+        status:         'PENDING_REVIEW',
+      },
+      {
+        id:             DRAFT_ID_2,
+        organizationId: org.id,
+        leadId:         LEAD_IDS[9]!,   // James O'Brien — ClickUp VP Product
+        campaignId:     CAMPAIGN_ID,
+        subject:        "Outbound automation for ClickUp's SDR team",
+        body:           `Hi James,\n\nI noticed ClickUp has been scaling its go-to-market motion quickly — impressive growth. I wanted to reach out because we've been helping VP-level product and sales leaders automate their outbound workflows without sacrificing personalisation.\n\nOutboundOS handles sequence generation, reply classification, and draft review in one place — so your team ships more pipeline with less manual lift.\n\nWorth a 15-minute chat to see if it's a fit?\n\nBest,\nThe OutboundOS Team`,
+        status:         'PENDING_REVIEW',
+      },
+      {
+        id:               DRAFT_ID_3,
+        organizationId:   org.id,
+        leadId:           LEAD_IDS[10]!, // Kayla Morris — Datadog AE
+        campaignId:       CAMPAIGN_ID,
+        subject:          "AI-powered outreach for Datadog's sales motion",
+        body:             `Hi Kayla,\n\nAs an Account Executive at Datadog, you're probably managing a high volume of outbound touchpoints. I wanted to share how OutboundOS helps AEs like you personalise at scale — AI-generated drafts that go into a human review queue before sending, so quality stays high.\n\nTeams using us see a 35% lift in reply rates within the first 30 days. I'd love to show you why.\n\nAre you free for a quick 20-minute call this week?\n\nBest,\nThe OutboundOS Team`,
+        status:           'APPROVED',
+        approvedByClerkId: 'org_3Bo1xPYGmXCnGJfPwPWe7iaBOoQ',
+        approvedAt:       new Date('2026-04-01T14:00:00Z'),
+      },
+      {
+        id:             DRAFT_ID_4,
+        organizationId: org.id,
+        leadId:         LEAD_IDS[11]!, // Liam Nguyen — HashiCorp DevRel
+        campaignId:     CAMPAIGN_ID,
+        subject:        "HashiCorp's DevRel team + outbound automation",
+        body:           `Hi Liam,\n\nDevRel teams are increasingly being asked to drive pipeline alongside community — a tough balance. I'm reaching out because OutboundOS was built to help technical GTM teams (like yours) automate personalised outbound without it feeling spammy.\n\nWe handle draft generation, reply classification, and sequence management — freeing you up to focus on what matters: building relationships with the HashiCorp community.\n\nWould love to connect. Any time this week work for a quick call?\n\nBest,\nThe OutboundOS Team`,
+        status:         'PENDING_REVIEW',
+      },
+    ],
+  })
+  console.log('  ✓ 4 drafts')
 
   console.log('\n✅ Seed complete!')
   console.log('\nNOTE: The org is seeded with clerkId = "org_demo".')
