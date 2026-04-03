@@ -139,19 +139,19 @@ npx vitest run
 
 ## Local Setup
 
-**Prerequisites:** Node.js 20+, PostgreSQL running locally
+**Prerequisites:** Node.js 20+, Docker Desktop
 
 ```bash
 git clone https://github.com/justintud23/outboundos-site
 cd outboundos-site
 npm install
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Fill in `.env`:
+Fill in `.env.local`:
 
 ```env
-# Database
+# Database — matches the Docker Compose config below
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/outboundos"
 
 # Clerk — create a project at clerk.com, enable Organizations
@@ -175,12 +175,37 @@ SENDGRID_WEBHOOK_SECRET=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
+### Database (Docker)
+
+PostgreSQL runs locally via Docker. A `docker-compose.yml` is included.
+
 ```bash
-npx prisma migrate dev
+# Start the database
+docker compose up -d
+
+# Apply migrations
+npx prisma migrate deploy
+
+# Start the app
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), sign up, create an organization, and you're in.
+
+### Database management
+
+```bash
+# Stop the database (data is preserved)
+docker compose down
+
+# Wipe all data and start fresh
+docker compose down -v
+docker compose up -d
+npx prisma migrate deploy
+
+# Verify connectivity
+npx prisma db execute --stdin <<< "SELECT 1;"
+```
 
 ---
 
@@ -198,15 +223,18 @@ Open [http://localhost:3000](http://localhost:3000), sign up, create an organiza
 
 ## Screenshots
 
-> _Screenshots coming soon — run locally to see the dashboard_
+> _Run locally to see the dashboard. Screenshots will be added here._
 
-| Screen | Description |
+![Dashboard](public/screenshots/dashboard.png)
+![Analytics](public/screenshots/analytics.png)
+![Replies](public/screenshots/replies.png)
+
+| File | Description |
 |---|---|
-| `screenshots/dashboard.png` | Main dashboard with campaign list |
-| `screenshots/analytics.png` | Analytics dashboard — 8 KPI cards |
-| `screenshots/replies.png` | Replies table with classification filter |
-| `screenshots/reply-positive.png` | POSITIVE reply row highlighting |
-| `screenshots/analytics-rates.png` | Delivery and open rate cards |
+| `public/screenshots/dashboard.png` | Main dashboard with campaign list |
+| `public/screenshots/analytics.png` | Analytics dashboard — 8 KPI cards with computed rates |
+| `public/screenshots/replies.png` | Replies table with classification filter |
+| `public/screenshots/draft-review.png` | AI-generated draft approval flow |
 
 ---
 

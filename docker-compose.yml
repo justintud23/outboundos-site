@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: outboundos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: outboundos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - outboundos-data:/var/lib/postgresql/data
+
+volumes:
+  outboundos-data:
