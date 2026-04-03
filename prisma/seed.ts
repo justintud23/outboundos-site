@@ -107,14 +107,18 @@ async function main() {
   console.log('🌱 Seeding OutboundOS demo data…')
 
   // ── 1. Wipe existing demo org data (cascade handles child records) ──
-  await prisma.organization.deleteMany({ where: { id: ORG_ID } })
+  // Delete by both id AND clerkId to handle the case where resolveOrganization()
+  // already created an org row for this Clerk ID with a different internal id.
+  await prisma.organization.deleteMany({
+    where: { OR: [{ id: ORG_ID }, { clerkId: 'org_3Bo1xPYGmXCnGJfPwPWe7iaBOoQ' }] },
+  })
   console.log('  ✓ Cleared existing demo org')
 
   // ── 2. Create Organization ──
   const org = await prisma.organization.create({
     data: {
       id:      ORG_ID,
-      clerkId: 'org_demo', // ← update this to your real Clerk org ID after signing in
+      clerkId: 'org_3Bo1xPYGmXCnGJfPwPWe7iaBOoQ',
       name:    'Acme Corp',
     },
   })
@@ -233,7 +237,7 @@ async function main() {
   for (let i = 0; i < 12; i++) {
     // DELIVERED — all 12
     eventRows.push({
-      outboundMessageId: messages[i].id,
+      outboundMessageId: messages[i]!.id,
       organizationId:    org.id,
       sgEventId:         `evt-delivered-${i + 1}`,
       eventType:         MessageEventType.DELIVERED,
@@ -245,7 +249,7 @@ async function main() {
   for (let i = 0; i < 9; i++) {
     // OPENED — first 9
     eventRows.push({
-      outboundMessageId: messages[i].id,
+      outboundMessageId: messages[i]!.id,
       organizationId:    org.id,
       sgEventId:         `evt-opened-${i + 1}`,
       eventType:         MessageEventType.OPENED,
@@ -257,7 +261,7 @@ async function main() {
   for (let i = 0; i < 5; i++) {
     // CLICKED — first 5
     eventRows.push({
-      outboundMessageId: messages[i].id,
+      outboundMessageId: messages[i]!.id,
       organizationId:    org.id,
       sgEventId:         `evt-clicked-${i + 1}`,
       eventType:         MessageEventType.CLICKED,
@@ -268,7 +272,7 @@ async function main() {
 
   // BOUNCED — message index 6 (Grace Thompson, who has status BOUNCED)
   eventRows.push({
-    outboundMessageId: messages[6].id,
+    outboundMessageId: messages[6]!.id,
     organizationId:    org.id,
     sgEventId:         'evt-bounced-1',
     eventType:         MessageEventType.BOUNCED,
@@ -278,7 +282,7 @@ async function main() {
 
   // UNSUBSCRIBED — message index 9 (James O'Brien, who has status UNSUBSCRIBED)
   eventRows.push({
-    outboundMessageId: messages[9].id,
+    outboundMessageId: messages[9]!.id,
     organizationId:    org.id,
     sgEventId:         'evt-unsubscribed-1',
     eventType:         MessageEventType.UNSUBSCRIBED,
@@ -303,8 +307,8 @@ async function main() {
     data: INBOUND_REPLIES.map((r, i) => ({
       id:                       r.id,
       organizationId:           org.id,
-      leadId:                   createdLeads[i].id,
-      outboundMessageId:        messages[i].id,
+      leadId:                   createdLeads[i]!.id,
+      outboundMessageId:        messages[i]!.id,
       rawBody:                  r.body,
       classification:           r.classification,
       classificationConfidence: r.confidence,
