@@ -223,18 +223,17 @@ npx prisma db execute --stdin <<< "SELECT 1;"
 
 ## Screenshots
 
-> _Run locally to see the dashboard. Screenshots will be added here._
-
-![Dashboard](public/screenshots/dashboard.png)
 ![Analytics](public/screenshots/analytics.png)
+![Leads](public/screenshots/leads.png)
 ![Replies](public/screenshots/replies.png)
+![Dashboard](public/screenshots/dashboard.png)
 
 | File | Description |
 |---|---|
-| `public/screenshots/dashboard.png` | Main dashboard with campaign list |
 | `public/screenshots/analytics.png` | Analytics dashboard — 8 KPI cards with computed rates |
-| `public/screenshots/replies.png` | Replies table with classification filter |
-| `public/screenshots/draft-review.png` | AI-generated draft approval flow |
+| `public/screenshots/leads.png` | Leads table with status badges and AI scores |
+| `public/screenshots/replies.png` | Replies table with classification filter and POSITIVE row highlighting |
+| `public/screenshots/dashboard.png` | Dashboard summary — lead/campaign/reply counts, recent replies |
 
 ---
 
