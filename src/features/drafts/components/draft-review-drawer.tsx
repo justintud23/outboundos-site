@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import type { DraftDTO } from '../types'
+import type { DraftDTO, DraftWithLeadDTO } from '../types'
 
 interface DraftReviewDrawerProps {
-  draft: DraftDTO | null  // null = closed
+  draft: DraftWithLeadDTO | null  // null = closed
   onClose: () => void
   onReviewed: (draft: DraftDTO) => void
 }
@@ -47,6 +47,10 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
   }, [])
 
   if (!draft) return null
+
+  const leadName =
+    [draft.lead.firstName, draft.lead.lastName].filter(Boolean).join(' ') ||
+    draft.lead.email
 
   async function handleApprove() {
     if (!draft) return
@@ -117,7 +121,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/40 z-40"
+        className="fixed inset-0 bg-black/50 z-40"
         onClick={submitting ? undefined : onClose}
         aria-hidden="true"
       />
@@ -127,11 +131,13 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
         role="dialog"
         aria-modal="true"
         aria-labelledby="draft-review-title"
-        className="fixed right-0 top-0 h-full w-full max-w-lg bg-[#13151c] border-l border-[#1e2130] z-50 flex flex-col shadow-2xl"
+        className="fixed right-0 top-0 h-full w-full max-w-lg bg-[#0f1117] border-l border-[#1e2130] z-50 flex flex-col shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#1e2130]">
-          <h2 id="draft-review-title" className="text-[#e2e8f0] font-semibold">Review Draft</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e2130]">
+          <h2 id="draft-review-title" className="text-[#e2e8f0] font-semibold text-sm">
+            Review Draft
+          </h2>
           <button
             onClick={submitting ? undefined : onClose}
             disabled={submitting}
@@ -143,66 +149,99 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div>
-            <label
-              htmlFor="draft-subject"
-              className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
-            >
-              Subject
-            </label>
-            <input
-              id="draft-subject"
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full bg-[#1a1d2e] border border-[#1e2130] rounded px-3 py-2 text-[#e2e8f0] text-sm focus:outline-none focus:border-[#6366f1]"
-              disabled={submitting}
-            />
+        <div className="flex-1 overflow-y-auto">
+
+          {/* Lead context panel */}
+          <div className="px-5 py-4 bg-[#13151c] border-b border-[#1e2130]">
+            <p className="text-[#475569] text-xs uppercase tracking-wide font-medium mb-2">To</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[#e2e8f0] text-sm font-medium">{leadName}</p>
+                {leadName !== draft.lead.email && (
+                  <p className="text-[#94a3b8] text-xs mt-0.5">{draft.lead.email}</p>
+                )}
+                {draft.lead.company && (
+                  <p className="text-[#475569] text-xs mt-0.5">{draft.lead.company}</p>
+                )}
+              </div>
+              {draft.promptTemplateId && (
+                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-[#1e1f3a] text-[#6366f1]">
+                  ✦ AI Generated
+                </span>
+              )}
+            </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="draft-body"
-              className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
-            >
-              Body
-            </label>
-            <textarea
-              id="draft-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={14}
-              className="w-full bg-[#1a1d2e] border border-[#1e2130] rounded px-3 py-2 text-[#e2e8f0] text-sm focus:outline-none focus:border-[#6366f1] resize-none"
-              disabled={submitting}
-            />
-          </div>
-
-          {showRejectInput && (
+          {/* Editable email content */}
+          <div className="px-5 py-4 space-y-4">
             <div>
               <label
-                htmlFor="draft-rejection-reason"
+                htmlFor="draft-subject"
                 className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
               >
-                Rejection reason (optional)
+                Subject
               </label>
               <input
-                id="draft-rejection-reason"
+                id="draft-subject"
                 type="text"
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="e.g. Wrong tone, needs revision"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
                 className="w-full bg-[#1a1d2e] border border-[#1e2130] rounded px-3 py-2 text-[#e2e8f0] text-sm focus:outline-none focus:border-[#6366f1]"
                 disabled={submitting}
               />
             </div>
-          )}
 
-          {error && <p className="text-[#ef4444] text-sm">{error}</p>}
+            <div>
+              <label
+                htmlFor="draft-body"
+                className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
+              >
+                Body
+              </label>
+              <textarea
+                id="draft-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={14}
+                className="w-full bg-[#1a1d2e] border border-[#1e2130] rounded px-3 py-2 text-[#e2e8f0] text-sm focus:outline-none focus:border-[#6366f1] resize-none font-mono leading-relaxed"
+                disabled={submitting}
+              />
+              {(subject !== draft.subject || body !== draft.body) && (
+                <p className="text-[#f59e0b] text-xs mt-1">Edited — will save on approve</p>
+              )}
+            </div>
+
+            {showRejectInput && (
+              <div>
+                <label
+                  htmlFor="draft-rejection-reason"
+                  className="block text-[#475569] text-xs font-medium uppercase tracking-wide mb-1"
+                >
+                  Rejection reason (optional)
+                </label>
+                <input
+                  id="draft-rejection-reason"
+                  type="text"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="e.g. Wrong tone, needs revision"
+                  className="w-full bg-[#1a1d2e] border border-[#1e2130] rounded px-3 py-2 text-[#e2e8f0] text-sm focus:outline-none focus:border-[#6366f1]"
+                  disabled={submitting}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {error && (
+              <p className="text-[#ef4444] text-sm bg-[#2d0f0f] border border-[#7f1d1d] rounded px-3 py-2">
+                {error}
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-[#1e2130] flex gap-2">
+        {/* Footer actions */}
+        <div className="px-5 py-4 border-t border-[#1e2130] flex gap-2">
           {!showRejectInput ? (
             <>
               <button

@@ -12,7 +12,8 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
   if (drafts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-[#94a3b8] text-sm">No drafts</p>
+        <p className="text-[#94a3b8] text-sm">No drafts to review.</p>
+        <p className="text-[#475569] text-xs mt-1">Generate drafts from a campaign to get started.</p>
       </div>
     )
   }
@@ -83,7 +84,7 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
 
 function StatusBadge({ status }: { status: DraftDTO['status'] }) {
   if (status === 'PENDING_REVIEW') {
-    return <Badge variant="muted">Pending</Badge>
+    return <Badge variant="warning">Pending Review</Badge>
   }
   if (status === 'APPROVED') {
     return <Badge variant="success">Approved</Badge>
