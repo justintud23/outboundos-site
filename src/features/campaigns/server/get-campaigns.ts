@@ -12,6 +12,7 @@ export interface CampaignSummaryDTO {
   messageCount: number
   draftPendingCount: number
   draftApprovedCount: number
+  replyCount: number
 }
 
 export async function getCampaigns({
@@ -32,29 +33,38 @@ export async function getCampaigns({
     },
   })
 
-  // For draft status breakdown we need separate counts — _count.select
-  // doesn't support filtering, so we fetch them in parallel.
   const ids = rows.map((r) => r.id)
 
-  const [pendingCounts, approvedCounts] = await Promise.all([
-    ids.length === 0
-      ? Promise.resolve([] as { campaignId: string; _count: { _all: number } }[])
-      : prisma.draft.groupBy({
-          by: ['campaignId'],
-          where: { organizationId, campaignId: { in: ids }, status: 'PENDING_REVIEW' },
-          _count: { _all: true },
-        }),
-    ids.length === 0
-      ? Promise.resolve([] as { campaignId: string; _count: { _all: number } }[])
-      : prisma.draft.groupBy({
-          by: ['campaignId'],
-          where: { organizationId, campaignId: { in: ids }, status: 'APPROVED' },
-          _count: { _all: true },
-        }),
+  if (ids.length === 0) {
+    return { campaigns: [], total: 0 }
+  }
+
+  // Draft status breakdown and reply counts — all in parallel.
+  // groupBy doesn't support relation filters, so reply counts use
+  // per-campaign count queries with a relation filter on outboundMessage.
+  const [pendingCounts, approvedCounts, ...replyCounts] = await Promise.all([
+    prisma.draft.groupBy({
+      by: ['campaignId'],
+      where: { organizationId, campaignId: { in: ids }, status: 'PENDING_REVIEW' },
+      _count: { _all: true },
+    }),
+    prisma.draft.groupBy({
+      by: ['campaignId'],
+      where: { organizationId, campaignId: { in: ids }, status: 'APPROVED' },
+      _count: { _all: true },
+    }),
+    ...ids.map((campaignId) =>
+      prisma.inboundReply
+        .count({ where: { organizationId, outboundMessage: { campaignId } } })
+        .then((count) => ({ campaignId, count })),
+    ),
   ])
 
   const pendingMap = new Map(pendingCounts.map((r) => [r.campaignId, r._count._all]))
   const approvedMap = new Map(approvedCounts.map((r) => [r.campaignId, r._count._all]))
+  const replyMap = new Map(
+    (replyCounts as { campaignId: string; count: number }[]).map((r) => [r.campaignId, r.count]),
+  )
 
   const campaigns: CampaignSummaryDTO[] = rows.map((row) => ({
     id: row.id,
@@ -65,6 +75,7 @@ export async function getCampaigns({
     messageCount: row._count.outboundMessages,
     draftPendingCount: pendingMap.get(row.id) ?? 0,
     draftApprovedCount: approvedMap.get(row.id) ?? 0,
+    replyCount: replyMap.get(row.id) ?? 0,
   }))
 
   return { campaigns, total: campaigns.length }

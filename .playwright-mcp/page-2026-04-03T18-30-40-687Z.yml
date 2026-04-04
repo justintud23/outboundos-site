@@ -1,0 +1,129 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]: OS
+      - navigation [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e8]
+          - generic: Dashboard
+        - link "Leads" [ref=e13] [cursor=pointer]:
+          - /url: /leads
+          - img [ref=e14]
+          - generic: Leads
+        - link "Drafts" [ref=e19] [cursor=pointer]:
+          - /url: /drafts
+          - img [ref=e20]
+          - generic: Drafts
+        - link "Campaigns" [ref=e23] [cursor=pointer]:
+          - /url: /campaigns
+          - img [ref=e24]
+          - generic: Campaigns
+        - link "Sequences" [ref=e27] [cursor=pointer]:
+          - /url: /sequences
+          - img [ref=e28]
+          - generic: Sequences
+        - link "Inbox" [ref=e32] [cursor=pointer]:
+          - /url: /inbox
+          - img [ref=e33]
+          - generic: Inbox
+        - link "Replies" [ref=e36] [cursor=pointer]:
+          - /url: /replies
+          - img [ref=e37]
+          - generic: Replies
+        - link "Analytics" [ref=e39] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e40]
+          - generic: Analytics
+        - link "Templates" [ref=e41] [cursor=pointer]:
+          - /url: /templates
+          - img [ref=e42]
+          - generic: Templates
+      - link "Settings" [ref=e45] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e46]
+        - generic: Settings
+    - main [ref=e49]:
+      - heading "Analytics" [level=1] [ref=e51]
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - paragraph [ref=e55]: Sent
+            - paragraph [ref=e56]: "12"
+          - generic [ref=e57]:
+            - paragraph [ref=e58]: Delivered
+            - paragraph [ref=e59]: "12"
+            - paragraph [ref=e60]: 100.0% rate
+          - generic [ref=e61]:
+            - paragraph [ref=e62]: Opened
+            - paragraph [ref=e63]: "9"
+            - paragraph [ref=e64]: 75.0% rate
+          - generic [ref=e65]:
+            - paragraph [ref=e66]: Clicked
+            - paragraph [ref=e67]: "5"
+            - paragraph [ref=e68]: 41.7% rate
+          - generic [ref=e69]:
+            - paragraph [ref=e70]: Replies
+            - paragraph [ref=e71]: "6"
+          - generic [ref=e72]:
+            - paragraph [ref=e73]: Positive Replies
+            - paragraph [ref=e74]: "3"
+            - paragraph [ref=e75]: 50.0% rate
+          - generic [ref=e76]:
+            - paragraph [ref=e77]: Bounced
+            - paragraph [ref=e78]: "1"
+            - paragraph [ref=e79]: 8.3% rate
+          - generic [ref=e80]:
+            - paragraph [ref=e81]: Unsubscribes
+            - paragraph [ref=e82]: "1"
+            - paragraph [ref=e83]: 8.3% rate
+        - generic [ref=e84]:
+          - heading "Recent Replies" [level=2] [ref=e85]
+          - table [ref=e88]:
+            - rowgroup [ref=e89]:
+              - row "Lead Classification Confidence Preview Received" [ref=e90]:
+                - columnheader "Lead" [ref=e91]
+                - columnheader "Classification" [ref=e92]
+                - columnheader "Confidence" [ref=e93]
+                - columnheader "Preview" [ref=e94]
+                - columnheader "Received" [ref=e95]
+            - rowgroup [ref=e96]:
+              - row "frank.wu@supabase.io Unsubscribe 98% Please remove me from your mailing list. I'm not interested and I haven't consented to receiving these messages. Mar 31, 2026" [ref=e97]:
+                - cell "frank.wu@supabase.io" [ref=e98]
+                - cell "Unsubscribe" [ref=e99]:
+                  - generic [ref=e100]: Unsubscribe
+                - cell "98%" [ref=e101]
+                - cell "Please remove me from your mailing list. I'm not interested and I haven't consented to receiving these messages." [ref=e102]
+                - cell "Mar 31, 2026" [ref=e103]
+              - row "evargas@vercel.com Out of Office 99% I'm out of office until April 14th with limited access to email. For urgent matters, please contact my colleague at oper Mar 30, 2026" [ref=e104]:
+                - cell "evargas@vercel.com" [ref=e105]
+                - cell "Out of Office" [ref=e106]:
+                  - generic [ref=e107]: Out of Office
+                - cell "99%" [ref=e108]
+                - cell "I'm out of office until April 14th with limited access to email. For urgent matters, please contact my colleague at oper" [ref=e109]
+                - cell "Mar 30, 2026" [ref=e110]
+              - row "d.okafor@figma.com Neutral 77% Got your note. Not sure this is the right fit right now, but I'll keep it in mind. Maybe check back in Q3. Mar 29, 2026" [ref=e111]:
+                - cell "d.okafor@figma.com" [ref=e112]
+                - cell "Neutral" [ref=e113]:
+                  - generic [ref=e114]: Neutral
+                - cell "77%" [ref=e115]
+                - cell "Got your note. Not sure this is the right fit right now, but I'll keep it in mind. Maybe check back in Q3." [ref=e116]
+                - cell "Mar 29, 2026" [ref=e117]
+              - row "clara.singh@linear.app Positive 91% Sounds compelling. We've struggled with reply classification on our current setup. I'm forwarding this to our Head of Re Mar 28, 2026" [ref=e118]:
+                - cell "clara.singh@linear.app" [ref=e119]
+                - cell "Positive" [ref=e120]:
+                  - generic [ref=e121]: Positive
+                - cell "91%" [ref=e122]
+                - cell "Sounds compelling. We've struggled with reply classification on our current setup. I'm forwarding this to our Head of Re" [ref=e123]
+                - cell "Mar 28, 2026" [ref=e124]
+              - row "ben.carter@notion.so Positive 89% Thanks for reaching out — your timing is actually perfect. We're evaluating tools for our SDR team right now. Would love Mar 27, 2026" [ref=e125]:
+                - cell "ben.carter@notion.so" [ref=e126]
+                - cell "Positive" [ref=e127]:
+                  - generic [ref=e128]: Positive
+                - cell "89%" [ref=e129]
+                - cell "Thanks for reaching out — your timing is actually perfect. We're evaluating tools for our SDR team right now. Would love" [ref=e130]
+                - cell "Mar 27, 2026" [ref=e131]
+        - paragraph [ref=e132]: Delivered, opened, clicked, bounced, and unsubscribe counts reflect unique emails (one message counted once per event type regardless of how many events were received). Positive replies are classified by AI.
+  - button "Open Next.js Dev Tools" [ref=e138] [cursor=pointer]:
+    - img [ref=e139]
+  - alert [ref=e142]

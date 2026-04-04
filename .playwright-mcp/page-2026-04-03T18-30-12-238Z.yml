@@ -1,0 +1,116 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]: OS
+      - navigation [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e8]
+          - generic: Dashboard
+        - link "Leads" [ref=e13] [cursor=pointer]:
+          - /url: /leads
+          - img [ref=e14]
+          - generic: Leads
+        - link "Drafts" [ref=e19] [cursor=pointer]:
+          - /url: /drafts
+          - img [ref=e20]
+          - generic: Drafts
+        - link "Campaigns" [ref=e23] [cursor=pointer]:
+          - /url: /campaigns
+          - img [ref=e24]
+          - generic: Campaigns
+        - link "Sequences" [ref=e27] [cursor=pointer]:
+          - /url: /sequences
+          - img [ref=e28]
+          - generic: Sequences
+        - link "Inbox" [ref=e32] [cursor=pointer]:
+          - /url: /inbox
+          - img [ref=e33]
+          - generic: Inbox
+        - link "Replies" [ref=e36] [cursor=pointer]:
+          - /url: /replies
+          - img [ref=e37]
+          - generic: Replies
+        - link "Analytics" [ref=e39] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e40]
+          - generic: Analytics
+        - link "Templates" [ref=e41] [cursor=pointer]:
+          - /url: /templates
+          - img [ref=e42]
+          - generic: Templates
+      - link "Settings" [ref=e45] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e46]
+        - generic: Settings
+    - main [ref=e49]:
+      - heading "Dashboard" [level=1] [ref=e51]
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - paragraph [ref=e55]: Leads
+            - paragraph [ref=e56]: "12"
+          - generic [ref=e57]:
+            - paragraph [ref=e58]: Campaigns
+            - paragraph [ref=e59]: "1"
+          - generic [ref=e60]:
+            - paragraph [ref=e61]: Messages Sent
+            - paragraph [ref=e62]: "12"
+          - generic [ref=e63]:
+            - paragraph [ref=e64]: Replies
+            - paragraph [ref=e65]: "6"
+            - paragraph [ref=e66]: 50.0% positive
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - heading "Recent Replies" [level=2] [ref=e69]
+            - link "View all →" [ref=e70] [cursor=pointer]:
+              - /url: /replies
+          - table [ref=e73]:
+            - rowgroup [ref=e74]:
+              - row "Lead Classification Confidence Preview Received" [ref=e75]:
+                - columnheader "Lead" [ref=e76]
+                - columnheader "Classification" [ref=e77]
+                - columnheader "Confidence" [ref=e78]
+                - columnheader "Preview" [ref=e79]
+                - columnheader "Received" [ref=e80]
+            - rowgroup [ref=e81]:
+              - row "frank.wu@supabase.io Unsubscribe 98% Please remove me from your mailing list. I'm not interested and I haven't consented to receiving these messages. Mar 31, 2026" [ref=e82]:
+                - cell "frank.wu@supabase.io" [ref=e83]
+                - cell "Unsubscribe" [ref=e84]:
+                  - generic [ref=e85]: Unsubscribe
+                - cell "98%" [ref=e86]
+                - cell "Please remove me from your mailing list. I'm not interested and I haven't consented to receiving these messages." [ref=e87]
+                - cell "Mar 31, 2026" [ref=e88]
+              - row "evargas@vercel.com Out of Office 99% I'm out of office until April 14th with limited access to email. For urgent matters, please contact my colleague at oper Mar 30, 2026" [ref=e89]:
+                - cell "evargas@vercel.com" [ref=e90]
+                - cell "Out of Office" [ref=e91]:
+                  - generic [ref=e92]: Out of Office
+                - cell "99%" [ref=e93]
+                - cell "I'm out of office until April 14th with limited access to email. For urgent matters, please contact my colleague at oper" [ref=e94]
+                - cell "Mar 30, 2026" [ref=e95]
+              - row "d.okafor@figma.com Neutral 77% Got your note. Not sure this is the right fit right now, but I'll keep it in mind. Maybe check back in Q3. Mar 29, 2026" [ref=e96]:
+                - cell "d.okafor@figma.com" [ref=e97]
+                - cell "Neutral" [ref=e98]:
+                  - generic [ref=e99]: Neutral
+                - cell "77%" [ref=e100]
+                - cell "Got your note. Not sure this is the right fit right now, but I'll keep it in mind. Maybe check back in Q3." [ref=e101]
+                - cell "Mar 29, 2026" [ref=e102]
+              - row "clara.singh@linear.app Positive 91% Sounds compelling. We've struggled with reply classification on our current setup. I'm forwarding this to our Head of Re Mar 28, 2026" [ref=e103]:
+                - cell "clara.singh@linear.app" [ref=e104]
+                - cell "Positive" [ref=e105]:
+                  - generic [ref=e106]: Positive
+                - cell "91%" [ref=e107]
+                - cell "Sounds compelling. We've struggled with reply classification on our current setup. I'm forwarding this to our Head of Re" [ref=e108]
+                - cell "Mar 28, 2026" [ref=e109]
+              - row "ben.carter@notion.so Positive 89% Thanks for reaching out — your timing is actually perfect. We're evaluating tools for our SDR team right now. Would love Mar 27, 2026" [ref=e110]:
+                - cell "ben.carter@notion.so" [ref=e111]
+                - cell "Positive" [ref=e112]:
+                  - generic [ref=e113]: Positive
+                - cell "89%" [ref=e114]
+                - cell "Thanks for reaching out — your timing is actually perfect. We're evaluating tools for our SDR team right now. Would love" [ref=e115]
+                - cell "Mar 27, 2026" [ref=e116]
+        - link "Full analytics →" [ref=e118] [cursor=pointer]:
+          - /url: /analytics
+  - button "Open Next.js Dev Tools" [ref=e124] [cursor=pointer]:
+    - img [ref=e125]
+  - alert [ref=e128]
