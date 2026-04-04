@@ -59,9 +59,16 @@ describe('CampaignCard', () => {
     expect(screen.getByText(/Created Jan \d+, 2026/)).toBeDefined()
   })
 
-  it('renders a link to /drafts', () => {
+  it('renders View Details link pointing to /campaigns/[id]', () => {
     render(<CampaignCard campaign={baseCampaign} />)
-    const link = screen.getByRole('link', { name: /view drafts/i })
-    expect(link).toBeDefined()
+    const links = screen.getAllByRole('link', { name: /view details/i })
+    expect(links.length).toBeGreaterThan(0)
+    expect((links[0] as HTMLAnchorElement).href).toContain('/campaigns/c1')
+  })
+
+  it('campaign name is a link to /campaigns/[id]', () => {
+    render(<CampaignCard campaign={baseCampaign} />)
+    const nameLink = screen.getByRole('link', { name: /Q2 Outreach Blitz/i })
+    expect((nameLink as HTMLAnchorElement).href).toContain('/campaigns/c1')
   })
 })

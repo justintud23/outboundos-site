@@ -21,9 +21,12 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
     <div className="bg-[#13151c] border border-[#1e2130] rounded-lg p-5 flex flex-col gap-3">
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-[#e2e8f0] font-semibold text-sm leading-snug">
+        <Link
+          href={`/campaigns/${campaign.id}`}
+          className="text-[#e2e8f0] font-semibold text-sm leading-snug hover:text-[#818cf8] transition-colors"
+        >
           {campaign.name}
-        </h2>
+        </Link>
         <Badge variant={STATUS_VARIANT[campaign.status]}>
           {capitalize(campaign.status)}
         </Badge>
@@ -65,10 +68,10 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
           Created {campaign.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
         <Link
-          href="/drafts"
+          href={`/campaigns/${campaign.id}`}
           className="text-[#6366f1] text-xs hover:text-[#818cf8] transition-colors"
         >
-          View Drafts →
+          View Details →
         </Link>
       </div>
     </div>
