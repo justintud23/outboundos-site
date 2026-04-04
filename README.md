@@ -15,10 +15,15 @@ Built as a portfolio project demonstrating production-grade architecture pattern
 ## Features
 
 ### Campaigns
-- Campaign cards with live stats: messages sent, drafts pending, inbound replies
-- Per-campaign summary cards (Total / Sent / Pending Drafts / Replies)
+- Campaign list with summary cards (Total / Sent / Pending Drafts / Replies)
+- Per-campaign stats: messages sent, drafts in review, inbound reply count
 - Status badges: Draft, Active, Paused, Completed, Archived
-- Link through to draft review queue per campaign
+- **Campaign Detail page** (`/campaigns/[id]`):
+  - 5 stat cards: Messages Sent, Total Drafts, Pending Review, Replies, Positive
+  - Pending-draft CTA banner (amber) when drafts are awaiting review
+  - Drafts section: lead context, subject, status badge, created date
+  - Replies section: classification badge, confidence %, body preview, received date
+  - All data fetched in a single parallel `Promise.all` — no N+1 queries
 
 ### Draft Review Flow
 - AI-generated email drafts queued for human review
@@ -85,7 +90,7 @@ src/
 │   │   └── server/         # getAnalytics()
 │   ├── campaigns/
 │   │   ├── components/     # CampaignCard
-│   │   └── server/         # getCampaigns() — message + draft + reply counts
+│   │   └── server/         # getCampaigns(), getCampaignDetail()
 │   ├── drafts/
 │   │   ├── components/     # DraftsTable, DraftReviewDrawer
 │   │   └── server/         # getDrafts(), generateDraft(), reviewDraft()
@@ -151,7 +156,7 @@ Rates are computed in the `KpiGrid` component: delivery rate = delivered/sent, o
 ## Testing
 
 ```
-138 tests across 21 test files — all passing
+148 tests across 22 test files — all passing
 ```
 
 **Patterns used:**
@@ -247,13 +252,14 @@ npx prisma db seed
 
 1. **Sign up** — create an account and organization via Clerk
 2. **Seed demo data** — `npx prisma db seed` populates leads, a campaign, drafts, sent messages, events, and AI-classified replies
-3. **Campaigns** — visit `/campaigns`; see the campaign card with messages sent, pending drafts, and reply count
-4. **Draft Review** — visit `/drafts`; amber banner shows pending drafts count; click "Review now" to filter to pending; open a draft to see the lead's name/company, the AI-generated email, and approve or edit before approving
-5. **Send** — approved drafts get a Send button; one click dispatches via SendGrid and removes the draft from the queue
-6. **Receive events** — delivery, open, click, bounce events arrive via SendGrid webhook; idempotent upsert by `sgEventId`
-7. **Inbound reply** — a lead replies; SendGrid Inbound Parse POSTs to `/api/replies`; the reply is AI-classified and stored
-8. **Analytics** — visit `/analytics` for 8 live KPI cards with computed rates
-9. **Replies** — visit `/replies` for the full reply history with classification filter and POSITIVE row highlighting
+3. **Campaigns** — visit `/campaigns`; see the campaign card with messages sent, pending drafts, and reply count; click a campaign name to drill into the detail page
+4. **Campaign Detail** — visit `/campaigns/[id]`; see 5 stat cards, a drafts table with status badges, and a replies table with AI classifications; amber banner CTAs when drafts are pending
+5. **Draft Review** — visit `/drafts` (or follow the "Review now" CTA); amber banner shows pending count; open a draft to see the lead's name/company, the AI-generated email, and approve or edit before approving
+6. **Send** — approved drafts get a Send button; one click dispatches via SendGrid and removes the draft from the queue
+7. **Receive events** — delivery, open, click, bounce events arrive via SendGrid webhook; idempotent upsert by `sgEventId`
+8. **Inbound reply** — a lead replies; SendGrid Inbound Parse POSTs to `/api/replies`; the reply is AI-classified and stored
+9. **Analytics** — visit `/analytics` for 8 live KPI cards with computed rates
+10. **Replies** — visit `/replies` for the full reply history with classification filter and POSITIVE row highlighting
 
 ---
 
@@ -285,7 +291,8 @@ npx prisma db seed
 **Campaigns**
 - [x] Campaign cards with message + draft + reply counts
 - [x] Summary cards (Campaigns / Sent / Pending / Replies)
-- [ ] Per-campaign analytics breakdown
+- [x] Campaign Detail page (`/campaigns/[id]`) — drafts + replies + stats
+- [ ] Per-campaign time-series analytics
 - [ ] Campaign builder UI
 
 **Analytics v2**
@@ -319,4 +326,4 @@ Most portfolio projects are CRUD apps with no real architecture decisions. Outbo
 - **Event deduplication** — analytics that don't lie when SendGrid delivers multiple OPENED events per message
 - **AI without coupling** — a provider abstraction that lets you swap models or mock in tests without touching business logic
 - **Human-in-the-loop AI** — draft generation is only half the story; the review flow (filter tabs, lead context, edit-before-approve) makes the AI output visible and correctable, which is how real AI-assisted tools work
-- **Test discipline** — TDD throughout, Prisma fully mocked, component tests isolated with jsdom, 138 tests passing across server functions and React components
+- **Test discipline** — TDD throughout, Prisma fully mocked, component tests isolated with jsdom, 148 tests passing across server functions and React components
