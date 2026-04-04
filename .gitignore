@@ -40,6 +40,10 @@ yarn-error.log*
 .superpowers/
 .worktrees/
 
+# tooling artifacts
+.playwright-mcp/
+.claude/
+
 # vercel
 .vercel
 
