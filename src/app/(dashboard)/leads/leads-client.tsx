@@ -5,7 +5,7 @@ import { CsvUploadForm } from '@/features/leads/components/csv-upload-form'
 import { LeadsTable } from '@/features/leads/components/leads-table'
 import { DraftReviewDrawer } from '@/features/drafts/components/draft-review-drawer'
 import type { LeadDTO, ImportBatchResult } from '@/features/leads/types'
-import type { DraftDTO } from '@/features/drafts/types'
+import type { DraftDTO, DraftWithLeadDTO } from '@/features/drafts/types'
 
 interface LeadsPageClientProps {
   initialLeads: LeadDTO[]
@@ -17,9 +17,9 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
   const [total, setTotal] = useState(initialTotal)
   const [lastBatch, setLastBatch] = useState<ImportBatchResult['batch'] | null>(null)
 
-  // Draft state: map of leadId → DraftDTO for leads with a pending draft
-  const [draftsByLeadId, setDraftsByLeadId] = useState<Map<string, DraftDTO>>(new Map())
-  const [reviewingDraft, setReviewingDraft] = useState<DraftDTO | null>(null)
+  // Draft state: map of leadId → DraftWithLeadDTO for leads with a pending draft
+  const [draftsByLeadId, setDraftsByLeadId] = useState<Map<string, DraftWithLeadDTO>>(new Map())
+  const [reviewingDraft, setReviewingDraft] = useState<DraftWithLeadDTO | null>(null)
   const [generatingLeadId, setGeneratingLeadId] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState<string | null>(null)
 
@@ -38,6 +38,20 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
     })
     setTotal((prev) => prev + result.batch.successCount)
     setLastBatch(result.batch)
+  }
+
+  function buildDraftWithLead(draft: DraftDTO, leadId: string): DraftWithLeadDTO {
+    const lead = leads.find((l) => l.id === leadId)
+    return {
+      ...draft,
+      lead: {
+        id: lead?.id ?? leadId,
+        email: lead?.email ?? '',
+        firstName: lead?.firstName ?? null,
+        lastName: lead?.lastName ?? null,
+        company: lead?.company ?? null,
+      },
+    }
   }
 
   async function handleGenerateDraft(leadId: string) {
@@ -59,26 +73,23 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
 
       if (res.status === 409 && data && 'code' in data && data.code === 'PENDING_DRAFT_EXISTS') {
         // Already has a pending draft — update map with minimal placeholder so Review button appears
-        setDraftsByLeadId((prev) => {
-          const next = new Map(prev)
-          next.set(leadId, {
-            id: (data as { code: string; draftId: string; message: string }).draftId,
-            organizationId: '',
-            leadId,
-            subject: '',
-            body: '',
-            status: 'PENDING_REVIEW',
-            promptTemplateId: null,
-            createdByClerkId: null,
-            approvedByClerkId: null,
-            approvedAt: null,
-            rejectedAt: null,
-            rejectionReason: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as DraftDTO)
-          return next
-        })
+        const placeholderDto: DraftDTO = {
+          id: (data as { code: string; draftId: string; message: string }).draftId,
+          organizationId: '',
+          leadId,
+          subject: '',
+          body: '',
+          status: 'PENDING_REVIEW',
+          promptTemplateId: null,
+          createdByClerkId: null,
+          approvedByClerkId: null,
+          approvedAt: null,
+          rejectedAt: null,
+          rejectionReason: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+        setDraftsByLeadId((prev) => new Map(prev).set(leadId, buildDraftWithLead(placeholderDto, leadId)))
         return
       }
 
@@ -88,7 +99,7 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
         return
       }
 
-      const draft = data as DraftDTO
+      const draft = buildDraftWithLead(data as DraftDTO, leadId)
       setDraftsByLeadId((prev) => new Map(prev).set(leadId, draft))
       setReviewingDraft(draft)
     } finally {
@@ -103,11 +114,7 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
 
   function handleDraftReviewed(updatedDraft: DraftDTO) {
     // Update the map — draft is no longer PENDING_REVIEW so it won't appear in pendingDrafts
-    setDraftsByLeadId((prev) => {
-      const next = new Map(prev)
-      next.set(updatedDraft.leadId, updatedDraft)
-      return next
-    })
+    setDraftsByLeadId((prev) => new Map(prev).set(updatedDraft.leadId, buildDraftWithLead(updatedDraft, updatedDraft.leadId)))
     setReviewingDraft(null)
   }
 
