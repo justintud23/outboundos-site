@@ -13,6 +13,7 @@ import {
   Mail,
   ChevronLeft,
   ChevronRight,
+  Kanban,
 } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { useSidebar } from './sidebar-context'
@@ -20,6 +21,7 @@ import { useSidebar } from './sidebar-context'
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/leads', icon: Users, label: 'Leads' },
+  { href: '/pipeline', icon: Kanban, label: 'Pipeline' },
   { href: '/drafts', icon: Mail, label: 'Drafts' },
   { href: '/campaigns', icon: Megaphone, label: 'Campaigns' },
   { href: '/sequences', icon: GitBranch, label: 'Sequences' },
