@@ -43,14 +43,14 @@ export function RepliesClient({ initialReplies, initialTotal }: RepliesClientPro
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <span className="text-[#94a3b8] text-sm">
+        <span className="text-[var(--text-secondary)] text-sm">
           {displayCount.toLocaleString()} repl{displayCount !== 1 ? 'ies' : 'y'}
         </span>
 
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as ReplyClassification | 'ALL')}
-          className="bg-[#1a1d2e] border border-[#2a2d3e] text-[#e2e8f0] text-xs rounded px-3 py-1.5 focus:outline-none focus:border-[#6366f1]"
+          className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs rounded-[var(--radius-btn)] px-3 py-1.5 focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] transition-all duration-[var(--transition-base)]"
         >
           <option value="ALL">All Classifications</option>
           {ALL_CLASSIFICATIONS.map((c) => (
@@ -61,7 +61,7 @@ export function RepliesClient({ initialReplies, initialTotal }: RepliesClientPro
         </select>
       </div>
 
-      <div className="bg-[#13151c] border border-[#1e2130] rounded-lg overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
         <RepliesTable replies={filtered} />
       </div>
     </div>

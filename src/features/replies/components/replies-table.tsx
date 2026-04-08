@@ -35,7 +35,7 @@ export function RepliesTable({ replies }: RepliesTableProps) {
   if (replies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-[#94a3b8] text-sm">No replies yet.</p>
+        <p className="text-[var(--text-secondary)] text-sm">No replies yet.</p>
       </div>
     )
   }
@@ -44,12 +44,12 @@ export function RepliesTable({ replies }: RepliesTableProps) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[#1e2130]">
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Lead</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Classification</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Confidence</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide hidden lg:table-cell">Preview</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Received</th>
+          <tr className="border-b border-[var(--border-default)]">
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Lead</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Classification</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Confidence</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide hidden lg:table-cell">Preview</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Received</th>
           </tr>
         </thead>
         <tbody>
@@ -58,23 +58,23 @@ export function RepliesTable({ replies }: RepliesTableProps) {
               key={reply.id}
               className={
                 reply.classification === 'POSITIVE'
-                  ? 'border-b border-[#1a1d2e] bg-[#052e16]/20 hover:bg-[#052e16]/40 transition-colors'
-                  : 'border-b border-[#1a1d2e] hover:bg-[#1a1d2e] transition-colors'
+                  ? 'border-b border-[var(--border-subtle)] bg-[var(--status-success-bg)] hover:bg-[var(--status-success-bg)] transition-colors duration-[var(--transition-fast)]'
+                  : 'border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-raised)] transition-colors duration-[var(--transition-fast)]'
               }
             >
-              <td className="py-3 px-4 text-[#e2e8f0]">{reply.leadEmail}</td>
+              <td className="py-3 px-4 text-[var(--text-primary)]">{reply.leadEmail}</td>
               <td className="py-3 px-4">
                 <ClassificationBadge value={reply.classification} />
               </td>
-              <td className="py-3 px-4 text-[#94a3b8] text-xs">
+              <td className="py-3 px-4 text-[var(--text-secondary)] text-xs">
                 {reply.classificationConfidence !== null
                   ? `${Math.round(reply.classificationConfidence * 100)}%`
-                  : '—'}
+                  : '\u2014'}
               </td>
-              <td className="py-3 px-4 text-[#475569] text-xs hidden lg:table-cell max-w-xs truncate">
+              <td className="py-3 px-4 text-[var(--text-muted)] text-xs hidden lg:table-cell max-w-xs truncate">
                 {reply.rawBody.slice(0, 120)}
               </td>
-              <td className="py-3 px-4 text-[#94a3b8] text-xs">
+              <td className="py-3 px-4 text-[var(--text-secondary)] text-xs">
                 {new Date(reply.receivedAt).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
