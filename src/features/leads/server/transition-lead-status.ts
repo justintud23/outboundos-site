@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
+import type { Prisma } from '@prisma/client'
 import type { LeadStatus } from '@prisma/client'
 import type { LeadDTO, TransitionInput, TransitionResult } from '../types'
 import { LeadNotFoundError, STATUS_ORDER, TERMINAL_STATUSES } from '../types'
@@ -82,7 +83,7 @@ export async function transitionLeadStatus(input: TransitionInput): Promise<Tran
         toStatus: newStatus,
         trigger,
         actorClerkId: actorClerkId ?? null,
-        metadata: metadata ?? undefined,
+        metadata: metadata as Prisma.InputJsonValue | undefined,
       },
     })
 

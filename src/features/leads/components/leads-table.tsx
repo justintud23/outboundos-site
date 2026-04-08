@@ -23,6 +23,8 @@ function StatusBadge({ status }: { status: LeadDTO['status'] }) {
     BOUNCED: 'danger',
     UNSUBSCRIBED: 'danger',
     CONVERTED: 'success',
+    INTERESTED: 'success',
+    NOT_INTERESTED: 'danger',
   }
   return <Badge variant={variantMap[status]}>{status}</Badge>
 }
