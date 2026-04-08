@@ -29,15 +29,15 @@ export default async function AnalyticsPage() {
         <KpiGrid analytics={analytics} />
 
         <div>
-          <h2 className="text-[#475569] text-xs uppercase tracking-wide font-medium mb-3">
+          <h2 className="text-[var(--text-muted)] text-xs uppercase tracking-wide font-medium mb-3">
             Recent Replies
           </h2>
-          <div className="bg-[#13151c] border border-[#1e2130] rounded-lg overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
             <RepliesTable replies={recentReplies} />
           </div>
         </div>
 
-        <p className="text-[#334155] text-xs leading-relaxed">
+        <p className="text-[var(--text-muted)] text-xs leading-relaxed">
           Delivered, opened, clicked, bounced, and unsubscribe counts reflect unique emails (one message counted once per event type regardless of how many events were received). Positive replies are classified by AI.
         </p>
 
