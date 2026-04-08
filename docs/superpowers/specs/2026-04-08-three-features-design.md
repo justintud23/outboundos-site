@@ -99,18 +99,31 @@ isRead    Boolean  @default(false)
 @@index([organizationId, isRead])
 ```
 
-**Draft — add unique constraint for idempotency:**
+**Draft — add nullable `sequenceEnrollmentId` for traceability:**
 ```prisma
-@@unique([sequenceId, leadId])  // already has sequenceId and leadId fields
+sequenceEnrollmentId  String?  // links draft to specific enrollment run
 ```
 
-Note: The Draft model already has `sequenceId` and `sequenceStepId` optional fields. For sequence runner idempotency, we check for existing drafts with matching (sequenceId, leadId, sequenceStepId) before generating. No schema change needed — this is an app-layer check.
+Sequence draft idempotency is enforced at the app layer: before generating a draft, query for existing drafts matching (sequenceId, leadId, sequenceStepId). No unique constraint — app-layer check for v1.
+
+**OutboundMessage — add indexes for inbox queries:**
+```prisma
+@@index([organizationId, sentAt])
+@@index([leadId, sentAt])
+```
+
+**InboundReply — add indexes for inbox queries:**
+```prisma
+@@index([organizationId, receivedAt])
+@@index([leadId, receivedAt])
+```
 
 ### Relations to Add
 
 - `Lead` → `LeadStatusChange[]`, `SequenceEnrollment[]`
 - `Organization` → `LeadStatusChange[]`, `SequenceEnrollment[]`
 - `Sequence` → `SequenceEnrollment[]`
+- `SequenceEnrollment` → `Draft[]` (via sequenceEnrollmentId)
 
 ---
 
@@ -130,9 +143,10 @@ NEW (0) → CONTACTED (1) → REPLIED (2) → INTERESTED (3) → CONVERTED (4)
 **Terminal states:** `NOT_INTERESTED`, `UNSUBSCRIBED`, `BOUNCED`
 
 **Transition rules:**
-- Automatic transitions never downgrade (e.g., INTERESTED cannot be auto-moved to REPLIED)
+- Automatic transitions never downgrade within the active pipeline (e.g., INTERESTED cannot be auto-moved to REPLIED)
+- Automatic transitions may move a lead INTO a terminal state (e.g., auto UNSUBSCRIBED), but never OUT of one
 - Manual transitions can move in any direction within the active pipeline
-- Manual transitions can move to/from terminal states
+- Manual transitions can move OUT of terminal states only via explicit user action (e.g., user drags from NOT_INTERESTED back to NEW)
 - Terminal states block: sending messages, enrolling in sequences (enforced at server layer)
 
 ### transitionLeadStatus()
@@ -161,8 +175,9 @@ interface TransitionResult {
 1. Fetch lead (org-scoped, throw if not found)
 2. If `fromStatus === newStatus`, return `{ changed: false }`
 3. If trigger starts with `"auto:"`:
-   - Check STATUS_ORDER: if current status rank >= new status rank, skip (no downgrade)
-   - Exception: terminal state transitions always apply (auto UNSUBSCRIBED overrides everything)
+   - If current status is terminal, skip (auto transitions never move OUT of terminal states)
+   - If newStatus is terminal, always apply (auto UNSUBSCRIBED overrides any active status)
+   - Otherwise, check STATUS_ORDER: if current status rank >= new status rank, skip (no downgrade)
 4. Update Lead.status in transaction with LeadStatusChange creation
 5. If new status is terminal: stop all active SequenceEnrollments for this lead (set status=STOPPED, stoppedReason mapped from status)
 6. Return result
@@ -259,6 +274,20 @@ interface PipelineLeadDTO {
 - `pipeline-card.tsx` — draggable lead card
 
 **Sidebar:** Add Pipeline nav item between Leads and Drafts (icon: `Kanban` from lucide-react or `LayoutPanelLeft`).
+
+### Feature 1 Implementation Scope
+
+Feature 1 ships as a self-contained unit including:
+1. Shared schema migration (all enum additions, new models, new fields, new indexes across all 3 features)
+2. `transitionLeadStatus()` core function with STATUS_ORDER, terminal state rules, audit logging
+3. Auto-transition integration in `ingest-reply.ts` (reply classification → lead status)
+4. Auto-transition integration in `send-draft.ts` (NEW → CONTACTED on send)
+5. Terminal state enforcement in `send-draft.ts` (block sending to terminal leads)
+6. `updateLeadStatus()` server function + `PATCH /api/leads/[id]/status` route
+7. `getPipelineLeads()` server function with lastActivityAt computation
+8. Pipeline board UI with @dnd-kit drag-and-drop
+9. Sidebar nav item for Pipeline
+10. Tests for transition logic, route handler, and pipeline queries
 
 ### Acceptance Criteria
 
@@ -359,13 +388,15 @@ See schema section above. Key fields:
 5. Idempotency check: does a Draft already exist for this (sequenceId, leadId, sequenceStepId)? If yes, return SKIPPED
 6. Generate draft:
    - Use step's subject/body as template (or as AI prompt input, matching existing generate-draft pattern)
-   - Link draft to campaignId (via sequence.campaignId), sequenceId, sequenceStepId
+   - Link draft to campaignId (via sequence.campaignId), sequenceId, sequenceStepId, sequenceEnrollmentId
    - Draft status: PENDING_REVIEW
 7. Advance enrollment:
    - `currentStepNumber = nextStepNumber`
    - Calculate next step's `nextDueAt` (if more steps exist): `now() + nextNextStep.delayDays days`
-   - If no more steps after this: `nextDueAt = null` (will be marked COMPLETED after this draft is approved and sent)
+   - If no more steps after this: `nextDueAt = null`
 8. Return DRAFT_GENERATED
+
+**Completion semantics:** Enrollment becomes COMPLETED only when all steps have been executed AND the final step's draft has been sent. The runner marks COMPLETED when `currentStepNumber + 1` exceeds total steps. For v1, this check happens in the runner — if the last step's draft was generated, the enrollment advances past the final step and is marked COMPLETED on the next cron pass. Future enhancement: hook into send-draft to mark COMPLETED immediately after final draft is sent.
 
 ### Integration with Feature 1
 
