@@ -55,10 +55,9 @@ export function CsvUploadForm({ onSuccess }: CsvUploadFormProps) {
 
       onSuccess(data)
     } catch {
-      setError('Network error — please try again.')
+      setError('Network error \u2014 please try again.')
     } finally {
       setUploading(false)
-      // Reset input so same file can be re-uploaded
       if (inputRef.current) inputRef.current.value = ''
     }
   }
@@ -77,7 +76,7 @@ export function CsvUploadForm({ onSuccess }: CsvUploadFormProps) {
         <button
           type="button"
           onClick={downloadSampleCsv}
-          className="flex items-center gap-1.5 text-xs text-[#6366f1] hover:text-[#818cf8] transition-colors"
+          className="flex items-center gap-1.5 text-xs text-[var(--accent-indigo)] hover:text-[var(--accent-indigo-hover)] transition-colors"
         >
           <Download size={12} />
           Sample CSV
@@ -95,13 +94,13 @@ export function CsvUploadForm({ onSuccess }: CsvUploadFormProps) {
           </Button>
         </label>
       </div>
-      <p className="text-[#475569] text-xs">
-        Required: <span className="text-[#94a3b8]">email</span>
-        {' · '}
-        Optional: <span className="text-[#94a3b8]">firstName, lastName, company, title</span>
+      <p className="text-[var(--text-muted)] text-xs">
+        Required: <span className="text-[var(--text-secondary)]">email</span>
+        {' \u00B7 '}
+        Optional: <span className="text-[var(--text-secondary)]">firstName, lastName, company, title</span>
       </p>
       {error && (
-        <span className="text-[#ef4444] text-xs">{error}</span>
+        <span className="text-[var(--status-danger)] text-xs">{error}</span>
       )}
     </div>
   )
