@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Mail, Trash2 } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { MailboxDTO } from '@/features/mailboxes/types'
@@ -43,40 +43,37 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
 
   return (
     <div className="space-y-8 max-w-xl">
-      {/* Section header */}
       <div>
-        <h2 className="text-[#e2e8f0] text-sm font-medium mb-1">Sending mailboxes</h2>
-        <p className="text-[#475569] text-xs">
+        <h2 className="text-[var(--text-primary)] text-sm font-medium mb-1">Sending mailboxes</h2>
+        <p className="text-[var(--text-muted)] text-xs">
           Outbound emails are sent from the active mailbox. Daily limit defaults to 50 emails/day.
         </p>
       </div>
 
-      {/* Existing mailboxes */}
       {mailboxes.length > 0 && (
-        <div className="bg-[#13151c] border border-[#1e2130] rounded-lg divide-y divide-[#1e2130]">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] divide-y divide-[var(--border-subtle)] shadow-[var(--shadow-card)]">
           {mailboxes.map((mb) => (
             <div key={mb.id} className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-3">
-                <Mail size={14} className="text-[#475569] shrink-0" />
+                <Mail size={14} className="text-[var(--text-muted)] shrink-0" />
                 <div>
-                  <p className="text-[#e2e8f0] text-sm">{mb.displayName}</p>
-                  <p className="text-[#475569] text-xs">{mb.email}</p>
+                  <p className="text-[var(--text-primary)] text-sm">{mb.displayName}</p>
+                  <p className="text-[var(--text-muted)] text-xs">{mb.email}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-0.5 rounded ${mb.isActive ? 'bg-[#1e3a2e] text-[#4ade80]' : 'bg-[#1e2130] text-[#475569]'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded-[var(--radius-badge)] ${mb.isActive ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]' : 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]'}`}>
                   {mb.isActive ? 'Active' : 'Inactive'}
                 </span>
-                <span className="text-[#475569] text-xs">{mb.sentToday}/{mb.dailyLimit} today</span>
+                <span className="text-[var(--text-muted)] text-xs">{mb.sentToday}/{mb.dailyLimit} today</span>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Add mailbox form */}
       <form onSubmit={handleAdd} className="space-y-3">
-        <h3 className="text-[#94a3b8] text-xs font-medium uppercase tracking-wide">Add mailbox</h3>
+        <h3 className="text-[var(--text-secondary)] text-xs font-medium uppercase tracking-wide">Add mailbox</h3>
         <div className="flex gap-3">
           <Input
             type="email"
@@ -95,9 +92,9 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
             className="flex-1"
           />
         </div>
-        {error && <p className="text-[#ef4444] text-xs">{error}</p>}
+        {error && <p className="text-[var(--status-danger)] text-xs">{error}</p>}
         <Button type="submit" variant="primary" size="sm" disabled={saving}>
-          {saving ? 'Adding…' : 'Add mailbox'}
+          {saving ? 'Adding\u2026' : 'Add mailbox'}
         </Button>
       </form>
     </div>
