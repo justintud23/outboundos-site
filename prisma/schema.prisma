@@ -25,6 +25,8 @@ enum LeadStatus {
   BOUNCED
   UNSUBSCRIBED
   CONVERTED
+  INTERESTED
+  NOT_INTERESTED
 }
 
 enum ImportStatus {
@@ -80,6 +82,13 @@ enum ReplyClassification {
   UNKNOWN
 }
 
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  STOPPED
+}
+
 enum PromptType {
   LEAD_SCORING
   EMAIL_DRAFT
@@ -107,6 +116,8 @@ model Organization {
   inboundReplies   InboundReply[]
   auditLogs        AuditLog[]
   promptTemplates  PromptTemplate[]
+  leadStatusChanges   LeadStatusChange[]
+  sequenceEnrollments SequenceEnrollment[]
 
   @@map("organizations")
 }
@@ -158,6 +169,8 @@ model Lead {
   drafts           Draft[]
   outboundMessages OutboundMessage[]
   inboundReplies   InboundReply[]
+  statusChanges       LeadStatusChange[]
+  sequenceEnrollments SequenceEnrollment[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -166,6 +179,29 @@ model Lead {
   @@index([organizationId, scoredAt])
   @@index([importBatchId])
   @@map("leads")
+}
+
+// ─── LEAD STATUS CHANGES ──────────────────────────────────────
+
+model LeadStatusChange {
+  id             String     @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  fromStatus   LeadStatus
+  toStatus     LeadStatus
+  trigger      String
+  actorClerkId String?
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([leadId])
+  @@index([organizationId, leadId])
+  @@map("lead_status_changes")
 }
 
 // ─── IMPORT BATCHES ────────────────────────────────────────────
@@ -233,6 +269,7 @@ model Sequence {
 
   steps  SequenceStep[]
   drafts Draft[]
+  enrollments SequenceEnrollment[]
 
   @@index([organizationId])
   @@index([campaignId])
@@ -257,6 +294,39 @@ model SequenceStep {
   @@unique([sequenceId, stepNumber])
   @@index([sequenceId])
   @@map("sequence_steps")
+}
+
+// ─── SEQUENCE ENROLLMENTS ─────────────────────────────────────
+
+model SequenceEnrollment {
+  id                  String           @id @default(cuid())
+  organizationId      String
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sequenceId          String
+  sequence            Sequence         @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  leadId              String
+  lead                Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  currentStepNumber   Int              @default(0)
+  status              EnrollmentStatus @default(ACTIVE)
+  nextDueAt           DateTime?
+  processing          Boolean          @default(false)
+  processingStartedAt DateTime?
+  startedAt           DateTime         @default(now())
+  pausedAt            DateTime?
+  stoppedAt           DateTime?
+  stoppedReason       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  drafts Draft[]
+
+  @@unique([sequenceId, leadId])
+  @@index([organizationId])
+  @@index([status, nextDueAt])
+  @@index([leadId])
+  @@map("sequence_enrollments")
 }
 
 // ─── MAILBOXES ─────────────────────────────────────────────────
@@ -299,6 +369,8 @@ model Draft {
   sequence       Sequence?     @relation(fields: [sequenceId], references: [id])
   sequenceStepId String?
   sequenceStep   SequenceStep? @relation(fields: [sequenceStepId], references: [id])
+  sequenceEnrollmentId String?
+  sequenceEnrollment   SequenceEnrollment? @relation(fields: [sequenceEnrollmentId], references: [id])
 
   promptTemplateId String?
   promptTemplate   PromptTemplate? @relation(fields: [promptTemplateId], references: [id])
@@ -355,6 +427,8 @@ model OutboundMessage {
   @@index([organizationId, status])
   @@index([leadId])
   @@index([mailboxId])
+  @@index([organizationId, sentAt])
+  @@index([leadId, sentAt])
   @@map("outbound_messages")
 }
 
@@ -396,6 +470,7 @@ model InboundReply {
   rawBody                  String
   classification           ReplyClassification @default(UNKNOWN)
   classificationConfidence Float?
+  isRead Boolean @default(false)
 
   receivedAt DateTime @default(now())
   createdAt  DateTime @default(now())
@@ -403,6 +478,9 @@ model InboundReply {
   @@index([organizationId])
   @@index([leadId])
   @@index([outboundMessageId])
+  @@index([organizationId, isRead])
+  @@index([organizationId, receivedAt])
+  @@index([leadId, receivedAt])
   @@map("inbound_replies")
 }
 
