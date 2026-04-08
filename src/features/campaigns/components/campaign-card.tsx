@@ -18,12 +18,11 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
   const totalDrafts = campaign.draftPendingCount + campaign.draftApprovedCount
 
   return (
-    <div className="bg-[#13151c] border border-[#1e2130] rounded-lg p-5 flex flex-col gap-3">
-      {/* Header row */}
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-5 flex flex-col gap-3 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)] transition-all duration-[var(--transition-base)]">
       <div className="flex items-start justify-between gap-3">
         <Link
           href={`/campaigns/${campaign.id}`}
-          className="text-[#e2e8f0] font-semibold text-sm leading-snug hover:text-[#818cf8] transition-colors"
+          className="text-[var(--text-primary)] font-semibold text-sm leading-snug hover:text-[var(--accent-indigo-hover)] transition-colors"
         >
           {campaign.name}
         </Link>
@@ -32,46 +31,43 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
         </Badge>
       </div>
 
-      {/* Description */}
       {campaign.description && (
-        <p className="text-[#94a3b8] text-xs leading-relaxed">
+        <p className="text-[var(--text-secondary)] text-xs leading-relaxed">
           {campaign.description}
         </p>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 py-2 border-t border-[#1e2130]">
+      <div className="grid grid-cols-3 gap-2 py-2 border-t border-[var(--border-subtle)]">
         <div>
-          <p className="text-[#475569] text-xs uppercase tracking-wide mb-0.5">Sent</p>
-          <p className="text-[#e2e8f0] text-sm font-medium tabular-nums">{campaign.messageCount.toLocaleString()}</p>
+          <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide mb-0.5">Sent</p>
+          <p className="text-[var(--text-primary)] text-sm font-medium tabular-nums">{campaign.messageCount.toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-[#475569] text-xs uppercase tracking-wide mb-0.5">Drafts</p>
-          <p className="text-[#e2e8f0] text-sm font-medium tabular-nums">
+          <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide mb-0.5">Drafts</p>
+          <p className="text-[var(--text-primary)] text-sm font-medium tabular-nums">
             {totalDrafts.toLocaleString()}
             {campaign.draftPendingCount > 0 && (
-              <span className="text-[#f59e0b] text-xs ml-1">
+              <span className="text-[var(--status-warning)] text-xs ml-1">
                 ({campaign.draftPendingCount} pending)
               </span>
             )}
           </p>
         </div>
         <div>
-          <p className="text-[#475569] text-xs uppercase tracking-wide mb-0.5">Replies</p>
-          <p className="text-[#e2e8f0] text-sm font-medium tabular-nums">{campaign.replyCount.toLocaleString()}</p>
+          <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide mb-0.5">Replies</p>
+          <p className="text-[var(--text-primary)] text-sm font-medium tabular-nums">{campaign.replyCount.toLocaleString()}</p>
         </div>
       </div>
 
-      {/* Footer */}
       <div className="flex items-center justify-between">
-        <span className="text-[#334155] text-xs">
+        <span className="text-[var(--text-muted)] text-xs">
           Created {campaign.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
         <Link
           href={`/campaigns/${campaign.id}`}
-          className="text-[#6366f1] text-xs hover:text-[#818cf8] transition-colors"
+          className="text-[var(--accent-indigo)] text-xs hover:text-[var(--accent-indigo-hover)] transition-colors"
         >
-          View Details →
+          View Details &rarr;
         </Link>
       </div>
     </div>
