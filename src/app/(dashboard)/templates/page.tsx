@@ -5,7 +5,7 @@ export default function TemplatesPage() {
     <>
       <Header title="Templates" />
       <div className="flex-1 p-6">
-        <p className="text-[#475569] text-sm">Templates — coming soon.</p>
+        <p className="text-[var(--text-muted)] text-sm">Templates — coming soon.</p>
       </div>
     </>
   )

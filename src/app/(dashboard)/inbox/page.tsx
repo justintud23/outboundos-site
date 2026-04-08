@@ -5,7 +5,7 @@ export default function InboxPage() {
     <>
       <Header title="Inbox" />
       <div className="flex-1 p-6">
-        <p className="text-[#475569] text-sm">Inbox — coming soon.</p>
+        <p className="text-[var(--text-muted)] text-sm">Inbox — coming soon.</p>
       </div>
     </>
   )

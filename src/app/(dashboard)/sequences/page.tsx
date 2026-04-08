@@ -5,7 +5,7 @@ export default function SequencesPage() {
     <>
       <Header title="Sequences" />
       <div className="flex-1 p-6">
-        <p className="text-[#475569] text-sm">Sequences — coming soon.</p>
+        <p className="text-[var(--text-muted)] text-sm">Sequences — coming soon.</p>
       </div>
     </>
   )
