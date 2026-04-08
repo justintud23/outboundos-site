@@ -2,8 +2,8 @@ import { chromium } from 'playwright'
 
 const BASE_URL = 'https://outboundos-site.vercel.app'
 
-const EMAIL = process.env.SCREENSHOT_EMAIL
-const PASSWORD = process.env.SCREENSHOT_PASSWORD
+const EMAIL = process.env.SCREENSHOT_EMAIL as string
+const PASSWORD = process.env.SCREENSHOT_PASSWORD as string
 
 if (!EMAIL || !PASSWORD) {
   console.error('Set SCREENSHOT_EMAIL and SCREENSHOT_PASSWORD env vars before running.')
