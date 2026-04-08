@@ -49,7 +49,7 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
   }
 
   // 4. Calculate nextDueAt from step 1's delayDays
-  const step1 = sequence.steps[0]
+  const step1 = sequence.steps[0]!
   const now = new Date()
   const nextDueAt = new Date(now.getTime() + step1.delayDays * 24 * 60 * 60 * 1000)
 
