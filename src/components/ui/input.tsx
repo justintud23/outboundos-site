@@ -6,9 +6,11 @@ export function Input({ className, ...props }: InputProps) {
   return (
     <input
       className={clsx(
-        'w-full bg-[#1a1d2e] border border-[#2a2d3e] text-[#e2e8f0] rounded-md px-3 py-2 text-sm',
-        'placeholder:text-[#475569]',
-        'focus:outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]',
+        'w-full bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)]',
+        `rounded-[var(--radius-btn)] px-3 py-2 text-sm`,
+        'placeholder:text-[var(--text-muted)]',
+        'focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)]',
+        'transition-all duration-[var(--transition-base)]',
         className,
       )}
       {...props}
