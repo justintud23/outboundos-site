@@ -2,28 +2,11 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
+import { StatCard } from '@/components/ui/stat-card'
 import { RepliesTable } from '@/features/replies/components/replies-table'
 import { getReplies } from '@/features/replies/server/get-replies'
 import { getDashboardSummary } from '@/features/dashboard/server/get-dashboard-summary'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
-
-interface StatCardProps {
-  label: string
-  value: number
-  sub?: string
-}
-
-function StatCard({ label, value, sub }: StatCardProps) {
-  return (
-    <div className="bg-[#13151c] border border-[#1e2130] rounded-lg p-5">
-      <p className="text-[#475569] text-xs uppercase tracking-wide font-medium mb-2">{label}</p>
-      <p className="text-3xl font-semibold tabular-nums text-[#e2e8f0]">{value.toLocaleString()}</p>
-      {sub !== undefined && (
-        <p className="text-[#475569] text-xs mt-1">{sub}</p>
-      )}
-    </div>
-  )
-}
 
 export default async function DashboardPage() {
   const { orgId } = await auth()
@@ -51,24 +34,24 @@ export default async function DashboardPage() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Leads"         value={summary.leads} />
-          <StatCard label="Campaigns"     value={summary.campaigns} />
+          <StatCard label="Campaigns"     value={summary.campaigns} accent="cyan" />
           <StatCard label="Messages Sent" value={summary.messagesSent} />
-          <StatCard label="Replies"       value={summary.replies} sub={positiveRate} />
+          <StatCard label="Replies"       value={summary.replies} sub={positiveRate} accent="success" />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[#475569] text-xs uppercase tracking-wide font-medium">
+            <h2 className="text-[var(--text-muted)] text-xs uppercase tracking-wide font-medium">
               Recent Replies
             </h2>
             <Link
               href="/replies"
-              className="text-[#6366f1] text-xs hover:text-[#818cf8] transition-colors"
+              className="text-[var(--accent-indigo)] text-xs hover:text-[var(--accent-indigo-hover)] transition-colors"
             >
-              View all →
+              View all &rarr;
             </Link>
           </div>
-          <div className="bg-[#13151c] border border-[#1e2130] rounded-lg overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
             <RepliesTable replies={recentReplies} />
           </div>
         </div>
@@ -76,9 +59,9 @@ export default async function DashboardPage() {
         <div className="flex gap-3">
           <Link
             href="/analytics"
-            className="text-xs text-[#475569] hover:text-[#94a3b8] transition-colors"
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
           >
-            Full analytics →
+            Full analytics &rarr;
           </Link>
         </div>
 
