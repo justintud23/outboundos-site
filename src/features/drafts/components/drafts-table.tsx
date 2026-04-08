@@ -12,8 +12,8 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
   if (drafts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-[#94a3b8] text-sm">No drafts to review.</p>
-        <p className="text-[#475569] text-xs mt-1">Generate drafts from a campaign to get started.</p>
+        <p className="text-[var(--text-secondary)] text-sm">No drafts to review.</p>
+        <p className="text-[var(--text-muted)] text-xs mt-1">Generate drafts from a campaign to get started.</p>
       </div>
     )
   }
@@ -22,12 +22,12 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[#1e2130]">
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Lead</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Subject</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Status</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide hidden md:table-cell">Created</th>
-            <th className="text-left py-3 px-4 text-[#475569] font-medium text-xs uppercase tracking-wide">Actions</th>
+          <tr className="border-b border-[var(--border-default)]">
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Lead</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Subject</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Status</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide hidden md:table-cell">Created</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -38,18 +38,18 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
             const isSending = sendingDraftId === draft.id
 
             return (
-              <tr key={draft.id} className="border-b border-[#1e2130] hover:bg-[#1a1d2e] transition-colors">
+              <tr key={draft.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-raised)] transition-colors duration-[var(--transition-fast)]">
                 <td className="px-4 py-3">
-                  <div className="text-[#e2e8f0]">{displayName}</div>
-                  <div className="text-[#94a3b8] text-xs">{draft.lead.email}</div>
+                  <div className="text-[var(--text-primary)]">{displayName}</div>
+                  <div className="text-[var(--text-secondary)] text-xs">{draft.lead.email}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="text-[#e2e8f0] truncate block max-w-[200px]">{draft.subject}</span>
+                  <span className="text-[var(--text-primary)] truncate block max-w-[200px]">{draft.subject}</span>
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={draft.status} />
                 </td>
-                <td className="px-4 py-3 text-[#94a3b8] hidden md:table-cell">
+                <td className="px-4 py-3 text-[var(--text-secondary)] hidden md:table-cell">
                   {new Date(draft.createdAt).toLocaleDateString('en-US')}
                 </td>
                 <td className="px-4 py-3">
@@ -57,7 +57,7 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                     <button
                       onClick={() => onReview(draft)}
                       aria-label={`Review draft for ${displayName}`}
-                      className="text-xs px-3 py-1 rounded bg-[#1e2130] hover:bg-[#6366f1] text-[#e2e8f0] transition-colors"
+                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--bg-surface-raised)] hover:bg-[var(--accent-indigo)] text-[var(--text-primary)] transition-colors duration-[var(--transition-base)]"
                     >
                       Review
                     </button>
@@ -67,7 +67,7 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                       onClick={() => void onSend(draft)}
                       disabled={isSending}
                       aria-label={`Send draft to ${displayName}`}
-                      className="text-xs px-3 py-1 rounded bg-[#1e3a2e] hover:bg-[#166534] text-[#4ade80] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--status-success-bg)] hover:bg-[var(--status-success)]/25 text-[var(--status-success)] transition-colors duration-[var(--transition-base)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSending ? 'Sending…' : 'Send'}
                     </button>

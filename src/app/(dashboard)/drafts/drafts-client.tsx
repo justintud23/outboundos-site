@@ -81,13 +81,13 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
 
         {/* Pending CTA banner */}
         {pendingCount > 0 && (
-          <div className="flex items-center justify-between bg-[#2d1f00] border border-[#f59e0b]/30 rounded-lg px-4 py-3">
-            <p className="text-[#f59e0b] text-sm font-medium">
+          <div className="flex items-center justify-between bg-[var(--status-warning-bg)] border border-[var(--status-warning)]/30 rounded-[var(--radius-card)] px-4 py-3">
+            <p className="text-[var(--status-warning)] text-sm font-medium">
               {pendingCount} draft{pendingCount !== 1 ? 's' : ''} pending review
             </p>
             <button
               onClick={() => setFilter('pending')}
-              className="text-[#f59e0b] text-xs underline hover:no-underline transition-all"
+              className="text-[var(--status-warning)] text-xs underline hover:no-underline transition-all duration-[var(--transition-base)]"
             >
               Review now →
             </button>
@@ -120,12 +120,12 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
         </div>
 
         {sendError && (
-          <div className="text-[#ef4444] text-sm bg-[#2d0f0f] border border-[#7f1d1d] rounded px-4 py-2">
+          <div className="text-[var(--status-danger)] text-sm bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/30 rounded-[var(--radius-btn)] px-4 py-2">
             {sendError}
           </div>
         )}
 
-        <div className="bg-[#13151c] border border-[#1e2130] rounded-lg overflow-hidden">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
           <DraftsTable
             drafts={visibleDrafts}
             onReview={handleReview}
@@ -159,10 +159,10 @@ function TabButton({ active, onClick, label, count, highlight }: TabButtonProps)
     <button
       onClick={onClick}
       className={[
-        'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
+        'flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors duration-[var(--transition-base)]',
         active
-          ? 'bg-[#1e2130] text-[#e2e8f0]'
-          : 'text-[#475569] hover:text-[#94a3b8]',
+          ? 'bg-[var(--bg-surface-raised)] text-[var(--text-primary)]'
+          : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
       ].join(' ')}
     >
       {label}
@@ -171,11 +171,11 @@ function TabButton({ active, onClick, label, count, highlight }: TabButtonProps)
           'inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-xs px-1',
           active
             ? highlight
-              ? 'bg-[#f59e0b] text-[#0f1117]'
-              : 'bg-[#2d3148] text-[#94a3b8]'
+              ? 'bg-[var(--status-warning)] text-[var(--text-inverse)]'
+              : 'bg-[var(--bg-surface-overlay)] text-[var(--text-secondary)]'
             : highlight
-              ? 'bg-[#f59e0b]/20 text-[#f59e0b]'
-              : 'bg-[#1a1d2e] text-[#475569]',
+              ? 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]'
+              : 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]',
         ].join(' ')}
       >
         {count}
