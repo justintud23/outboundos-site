@@ -9,6 +9,9 @@ import {
   DraftAlreadySentError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
+import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { TERMINAL_STATUSES } from '@/features/leads/types'
+import { LeadInTerminalStateError } from '../types'
 
 interface SendDraftInput {
   organizationId: string
@@ -24,7 +27,7 @@ export async function sendDraft({
   // 1. Fetch draft (org-scoped)
   const draft = await prisma.draft.findFirst({
     where: { id: draftId, organizationId },
-    include: { lead: { select: { email: true } } },
+    include: { lead: { select: { id: true, email: true, status: true } } },
   })
 
   if (!draft) {
@@ -34,6 +37,11 @@ export async function sendDraft({
   // 2. Must be APPROVED
   if (draft.status !== 'APPROVED') {
     throw new DraftNotApprovedError(draft.status)
+  }
+
+  // 2b. Check lead is not in terminal state
+  if (TERMINAL_STATUSES.includes(draft.lead.status)) {
+    throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
   // 3. Fetch active mailbox
@@ -115,6 +123,15 @@ export async function sendDraft({
     }
     throw err
   }
+
+  // 6b. Auto-transition lead status: NEW → CONTACTED
+  await transitionLeadStatus({
+    organizationId,
+    leadId: draft.leadId,
+    newStatus: 'CONTACTED',
+    trigger: 'auto:message_sent',
+    metadata: { messageId: created.id, draftId },
+  })
 
   // 7. Map to OutboundMessageDTO
   return {

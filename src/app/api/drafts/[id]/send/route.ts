@@ -7,6 +7,7 @@ import {
   DraftAlreadySentError,
   NoActiveMailboxError,
   MailboxLimitExceededError,
+  LeadInTerminalStateError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 
@@ -55,6 +56,12 @@ export async function POST(
       return NextResponse.json(
         { code: 'MAILBOX_LIMIT_EXCEEDED', message: err.message },
         { status: 429 },
+      )
+    }
+    if (err instanceof LeadInTerminalStateError) {
+      return NextResponse.json(
+        { error: err.message, code: 'LEAD_IN_TERMINAL_STATE' },
+        { status: 422 },
       )
     }
     const message = err instanceof Error ? err.message : 'Internal server error'

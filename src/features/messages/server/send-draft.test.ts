@@ -12,6 +12,18 @@ vi.mock('@/lib/email', () => ({
   getEmailProvider: vi.fn(),
 }))
 
+vi.mock('@/features/leads/server/transition-lead-status', () => ({
+  transitionLeadStatus: vi.fn().mockResolvedValue({ changed: true, lead: {}, previousStatus: 'NEW' }),
+}))
+
+vi.mock('@/features/leads/types', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>
+  return {
+    ...actual,
+    TERMINAL_STATUSES: ['NOT_INTERESTED', 'UNSUBSCRIBED', 'BOUNCED'],
+  }
+})
+
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
@@ -48,7 +60,7 @@ const fakeDraft = {
   rejectionReason: null,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-02'),
-  lead: { email: 'jane@acme.com' },
+  lead: { id: 'lead-1', email: 'jane@acme.com', status: 'NEW' },
 }
 
 const fakeMailbox = {

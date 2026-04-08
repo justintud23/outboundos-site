@@ -48,3 +48,13 @@ export class DraftAlreadySentError extends Error {
     Object.setPrototypeOf(this, DraftAlreadySentError.prototype)
   }
 }
+
+import type { LeadStatus } from '@prisma/client'
+
+export class LeadInTerminalStateError extends Error {
+  constructor(public readonly leadId: string, public readonly status: LeadStatus) {
+    super(`Cannot send to lead ${leadId} in terminal state: ${status}`)
+    this.name = 'LeadInTerminalStateError'
+    Object.setPrototypeOf(this, LeadInTerminalStateError.prototype)
+  }
+}
