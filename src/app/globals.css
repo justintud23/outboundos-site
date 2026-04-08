@@ -1,19 +1,73 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1117;
-  --foreground: #e2e8f0;
-  --sidebar-bg: #13151c;
-  --sidebar-border: #1e2130;
-  --card-bg: #1a1d2e;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --muted: #94a3b8;
-  --border: #2a2d3e;
+  /* ── Backgrounds (surface hierarchy) ── */
+  --bg-base: #0a0f1f;
+  --bg-surface: #0f1221;
+  --bg-surface-raised: #161a2c;
+  --bg-surface-overlay: #1c2039;
+  --bg-sidebar: #0c0f1a;
+
+  /* ── Borders & Dividers ── */
+  --border-default: #23294a;
+  --border-subtle: #151833;
+  --border-glow: rgba(99, 102, 241, 0.15);
+
+  /* ── Text ── */
+  --text-primary: #e8eaf0;
+  --text-secondary: #94a3b8;
+  --text-muted: #4b5574;
+  --text-inverse: #080b14;
+
+  /* ── Accent Colors ── */
+  --accent-indigo: #6366f1;
+  --accent-indigo-hover: #818cf8;
+  --accent-indigo-glow: rgba(99, 102, 241, 0.2);
+  --accent-cyan: #22d3ee;
+  --accent-magenta: #e879f9;
+
+  /* ── Semantic Status ── */
+  --status-success: #10b981;
+  --status-success-bg: rgba(16, 185, 129, 0.12);
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-danger: #ef4444;
+  --status-danger-bg: rgba(239, 68, 68, 0.12);
+
+  /* ── Effects ── */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px rgba(99, 102, 241, 0.04);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.08);
+  --radius-card: 12px;
+  --radius-btn: 8px;
+  --radius-badge: 6px;
+
+  /* ── Transitions ── */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+  --transition-slow: 260ms ease;
+
+  /* ── Focus ── */
+  --focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.35);
+
+  /* ── Sidebar ── */
+  --sidebar-width-expanded: 240px;
+  --sidebar-width-collapsed: 60px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-base);
+  color: var(--text-primary);
   font-family: var(--font-geist-sans, system-ui, sans-serif);
+}
+
+/* Subtle radial gradient background layer for depth */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(34, 211, 238, 0.04) 0%, transparent 60%);
+  pointer-events: none;
 }
