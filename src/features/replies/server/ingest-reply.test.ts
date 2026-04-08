@@ -13,6 +13,26 @@ vi.mock('@/lib/ai', () => ({
   getAIProvider: vi.fn(),
 }))
 
+vi.mock('@/features/leads/server/transition-lead-status', () => ({
+  transitionLeadStatus: vi.fn().mockResolvedValue({ changed: false, lead: {}, previousStatus: 'NEW' }),
+}))
+
+vi.mock('@/features/leads/types', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>
+  return {
+    ...actual,
+    CLASSIFICATION_TO_STATUS: {
+      POSITIVE: 'INTERESTED',
+      NEGATIVE: 'NOT_INTERESTED',
+      OUT_OF_OFFICE: 'REPLIED',
+      UNSUBSCRIBE_REQUEST: 'UNSUBSCRIBED',
+      REFERRAL: 'REPLIED',
+      NEUTRAL: 'REPLIED',
+      UNKNOWN: 'REPLIED',
+    },
+  }
+})
+
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { ingestReply } from './ingest-reply'

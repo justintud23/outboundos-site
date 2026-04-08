@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import type { InboundReplyDTO } from '../types'
 import { LeadNotFoundByEmailError } from '../types'
+import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { CLASSIFICATION_TO_STATUS } from '@/features/leads/types'
 
 const FALLBACK_CLASSIFY_PROMPT = `You are an email reply classifier for a sales team.
 Classify the reply into exactly one category:
@@ -75,6 +77,18 @@ export async function ingestReply({
       ...(receivedAt !== undefined && { receivedAt }),
     },
   })
+
+  // 6. Auto-transition lead status based on classification
+  const targetStatus = CLASSIFICATION_TO_STATUS[classification]
+  if (targetStatus) {
+    await transitionLeadStatus({
+      organizationId,
+      leadId: lead.id,
+      newStatus: targetStatus,
+      trigger: 'auto:reply_classification',
+      metadata: { replyId: reply.id, classification, confidence },
+    })
+  }
 
   return {
     id: reply.id,
