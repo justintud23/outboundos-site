@@ -26,11 +26,13 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = clsx(
-    'inline-flex items-center justify-center font-medium rounded-md transition-colors',
+    'inline-flex items-center justify-center font-medium transition-all duration-[var(--transition-base)]',
+    `rounded-[var(--radius-btn)]`,
+    'focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]',
     {
-      'bg-[#6366f1] text-white hover:bg-[#4f46e5]': variant === 'primary',
-      'text-[#94a3b8] hover:text-white hover:bg-[#1e2130]': variant === 'ghost',
-      'border border-[#2a2d3e] text-[#94a3b8] hover:border-[#6366f1] hover:text-white': variant === 'outline',
+      'bg-[var(--accent-indigo)] text-white hover:bg-[var(--accent-indigo-hover)] shadow-[0_0_12px_rgba(99,102,241,0.15)]': variant === 'primary',
+      'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)]': variant === 'ghost',
+      'border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-indigo)] hover:text-[var(--text-primary)]': variant === 'outline',
       'px-3 py-1.5 text-sm': size === 'sm',
       'px-4 py-2 text-sm': size === 'md',
       'opacity-50 cursor-not-allowed': disabled,
