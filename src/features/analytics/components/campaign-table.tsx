@@ -23,7 +23,7 @@ function InlineBar({ value, max }: { value: number; max: number }) {
       <span className="text-[var(--text-primary)] text-xs tabular-nums w-8 text-right">{value}</span>
       <div className="flex-1 h-1.5 bg-[var(--bg-surface-raised)] rounded-full overflow-hidden">
         <div
-          className="h-full bg-[var(--accent-indigo)] rounded-full transition-all duration-500"
+          className="h-full bg-[var(--chart-sent)] rounded-full transition-all duration-500"
           style={{ width: `${width}%` }}
         />
       </div>

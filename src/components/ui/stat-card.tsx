@@ -4,7 +4,7 @@ interface StatCardProps {
   label: string
   value: number
   sub?: string
-  accent?: 'success' | 'warning' | 'danger' | 'cyan'
+  accent?: 'success' | 'warning' | 'danger' | 'cyan' | 'violet' | 'warm'
 }
 
 const ACCENT_COLORS: Record<string, string> = {
@@ -12,6 +12,8 @@ const ACCENT_COLORS: Record<string, string> = {
   warning: 'border-l-[var(--status-warning)]',
   danger: 'border-l-[var(--status-danger)]',
   cyan: 'border-l-[var(--accent-cyan)]',
+  violet: 'border-l-[var(--accent-magenta)]',
+  warm: 'border-l-[var(--accent-warm)]',
 }
 
 const VALUE_COLORS: Record<string, string> = {
@@ -19,6 +21,8 @@ const VALUE_COLORS: Record<string, string> = {
   warning: 'text-[var(--status-warning)]',
   danger: 'text-[var(--status-danger)]',
   cyan: 'text-[var(--accent-cyan)]',
+  violet: 'text-[var(--accent-magenta)]',
+  warm: 'text-[var(--accent-warm)]',
 }
 
 export function StatCard({ label, value, sub, accent }: StatCardProps) {

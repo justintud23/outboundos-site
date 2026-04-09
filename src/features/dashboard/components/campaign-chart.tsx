@@ -24,8 +24,8 @@ export function CampaignChart({ data }: { data: CampaignPerformanceDTO[] }) {
           contentStyle={{ background: 'var(--bg-surface-overlay)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: 'var(--text-primary)' }}
         />
-        <Bar dataKey="sent" fill="var(--accent-indigo)" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="replied" fill="var(--accent-cyan)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="sent" fill="var(--chart-sent)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="replied" fill="var(--chart-replied)" radius={[4, 4, 0, 0]} />
       </LazyBarChart>
     </LazyResponsiveContainer>
   )

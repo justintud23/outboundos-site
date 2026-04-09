@@ -29,12 +29,12 @@ function KpiChip({ label, value, accent, index }: KpiChipProps) {
 
 export function KpiStrip({ analytics }: { analytics: AnalyticsDTO }) {
   const chips = [
-    { label: 'Sent', value: analytics.sent, accent: 'var(--accent-indigo)' },
-    { label: 'Delivered', value: analytics.delivered, accent: 'var(--accent-cyan)' },
-    { label: 'Opened', value: analytics.opened, accent: 'var(--accent-magenta)' },
+    { label: 'Sent', value: analytics.sent, accent: 'var(--chart-sent)' },
+    { label: 'Delivered', value: analytics.delivered, accent: 'var(--chart-delivered)' },
+    { label: 'Opened', value: analytics.opened, accent: 'var(--chart-opened)' },
     { label: 'Clicked', value: analytics.clicked, accent: 'var(--accent-cyan)' },
-    { label: 'Replies', value: analytics.replies, accent: 'var(--status-success)' },
-    { label: 'Positive', value: analytics.positiveReplies, accent: 'var(--status-success)' },
+    { label: 'Replies', value: analytics.replies, accent: 'var(--chart-replied)' },
+    { label: 'Positive', value: analytics.positiveReplies, accent: 'var(--chart-positive)' },
     { label: 'Bounced', value: analytics.bounced, accent: 'var(--status-danger)' },
     { label: 'Unsubs', value: analytics.unsubscribes, accent: 'var(--status-danger)' },
   ]

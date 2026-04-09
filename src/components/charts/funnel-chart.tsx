@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react'
 import type { FunnelStageDTO } from '@/features/analytics/types'
 
 const STAGE_COLORS = [
-  'var(--accent-indigo)',
-  'color-mix(in srgb, var(--accent-indigo) 80%, var(--accent-cyan) 20%)',
-  'color-mix(in srgb, var(--accent-indigo) 50%, var(--accent-cyan) 50%)',
-  'color-mix(in srgb, var(--accent-cyan) 80%, var(--accent-indigo) 20%)',
-  'var(--accent-cyan)',
+  'var(--chart-sent)',
+  'var(--chart-delivered)',
+  'var(--chart-opened)',
+  'var(--chart-replied)',
+  'var(--chart-positive)',
 ]
 
 interface FunnelChartProps {

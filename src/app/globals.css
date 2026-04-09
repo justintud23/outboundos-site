@@ -1,42 +1,43 @@
 @import "tailwindcss";
 
 :root {
-  /* ── Backgrounds (surface hierarchy) ── */
-  --bg-base: #0a0f1f;
-  --bg-surface: #0f1221;
-  --bg-surface-raised: #161a2c;
-  --bg-surface-overlay: #1c2039;
-  --bg-sidebar: #0c0f1a;
+  /* ── Backgrounds (Obsidian Spectrum surface hierarchy) ── */
+  --bg-base: #09090b;
+  --bg-surface: #111114;
+  --bg-surface-raised: #18181b;
+  --bg-surface-overlay: #1f1f23;
+  --bg-sidebar: #0c0c0e;
 
   /* ── Borders & Dividers ── */
-  --border-default: #23294a;
-  --border-subtle: #151833;
-  --border-glow: rgba(99, 102, 241, 0.15);
+  --border-default: #27272a;
+  --border-subtle: #1c1c1f;
+  --border-glow: rgba(129, 140, 248, 0.15);
 
   /* ── Text ── */
-  --text-primary: #e8eaf0;
-  --text-secondary: #94a3b8;
-  --text-muted: #4b5574;
-  --text-inverse: #080b14;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+  --text-inverse: #09090b;
 
-  /* ── Accent Colors ── */
-  --accent-indigo: #6366f1;
-  --accent-indigo-hover: #818cf8;
-  --accent-indigo-glow: rgba(99, 102, 241, 0.2);
-  --accent-cyan: #22d3ee;
-  --accent-magenta: #e879f9;
+  /* ── Accent Colors (4-color spectrum) ── */
+  --accent-indigo: #818cf8;
+  --accent-indigo-hover: #a5b4fc;
+  --accent-indigo-glow: rgba(129, 140, 248, 0.2);
+  --accent-cyan: #38bdf8;
+  --accent-magenta: #a78bfa;
+  --accent-warm: #fb923c;
 
   /* ── Semantic Status ── */
-  --status-success: #10b981;
-  --status-success-bg: rgba(16, 185, 129, 0.12);
-  --status-warning: #f59e0b;
-  --status-warning-bg: rgba(245, 158, 11, 0.12);
-  --status-danger: #ef4444;
-  --status-danger-bg: rgba(239, 68, 68, 0.12);
+  --status-success: #4ade80;
+  --status-success-bg: rgba(74, 222, 128, 0.12);
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.12);
+  --status-danger: #f87171;
+  --status-danger-bg: rgba(248, 113, 113, 0.12);
 
   /* ── Effects ── */
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px rgba(99, 102, 241, 0.04);
-  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.08);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 12px rgba(129, 140, 248, 0.03);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 20px rgba(129, 140, 248, 0.06);
   --radius-card: 12px;
   --radius-btn: 8px;
   --radius-badge: 6px;
@@ -47,11 +48,18 @@
   --transition-slow: 260ms ease;
 
   /* ── Focus ── */
-  --focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.35);
+  --focus-ring: 0 0 0 2px rgba(129, 140, 248, 0.35);
 
   /* ── Sidebar ── */
   --sidebar-width-expanded: 240px;
   --sidebar-width-collapsed: 60px;
+
+  /* ── Chart Colors (fixed per-series) ── */
+  --chart-sent: #818cf8;
+  --chart-delivered: #38bdf8;
+  --chart-opened: #a78bfa;
+  --chart-replied: #4ade80;
+  --chart-positive: #34d399;
 }
 
 body {
@@ -60,14 +68,14 @@ body {
   font-family: var(--font-geist-sans, system-ui, sans-serif);
 }
 
-/* Subtle radial gradient background layer for depth */
+/* Subtle radial gradient background — cooler, more neutral */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 100%, rgba(34, 211, 238, 0.04) 0%, transparent 60%);
+    radial-gradient(ellipse at 20% 0%, rgba(129, 140, 248, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(56, 189, 248, 0.03) 0%, transparent 60%);
   pointer-events: none;
 }

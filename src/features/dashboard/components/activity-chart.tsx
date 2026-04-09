@@ -22,8 +22,8 @@ export function ActivityChart({ data }: { data: DailyActivityPoint[] }) {
           contentStyle={{ background: 'var(--bg-surface-overlay)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: 'var(--text-primary)' }}
         />
-        <Area type="monotone" dataKey="sent" stroke="var(--accent-indigo)" fill="var(--accent-indigo)" fillOpacity={0.15} strokeWidth={2} />
-        <Area type="monotone" dataKey="replied" stroke="var(--accent-cyan)" fill="var(--accent-cyan)" fillOpacity={0.15} strokeWidth={2} />
+        <Area type="monotone" dataKey="sent" stroke="var(--chart-sent)" fill="var(--chart-sent)" fillOpacity={0.15} strokeWidth={2} />
+        <Area type="monotone" dataKey="replied" stroke="var(--chart-replied)" fill="var(--chart-replied)" fillOpacity={0.15} strokeWidth={2} />
       </LazyAreaChart>
     </LazyResponsiveContainer>
   )

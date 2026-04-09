@@ -27,10 +27,10 @@ export function ActivityLineChart({ data }: { data: DailyActivityExtendedPoint[]
           labelStyle={{ color: 'var(--text-primary)' }}
         />
         <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }} />
-        <Area type="monotone" dataKey="sent" stroke="var(--accent-indigo)" fill="var(--accent-indigo)" fillOpacity={0.12} strokeWidth={2} name="Sent" />
-        <Area type="monotone" dataKey="delivered" stroke="var(--accent-cyan)" fill="var(--accent-cyan)" fillOpacity={0.08} strokeWidth={2} name="Delivered" />
-        <Area type="monotone" dataKey="opened" stroke="var(--accent-magenta)" fill="var(--accent-magenta)" fillOpacity={0.08} strokeWidth={2} name="Opened" />
-        <Area type="monotone" dataKey="replied" stroke="var(--status-success)" fill="var(--status-success)" fillOpacity={0.08} strokeWidth={2} name="Replied" />
+        <Area type="monotone" dataKey="sent" stroke="var(--chart-sent)" fill="var(--chart-sent)" fillOpacity={0.12} strokeWidth={2} name="Sent" />
+        <Area type="monotone" dataKey="delivered" stroke="var(--chart-delivered)" fill="var(--chart-delivered)" fillOpacity={0.08} strokeWidth={2} name="Delivered" />
+        <Area type="monotone" dataKey="opened" stroke="var(--chart-opened)" fill="var(--chart-opened)" fillOpacity={0.08} strokeWidth={2} name="Opened" />
+        <Area type="monotone" dataKey="replied" stroke="var(--chart-replied)" fill="var(--chart-replied)" fillOpacity={0.08} strokeWidth={2} name="Replied" />
       </LazyAreaChart>
     </LazyResponsiveContainer>
   )
