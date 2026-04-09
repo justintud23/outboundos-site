@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { updateTemplate } from '@/features/templates/server/update-template'
 import { setActiveTemplate } from '@/features/templates/server/set-active-template'
+import { duplicateTemplate } from '@/features/templates/server/duplicate-template'
 import { TemplateNotFoundError } from '@/features/templates/types'
 
 export async function PATCH(
@@ -28,6 +29,11 @@ export async function PATCH(
     if (body.action === 'activate') {
       const template = await setActiveTemplate({ organizationId: org.id, templateId: id })
       return NextResponse.json(template)
+    }
+
+    if (body.action === 'duplicate') {
+      const template = await duplicateTemplate({ organizationId: org.id, templateId: id })
+      return NextResponse.json(template, { status: 201 })
     }
 
     const template = await updateTemplate({

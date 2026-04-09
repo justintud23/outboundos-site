@@ -1,13 +1,16 @@
 import { prisma } from '@/lib/db/prisma'
+import type { PromptType } from '@prisma/client'
 import type { TemplateDTO } from '../types'
 
 export async function getTemplates({
   organizationId,
+  promptType,
 }: {
   organizationId: string
+  promptType?: PromptType
 }): Promise<{ templates: TemplateDTO[]; total: number }> {
   const templates = await prisma.promptTemplate.findMany({
-    where: { organizationId },
+    where: { organizationId, ...(promptType && { promptType }) },
     orderBy: [{ promptType: 'asc' }, { version: 'desc' }],
     select: {
       id: true,
