@@ -1,6 +1,7 @@
 'use client'
 
 import { LazyBarChart, LazyResponsiveContainer, XAxis, YAxis, Tooltip, Bar, Cell } from '@/components/charts/recharts-wrapper'
+import { formatEnumLabel } from '@/lib/format'
 import type { ClassificationBreakdownDTO } from '@/features/analytics/types'
 import type { ReplyClassification } from '@prisma/client'
 
@@ -20,13 +21,14 @@ export function ClassificationChart({ data }: { data: ClassificationBreakdownDTO
   }
 
   const total = data.reduce((s, d) => s + d.count, 0)
+  const chartData = data.map((d) => ({ ...d, label: formatEnumLabel(d.classification) }))
 
   return (
     <div>
       <LazyResponsiveContainer width="100%" height={180}>
-        <LazyBarChart data={data} layout="vertical" margin={{ left: 80, right: 30 }}>
+        <LazyBarChart data={chartData} layout="vertical" margin={{ left: 80, right: 30 }}>
           <XAxis type="number" hide />
-          <YAxis type="category" dataKey="classification" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} width={75} />
+          <YAxis type="category" dataKey="label" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} width={75} />
           <Tooltip
             contentStyle={{ background: 'var(--bg-surface-overlay)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: 'var(--text-primary)' }}

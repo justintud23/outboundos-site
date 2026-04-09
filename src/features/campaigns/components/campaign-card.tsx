@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { CampaignSummaryDTO, CampaignStatus } from '@/features/campaigns/server/get-campaigns'
 
 const STATUS_VARIANT: Record<CampaignStatus, 'default' | 'success' | 'warning' | 'danger' | 'muted'> = {
@@ -8,10 +9,6 @@ const STATUS_VARIANT: Record<CampaignStatus, 'default' | 'success' | 'warning' |
   PAUSED:    'warning',
   COMPLETED: 'default',
   ARCHIVED:  'muted',
-}
-
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
 export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
@@ -27,7 +24,7 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
           {campaign.name}
         </Link>
         <Badge variant={STATUS_VARIANT[campaign.status]}>
-          {capitalize(campaign.status)}
+          {formatEnumLabel(campaign.status)}
         </Badge>
       </div>
 

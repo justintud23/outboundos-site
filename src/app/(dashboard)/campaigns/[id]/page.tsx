@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
 import { getCampaignDetail } from '@/features/campaigns/server/get-campaign-detail'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { formatEnumLabel } from '@/lib/format'
 import type { CampaignStatus, DraftStatus, ReplyClassification } from '@prisma/client'
 import type { CampaignDetailDraftDTO, CampaignDetailReplyDTO } from '@/features/campaigns/server/get-campaign-detail'
 
@@ -47,10 +48,6 @@ const REPLY_LABEL: Record<ReplyClassification, string> = {
   UNSUBSCRIBE_REQUEST: 'Unsubscribe',
   REFERRAL:            'Referral',
   UNKNOWN:             'Unknown',
-}
-
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
 function DraftsSection({ drafts, draftTotal }: { drafts: CampaignDetailDraftDTO[]; draftTotal: number }) {
@@ -176,7 +173,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-[var(--text-primary)] font-semibold text-xl">{campaign.name}</h1>
-                <Badge variant={CAMPAIGN_STATUS_VARIANT[campaign.status]}>{capitalize(campaign.status)}</Badge>
+                <Badge variant={CAMPAIGN_STATUS_VARIANT[campaign.status]}>{formatEnumLabel(campaign.status)}</Badge>
               </div>
               {campaign.description && <p className="text-[var(--text-secondary)] text-sm mt-1">{campaign.description}</p>}
               <p className="text-[var(--text-muted)] text-xs mt-1">Created {campaign.createdAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>

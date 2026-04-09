@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { ReplyWithLeadDTO } from '@/features/replies/types'
 import type { ReplyClassification } from '@prisma/client'
 
@@ -37,7 +38,7 @@ export function RecentRepliesCompact({ replies }: { replies: ReplyWithLeadDTO[] 
           className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-btn)] hover:bg-[var(--bg-surface-raised)] transition-colors"
         >
           <span className="text-[var(--text-primary)] text-xs truncate flex-1">{reply.leadEmail}</span>
-          <Badge variant={VARIANT[reply.classification]}>{reply.classification}</Badge>
+          <Badge variant={VARIANT[reply.classification]}>{formatEnumLabel(reply.classification)}</Badge>
           <span className="text-[var(--text-muted)] text-[10px] flex-shrink-0">{relativeTime(reply.receivedAt)}</span>
         </Link>
       ))}

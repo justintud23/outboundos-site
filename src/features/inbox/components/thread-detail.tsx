@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import { MessageBubble } from './message-bubble'
 import type { ThreadDetailDTO } from '../types'
 import type { LeadStatus } from '@prisma/client'
@@ -57,7 +58,7 @@ export function ThreadDetail({ thread, loading, onBack }: ThreadDetailProps) {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-[var(--text-primary)] font-semibold text-sm">{leadName}</h2>
               <Badge variant={STATUS_VARIANT[thread.lead.status]}>
-                {thread.lead.status}
+                {formatEnumLabel(thread.lead.status)}
               </Badge>
               {thread.lead.score !== null && (
                 <Badge variant={thread.lead.score >= 70 ? 'success' : thread.lead.score >= 40 ? 'warning' : 'danger'}>

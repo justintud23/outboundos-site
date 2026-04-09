@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { InboxThreadDTO, InboxFilter } from '../types'
 import type { ReplyClassification } from '@prisma/client'
 
@@ -113,7 +114,7 @@ export function ThreadList({
                 </span>
                 {thread.latestClassification && (
                   <Badge variant={CLASSIFICATION_VARIANT[thread.latestClassification]}>
-                    {thread.latestClassification}
+                    {formatEnumLabel(thread.latestClassification)}
                   </Badge>
                 )}
               </div>

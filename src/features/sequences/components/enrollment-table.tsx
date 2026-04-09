@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { EnrollmentDTO } from '../types'
 import type { EnrollmentStatus } from '@prisma/client'
 
@@ -49,7 +50,7 @@ export function EnrollmentTable({ enrollments, onAction }: EnrollmentTableProps)
               </td>
               <td className="py-3 px-4">
                 <Badge variant={STATUS_VARIANT[enrollment.status]}>
-                  {enrollment.status}
+                  {formatEnumLabel(enrollment.status)}
                 </Badge>
                 {enrollment.stoppedReason && (
                   <span className="text-[var(--text-muted)] text-xs ml-1">({enrollment.stoppedReason})</span>

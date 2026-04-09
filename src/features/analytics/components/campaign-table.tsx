@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { CampaignPerformanceDTO } from '../types'
 import type { CampaignStatus } from '@prisma/client'
 
@@ -99,7 +100,7 @@ export function CampaignTable({ data }: { data: CampaignPerformanceDTO[] }) {
                 </Link>
               </td>
               <td className="py-3 px-3">
-                <Badge variant={STATUS_VARIANT[campaign.status]}>{campaign.status}</Badge>
+                <Badge variant={STATUS_VARIANT[campaign.status]}>{formatEnumLabel(campaign.status)}</Badge>
               </td>
               <td className="py-3 px-3"><InlineBar value={campaign.sent} max={maxSent} /></td>
               <td className="py-3 px-3"><InlineBar value={campaign.delivered} max={maxSent} /></td>

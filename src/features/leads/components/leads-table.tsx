@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { formatEnumLabel } from '@/lib/format'
 import type { LeadDTO } from '../types'
 
 interface LeadsTableProps {
@@ -26,7 +27,7 @@ function StatusBadge({ status }: { status: LeadDTO['status'] }) {
     INTERESTED: 'success',
     NOT_INTERESTED: 'danger',
   }
-  return <Badge variant={variantMap[status]}>{status}</Badge>
+  return <Badge variant={variantMap[status]}>{formatEnumLabel(status)}</Badge>
 }
 
 export function LeadsTable({
