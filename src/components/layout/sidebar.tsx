@@ -14,12 +14,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Kanban,
+  Zap,
 } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { useSidebar } from './sidebar-context'
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/action-center', icon: Zap, label: 'Actions' },
   { href: '/leads', icon: Users, label: 'Leads' },
   { href: '/pipeline', icon: Kanban, label: 'Pipeline' },
   { href: '/drafts', icon: Mail, label: 'Drafts' },

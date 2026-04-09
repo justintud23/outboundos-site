@@ -7,6 +7,7 @@ import type { PipelineLeadDTO } from '../types'
 
 interface PipelineCardProps {
   lead: PipelineLeadDTO
+  nextAction?: string
 }
 
 function formatRelativeTime(date: Date): string {
@@ -22,7 +23,7 @@ function formatRelativeTime(date: Date): string {
   return `${Math.floor(diffDay / 30)}mo ago`
 }
 
-export function PipelineCard({ lead }: PipelineCardProps) {
+export function PipelineCard({ lead, nextAction }: PipelineCardProps) {
   const {
     attributes,
     listeners,
@@ -55,6 +56,11 @@ export function PipelineCard({ lead }: PipelineCardProps) {
       {lead.company && (
         <p className="text-[var(--text-muted)] text-xs truncate mt-0.5">
           {lead.company}
+        </p>
+      )}
+      {nextAction && (
+        <p className="text-[var(--accent-warm)] text-[10px] mt-1.5 truncate">
+          Next: {nextAction}
         </p>
       )}
       <div className="flex items-center justify-between mt-2">
