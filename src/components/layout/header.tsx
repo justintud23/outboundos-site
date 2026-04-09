@@ -31,6 +31,9 @@ export function Header({ title }: HeaderProps) {
               rootBox: 'text-sm',
               organizationSwitcherTrigger:
                 'text-[var(--text-secondary)] hover:text-white py-1 px-2 rounded-md hover:bg-[var(--bg-surface-raised)]',
+              organizationSwitcherTriggerIcon: 'text-[var(--text-secondary)]',
+              organizationPreviewMainIdentifier: 'text-white',
+              organizationPreviewSecondaryIdentifier: 'text-[var(--text-secondary)]',
             },
           }}
         />
