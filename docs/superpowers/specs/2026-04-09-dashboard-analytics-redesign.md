@@ -48,7 +48,7 @@ interface CampaignPerformanceDTO {
   replyRate: number     // 0-1, 0 if sent=0
 }
 
-getCampaignPerformance(input: { organizationId: string }): Promise<CampaignPerformanceDTO[]>
+getCampaignPerformance(input: { organizationId: string; days?: number }): Promise<CampaignPerformanceDTO[]>
 ```
 
 - Fetch campaigns with `_count` of outboundMessages
@@ -68,7 +68,7 @@ interface ClassificationBreakdownDTO {
   count: number
 }
 
-getClassificationBreakdown(input: { organizationId: string }): Promise<ClassificationBreakdownDTO[]>
+getClassificationBreakdown(input: { organizationId: string; days?: number }): Promise<ClassificationBreakdownDTO[]>
 ```
 
 - `inboundReply.groupBy({ by: ['classification'], _count: { _all: true } })`
@@ -85,7 +85,7 @@ interface FunnelStageDTO {
   rate: number          // 0-1, relative to sent (first stage)
 }
 
-getFunnelData(input: { organizationId: string }): Promise<FunnelStageDTO[]>
+getFunnelData(input: { organizationId: string; days?: number }): Promise<FunnelStageDTO[]>
 ```
 
 - 5 stages: Sent → Delivered → Opened → Replied → Interested
@@ -202,10 +202,11 @@ Recharts `BarChart`:
 
 ### Recent Replies Module
 
-Existing `RepliesTable` with refinements:
-- Classification badge colors (already token-based)
-- Relative timestamps (e.g., "2h ago")
-- Unread indicator dot (uses `isRead` field)
+Compact presentation (not full RepliesTable):
+- 5 most recent replies as compact list items
+- Each item: lead email, classification badge, relative timestamp ("2h ago"), unread dot
+- No table headers — lightweight stacked list
+- Click item navigates to /inbox
 
 ### SnapshotBar Component
 
@@ -227,24 +228,26 @@ interface SnapshotBarProps {
 - Center: "Last updated at 8:03 AM"
 - Right: Live toggle (green dot when on) + Refresh button (spins when refreshing)
 - Daily auto-refresh: on mount, calculate ms until next 8 AM in user's local timezone, setTimeout
+- All timestamps displayed in user-local time (toLocaleTimeString)
 
 ### Refresh Behavior
 
-- Each module fetches independently via dedicated API routes or client-side fetch
-- Refresh button triggers all modules to refetch in parallel
-- Each module shows its own skeleton during refresh (not global block)
-- Live mode: setInterval 60s polls all modules
-- Auto-refresh: setTimeout to next local 8 AM
+- Refresh orchestrated at page/client level via single `/api/dashboard/refresh` route
+- Refresh button triggers one fetch, client distributes updated data to all modules
+- Each module shows its own skeleton during refresh (keyed off global `refreshing` state)
+- Live mode: setInterval 60s calls the single refresh route
+- Auto-refresh: setTimeout to next 8 AM in user's local timezone (detected via `Intl.DateTimeFormat().resolvedOptions().timeZone`)
 
-### API Routes for Client Refresh
+### Module Expansion
 
-- `GET /api/dashboard/summary` → getDashboardSummary
-- `GET /api/dashboard/funnel` → getFunnelData
-- `GET /api/dashboard/activity?days=30` → getDailyActivity
-- `GET /api/dashboard/classification` → getClassificationBreakdown
-- `GET /api/dashboard/campaigns` → getCampaignPerformance
+Optional for v1 — expansion via full-width panel is deferred. Modules render at fixed card size only. Expand icon hidden in v1.
 
-Each is a thin route handler: auth → resolveOrganization → call server function → return JSON.
+### API Route for Client Refresh
+
+Single page-level refresh route:
+- `GET /api/dashboard/refresh?days=30` → calls all 6 server functions in parallel, returns combined JSON
+
+Refresh orchestrated at page/client level — one fetch replaces all data at once. No per-module network fetching.
 
 ### Empty States
 
@@ -280,7 +283,12 @@ Same pattern: server fetches → client manages. Shares SnapshotBar with dashboa
 8 chips in horizontal row (flex-wrap on mobile):
 - Sent, Delivered, Opened, Clicked, Replies, Positive, Bounced, Unsubscribes
 - Each chip: pill-shaped, accent left-border
-- Content: label, value, % change vs previous period (compare current N days to prior N days)
+- Content: label, value, % change vs previous equal-length period
+  - Comparison: current N days vs prior N days (e.g., 30d = compare last 30d to 30d before that)
+  - Math: `((current - previous) / previous) * 100`, display as "+12%" or "-5%"
+  - If previous = 0 and current > 0: show "+100%"
+  - If previous = 0 and current = 0: show "—"
+  - Color: green for positive change, red for negative, muted for zero
 - 7-day sparkline inside each chip (using getDailyActivityExtended data, sampled)
 - Staggered fade-in animation on load
 - Clickable (future: filter page by metric — for now, visual feedback only)
@@ -339,13 +347,12 @@ Recharts `BarChart` (horizontal):
 - Shows total replies count as context header: "8 classifications from 23 total replies"
 - Bars sorted by count DESC
 
-### API Routes for Client Refresh
+### API Route for Client Refresh
 
-- `GET /api/analytics/summary` → getAnalytics (existing)
-- `GET /api/analytics/funnel` → getFunnelData
-- `GET /api/analytics/activity?days=30` → getDailyActivityExtended
-- `GET /api/analytics/campaigns` → getCampaignPerformance
-- `GET /api/analytics/classification` → getClassificationBreakdown
+Single page-level refresh route:
+- `GET /api/analytics/refresh?days=30` → calls all analytics server functions in parallel, returns combined JSON
+
+Refresh orchestrated at page/client level — one fetch replaces all data.
 
 ### Empty States
 
@@ -398,17 +405,9 @@ Recharts `BarChart` (horizontal):
 - `src/features/analytics/server/get-classification-breakdown.ts`
 - `src/features/analytics/server/get-funnel-data.ts`
 
-**API routes (10):**
-- `src/app/api/dashboard/summary/route.ts`
-- `src/app/api/dashboard/funnel/route.ts`
-- `src/app/api/dashboard/activity/route.ts`
-- `src/app/api/dashboard/classification/route.ts`
-- `src/app/api/dashboard/campaigns/route.ts`
-- `src/app/api/analytics/funnel/route.ts`
-- `src/app/api/analytics/activity/route.ts`
-- `src/app/api/analytics/campaigns/route.ts`
-- `src/app/api/analytics/classification/route.ts`
-- `src/app/api/analytics/summary/route.ts`
+**API routes (2):**
+- `src/app/api/dashboard/refresh/route.ts`
+- `src/app/api/analytics/refresh/route.ts`
 
 **Shared components (3):**
 - `src/components/charts/recharts-wrapper.tsx`
