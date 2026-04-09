@@ -28,12 +28,10 @@ export function Header({ title }: HeaderProps) {
         <OrganizationSwitcher
           appearance={{
             elements: {
-              rootBox: 'text-sm',
+              rootBox: 'text-sm [&_*]:!text-white',
               organizationSwitcherTrigger:
-                'text-[var(--text-secondary)] hover:text-white py-1 px-2 rounded-md hover:bg-[var(--bg-surface-raised)]',
-              organizationSwitcherTriggerIcon: 'text-[var(--text-secondary)]',
-              organizationPreviewMainIdentifier: 'text-white',
-              organizationPreviewSecondaryIdentifier: 'text-[var(--text-secondary)]',
+                'hover:bg-[var(--bg-surface-raised)] py-1 px-2 rounded-md',
+              organizationSwitcherTriggerIcon: '!text-[var(--text-secondary)]',
             },
           }}
         />
