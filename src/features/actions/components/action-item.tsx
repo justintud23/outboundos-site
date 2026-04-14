@@ -1,53 +1,134 @@
 import Link from 'next/link'
-import { Badge } from '@/components/ui/badge'
+import {
+  MessageSquare,
+  FileCheck,
+  Send,
+  Reply,
+  GitBranch,
+  UserCheck,
+  Star,
+} from 'lucide-react'
 import type { NextAction, ActionType } from '../types'
 import { ACTION_CTA, ACTION_HREF } from '../types'
+import type { LucideIcon } from 'lucide-react'
 
-const TYPE_VARIANT: Record<ActionType, 'danger' | 'warning' | 'success' | 'default' | 'muted'> = {
-  REVIEW_REPLY: 'danger',
-  APPROVE_DRAFT: 'warning',
-  SEND_DRAFT: 'success',
-  FOLLOW_UP: 'default',
-  ENROLL_SEQUENCE: 'muted',
-  MARK_CONVERTED: 'success',
-  NO_ACTION: 'muted',
-}
-
-const TYPE_ACCENT: Record<ActionType, string> = {
-  REVIEW_REPLY: 'var(--status-danger)',
-  APPROVE_DRAFT: 'var(--status-warning)',
-  SEND_DRAFT: 'var(--status-success)',
-  FOLLOW_UP: 'var(--accent-indigo)',
-  ENROLL_SEQUENCE: 'var(--accent-cyan)',
-  MARK_CONVERTED: 'var(--chart-positive)',
-  NO_ACTION: 'var(--text-muted)',
+/** Spec color mapping per action type */
+const TYPE_CONFIG: Record<ActionType, {
+  accent: string
+  bg: string
+  text: string
+  icon: LucideIcon
+  ctaBg: string
+  ctaHoverBg: string
+}> = {
+  REVIEW_REPLY: {
+    accent: 'var(--accent-magenta)',
+    bg: 'rgba(167, 139, 250, 0.10)',
+    text: 'text-[var(--accent-magenta)]',
+    icon: MessageSquare,
+    ctaBg: 'bg-[rgba(167,139,250,0.12)]',
+    ctaHoverBg: 'hover:bg-[rgba(167,139,250,0.22)]',
+  },
+  APPROVE_DRAFT: {
+    accent: 'var(--accent-indigo)',
+    bg: 'rgba(99, 102, 241, 0.10)',
+    text: 'text-[var(--accent-indigo)]',
+    icon: FileCheck,
+    ctaBg: 'bg-[var(--accent-indigo-glow)]',
+    ctaHoverBg: 'hover:bg-[rgba(99,102,241,0.28)]',
+  },
+  SEND_DRAFT: {
+    accent: 'var(--accent-cyan)',
+    bg: 'rgba(56, 189, 248, 0.10)',
+    text: 'text-[var(--accent-cyan)]',
+    icon: Send,
+    ctaBg: 'bg-[rgba(56,189,248,0.12)]',
+    ctaHoverBg: 'hover:bg-[rgba(56,189,248,0.22)]',
+  },
+  FOLLOW_UP: {
+    accent: 'var(--status-warning)',
+    bg: 'rgba(234, 179, 8, 0.10)',
+    text: 'text-[var(--status-warning)]',
+    icon: Reply,
+    ctaBg: 'bg-[var(--status-warning-bg)]',
+    ctaHoverBg: 'hover:bg-[rgba(234,179,8,0.22)]',
+  },
+  ENROLL_SEQUENCE: {
+    accent: 'var(--accent-indigo)',
+    bg: 'rgba(99, 102, 241, 0.08)',
+    text: 'text-[var(--accent-indigo-hover)]',
+    icon: GitBranch,
+    ctaBg: 'bg-[rgba(99,102,241,0.10)]',
+    ctaHoverBg: 'hover:bg-[rgba(99,102,241,0.20)]',
+  },
+  REVIEW_INTERESTED_LEAD: {
+    accent: 'var(--status-success)',
+    bg: 'rgba(34, 197, 94, 0.10)',
+    text: 'text-[var(--status-success)]',
+    icon: Star,
+    ctaBg: 'bg-[var(--status-success-bg)]',
+    ctaHoverBg: 'hover:bg-[rgba(34,197,94,0.22)]',
+  },
+  MARK_CONVERTED: {
+    accent: 'var(--chart-positive)',
+    bg: 'rgba(52, 211, 153, 0.10)',
+    text: 'text-[var(--chart-positive)]',
+    icon: UserCheck,
+    ctaBg: 'bg-[rgba(52,211,153,0.12)]',
+    ctaHoverBg: 'hover:bg-[rgba(52,211,153,0.22)]',
+  },
+  NO_ACTION: {
+    accent: 'var(--text-muted)',
+    bg: 'rgba(71, 85, 105, 0.10)',
+    text: 'text-[var(--text-muted)]',
+    icon: FileCheck,
+    ctaBg: 'bg-[var(--bg-surface-raised)]',
+    ctaHoverBg: 'hover:bg-[var(--bg-surface-overlay)]',
+  },
 }
 
 function relativeTime(date: Date): string {
   const diffMs = Date.now() - new Date(date).getTime()
   const diffMin = Math.floor(diffMs / 60_000)
-  if (diffMin < 1) return 'now'
+  if (diffMin < 1) return 'just now'
   if (diffMin < 60) return `${diffMin}m ago`
   const diffHr = Math.floor(diffMin / 60)
   if (diffHr < 24) return `${diffHr}h ago`
-  return `${Math.floor(diffHr / 24)}d ago`
+  const diffDays = Math.floor(diffHr / 24)
+  if (diffDays === 1) return '1d ago'
+  return `${diffDays}d ago`
 }
 
 export function ActionItem({ action }: { action: NextAction }) {
-  const href = ACTION_HREF[action.type]
+  const href = action.href ?? ACTION_HREF[action.type]
   const cta = ACTION_CTA[action.type]
+  const config = TYPE_CONFIG[action.type]
+  const Icon = config.icon
 
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)] transition-all duration-[var(--transition-base)]"
-      style={{ borderLeftWidth: 3, borderLeftColor: TYPE_ACCENT[action.type] }}
+      className="flex items-center gap-4 px-4 py-3.5 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)] transition-all duration-[var(--transition-base)] animate-fade-in-up"
+      style={{ borderLeftWidth: 3, borderLeftColor: config.accent }}
     >
+      {/* Icon */}
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ background: config.bg }}
+        aria-hidden="true"
+      >
+        <Icon size={16} className={config.text} />
+      </div>
+
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <Badge variant={TYPE_VARIANT[action.type]}>{action.label}</Badge>
+          <span className={`text-xs font-semibold uppercase tracking-wider ${config.text}`}>
+            {action.label}
+          </span>
           {action.leadName && (
-            <span className="text-[var(--text-primary)] text-sm font-medium truncate">{action.leadName}</span>
+            <span className="text-[var(--text-primary)] text-sm font-medium truncate">
+              {action.leadName}
+            </span>
           )}
         </div>
         {action.description && (
@@ -56,7 +137,7 @@ export function ActionItem({ action }: { action: NextAction }) {
       </div>
 
       {/* Timestamp */}
-      <span className="text-[var(--text-muted)] text-xs flex-shrink-0">
+      <span className="text-[var(--text-muted)] text-xs tabular-nums flex-shrink-0 hidden sm:block">
         {relativeTime(action.createdAt)}
       </span>
 
@@ -64,7 +145,7 @@ export function ActionItem({ action }: { action: NextAction }) {
       {cta && (
         <Link
           href={href}
-          className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--bg-surface-raised)] hover:bg-[var(--accent-indigo)] text-[var(--text-primary)] transition-colors duration-[var(--transition-base)] flex-shrink-0 font-medium"
+          className={`text-xs px-3 py-1.5 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97]`}
         >
           {cta}
         </Link>

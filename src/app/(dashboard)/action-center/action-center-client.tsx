@@ -2,11 +2,23 @@
 
 import { useState, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { ActionItem } from '@/features/actions/components/action-item'
-import type { NextAction } from '@/features/actions/types'
+import { ActionCenterList } from '@/features/actions/components/action-center-list'
+import type { NextAction, ActionType } from '@/features/actions/types'
+import { ACTION_LABELS } from '@/features/actions/types'
 
 interface ActionCenterClientProps {
   initialActions: NextAction[]
+}
+
+const TYPE_COLORS: Record<ActionType, string> = {
+  REVIEW_REPLY: 'bg-[rgba(167,139,250,0.12)] text-[var(--accent-magenta)]',
+  APPROVE_DRAFT: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]',
+  SEND_DRAFT: 'bg-[rgba(56,189,248,0.12)] text-[var(--accent-cyan)]',
+  FOLLOW_UP: 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]',
+  ENROLL_SEQUENCE: 'bg-[rgba(99,102,241,0.10)] text-[var(--accent-indigo-hover)]',
+  REVIEW_INTERESTED_LEAD: 'bg-[var(--status-success-bg)] text-[var(--status-success)]',
+  MARK_CONVERTED: 'bg-[rgba(52,211,153,0.12)] text-[var(--chart-positive)]',
+  NO_ACTION: 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]',
 }
 
 export function ActionCenterClient({ initialActions }: ActionCenterClientProps) {
@@ -26,49 +38,52 @@ export function ActionCenterClient({ initialActions }: ActionCenterClientProps) 
     }
   }, [])
 
-  // Group by type for summary
-  const counts = actions.reduce<Record<string, number>>((acc, a) => {
+  // Group by type for summary pills
+  const typeCounts = actions.reduce<Partial<Record<ActionType, number>>>((acc, a) => {
     acc[a.type] = (acc[a.type] ?? 0) + 1
     return acc
   }, {})
 
   return (
     <div className="space-y-6">
-      {/* Summary bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
           <p className="text-[var(--text-secondary)] text-sm">
-            {actions.length} action{actions.length !== 1 ? 's' : ''} pending
+            What needs your attention right now
           </p>
-          {Object.entries(counts).map(([type, count]) => (
-            <span key={type} className="text-[var(--text-muted)] text-xs">
-              {count} {type.toLowerCase().replace(/_/g, ' ')}
-            </span>
-          ))}
         </div>
         <button
           onClick={() => void refresh()}
           disabled={refreshing}
-          className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors disabled:opacity-50"
-          title="Refresh"
+          className="p-1.5 rounded-[var(--radius-btn)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)] transition-all duration-[var(--transition-base)] disabled:opacity-40 cursor-pointer flex-shrink-0"
+          aria-label="Refresh actions"
         >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       </div>
 
-      {/* Action list */}
-      {actions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-[var(--status-success)] text-lg font-medium mb-1">You're all caught up</p>
-          <p className="text-[var(--text-muted)] text-sm">No actions need your attention right now.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {actions.map((action, i) => (
-            <ActionItem key={`${action.type}-${action.leadId ?? action.draftId ?? i}`} action={action} />
+      {/* Summary pills */}
+      {actions.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[var(--text-primary)] text-sm font-medium tabular-nums">
+            {actions.length} pending
+          </span>
+          <span className="text-[var(--border-default)]" aria-hidden="true">|</span>
+          {(Object.entries(typeCounts) as [ActionType, number][]).map(([type, count]) => (
+            <span
+              key={type}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[var(--radius-badge)] text-xs font-medium ${TYPE_COLORS[type]}`}
+            >
+              <span className="tabular-nums">{count}</span>
+              {ACTION_LABELS[type]}
+            </span>
           ))}
         </div>
       )}
+
+      {/* Action list */}
+      <ActionCenterList actions={actions} />
     </div>
   )
 }
