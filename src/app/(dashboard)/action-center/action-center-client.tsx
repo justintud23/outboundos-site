@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { ActionCenterList } from '@/features/actions/components/action-center-list'
+import { getActionSummary } from '@/features/actions/utils/get-action-summary'
 import type { NextAction, ActionType } from '@/features/actions/types'
 import { ACTION_LABELS } from '@/features/actions/types'
 
@@ -38,7 +39,9 @@ export function ActionCenterClient({ initialActions }: ActionCenterClientProps) 
     }
   }, [])
 
-  // Group by type for summary pills
+  const summary = getActionSummary(actions)
+
+  // Group by type for detail pills
   const typeCounts = actions.reduce<Partial<Record<ActionType, number>>>((acc, a) => {
     acc[a.type] = (acc[a.type] ?? 0) + 1
     return acc
@@ -49,9 +52,7 @@ export function ActionCenterClient({ initialActions }: ActionCenterClientProps) 
       {/* Header row */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[var(--text-secondary)] text-sm">
-            What needs your attention right now
-          </p>
+          <p className="text-[var(--text-secondary)] text-sm">{summary}</p>
         </div>
         <button
           onClick={() => void refresh()}
@@ -63,13 +64,13 @@ export function ActionCenterClient({ initialActions }: ActionCenterClientProps) 
         </button>
       </div>
 
-      {/* Summary pills */}
+      {/* Detail pills */}
       {actions.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[var(--text-primary)] text-sm font-medium tabular-nums">
             {actions.length} pending
           </span>
-          <span className="text-[var(--border-default)]" aria-hidden="true">|</span>
+          <span className="text-[var(--border-default)]" aria-hidden="true">·</span>
           {(Object.entries(typeCounts) as [ActionType, number][]).map(([type, count]) => (
             <span
               key={type}

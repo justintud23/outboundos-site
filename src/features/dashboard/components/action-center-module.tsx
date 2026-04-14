@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { CheckCircle2, ArrowRight } from 'lucide-react'
 import { ActionItem } from '@/features/actions/components/action-item'
+import { getActionSummary } from '@/features/actions/utils/get-action-summary'
 import type { NextAction } from '@/features/actions/types'
 
 interface ActionCenterModuleProps {
@@ -18,8 +19,13 @@ export function ActionCenterModule({ actions }: ActionCenterModuleProps) {
     )
   }
 
+  const summary = getActionSummary(actions)
+
   return (
     <div className="flex flex-col h-full">
+      {/* Compact summary line */}
+      <p className="text-[var(--text-muted)] text-[11px] mb-2">{summary}</p>
+
       <div className="space-y-0.5 flex-1">
         {actions.map((action) => (
           <ActionItem key={action.id} action={action} compact />

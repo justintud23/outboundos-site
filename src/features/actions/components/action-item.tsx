@@ -9,10 +9,10 @@ import {
   Star,
 } from 'lucide-react'
 import type { NextAction, ActionType } from '../types'
-import { ACTION_CTA, ACTION_HREF } from '../types'
+import { ACTION_CTA, ACTION_HREF, getUrgencyTier } from '../types'
+import { relativeTime } from '@/lib/format'
 import type { LucideIcon } from 'lucide-react'
 
-/** Spec color mapping per action type */
 const TYPE_CONFIG: Record<ActionType, {
   accent: string
   bg: string
@@ -87,16 +87,21 @@ const TYPE_CONFIG: Record<ActionType, {
   },
 }
 
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - new Date(date).getTime()
-  const diffMin = Math.floor(diffMs / 60_000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDays = Math.floor(diffHr / 24)
-  if (diffDays === 1) return '1d ago'
-  return `${diffDays}d ago`
+function UrgencyDot({ priority }: { priority: number }) {
+  const tier = getUrgencyTier(priority)
+  if (tier === 'low') return null
+  if (tier === 'high') {
+    return (
+      <span className="relative flex h-2 w-2 flex-shrink-0" aria-hidden="true">
+        <span className="absolute inline-flex h-full w-full rounded-full opacity-60 motion-safe:animate-ping" style={{ backgroundColor: 'var(--accent-magenta)' }} />
+        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--accent-magenta)' }} />
+      </span>
+    )
+  }
+  // medium
+  return (
+    <span className="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--status-warning)' }} aria-hidden="true" />
+  )
 }
 
 interface ActionItemProps {
@@ -109,12 +114,14 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
   const cta = ACTION_CTA[action.type]
   const config = TYPE_CONFIG[action.type]
   const Icon = config.icon
+  const tier = getUrgencyTier(action.priority)
+  const borderWidth = tier === 'high' ? 3 : tier === 'medium' ? 3 : 2
 
   if (compact) {
     return (
       <div
         className="flex items-center gap-3 px-2.5 py-2 rounded-[var(--radius-btn)] hover:bg-[var(--bg-surface-raised)] transition-colors duration-[var(--transition-fast)]"
-        style={{ borderLeft: `2px solid ${config.accent}` }}
+        style={{ borderLeft: `${borderWidth}px solid ${config.accent}` }}
       >
         <div
           className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
@@ -126,6 +133,7 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
+            <UrgencyDot priority={action.priority} />
             <span className={`text-[10px] font-semibold uppercase tracking-wider ${config.text}`}>
               {action.label}
             </span>
@@ -135,8 +143,8 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
               </span>
             )}
           </div>
-          {action.description && (
-            <p className="text-[var(--text-muted)] text-[11px] truncate">{action.description}</p>
+          {action.reason && (
+            <p className="text-[var(--text-muted)] text-[11px] truncate">{action.reason}</p>
           )}
         </div>
 
@@ -155,7 +163,7 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
   return (
     <div
       className="flex items-center gap-4 px-4 py-3.5 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)] transition-all duration-[var(--transition-base)] animate-fade-in-up"
-      style={{ borderLeftWidth: 3, borderLeftColor: config.accent }}
+      style={{ borderLeftWidth: borderWidth, borderLeftColor: config.accent }}
     >
       {/* Icon */}
       <div
@@ -169,6 +177,7 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
+          <UrgencyDot priority={action.priority} />
           <span className={`text-xs font-semibold uppercase tracking-wider ${config.text}`}>
             {action.label}
           </span>
@@ -179,7 +188,10 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
           )}
         </div>
         {action.description && (
-          <p className="text-[var(--text-muted)] text-xs truncate">{action.description}</p>
+          <p className="text-[var(--text-secondary)] text-xs truncate">{action.description}</p>
+        )}
+        {action.reason && (
+          <p className="text-[var(--text-muted)] text-[11px] mt-0.5 truncate">{action.reason}</p>
         )}
       </div>
 

@@ -14,6 +14,7 @@ export interface NextAction {
   priority: number
   label: string
   description?: string
+  reason?: string
   leadId?: string
   leadName?: string
   draftId?: string
@@ -54,6 +55,14 @@ export const ACTION_CTA: Record<ActionType, string> = {
   REVIEW_INTERESTED_LEAD: 'View Lead',
   MARK_CONVERTED: 'Convert',
   NO_ACTION: '',
+}
+
+export type UrgencyTier = 'high' | 'medium' | 'low'
+
+export function getUrgencyTier(priority: number): UrgencyTier {
+  if (priority >= 90) return 'high'
+  if (priority >= 70) return 'medium'
+  return 'low'
 }
 
 export const ACTION_HREF: Record<ActionType, string> = {
