@@ -9,14 +9,18 @@ import { ClassificationChart } from '@/features/dashboard/components/classificat
 import { ActivityChart } from '@/features/dashboard/components/activity-chart'
 import { CampaignChart } from '@/features/dashboard/components/campaign-chart'
 import { RecentRepliesCompact } from '@/features/dashboard/components/recent-replies-compact'
+import { ActionCenterModule } from '@/features/dashboard/components/action-center-module'
 import type { DashboardRefreshData } from '@/features/analytics/types'
+import type { NextAction } from '@/features/actions/types'
 
 interface DashboardClientProps {
   initialData: DashboardRefreshData
+  initialActions: NextAction[]
 }
 
-export function DashboardClient({ initialData }: DashboardClientProps) {
+export function DashboardClient({ initialData, initialActions }: DashboardClientProps) {
   const [data, setData] = useState(initialData)
+  const [actions, setActions] = useState(initialActions)
   const [dateRange, setDateRange] = useState<'7d' | '30d'>('30d')
   const [isLive, setIsLive] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -26,12 +30,19 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     setRefreshing(true)
     try {
       const d = days ?? (dateRange === '7d' ? 7 : 30)
-      const res = await fetch(`/api/dashboard/refresh?days=${d}`)
-      if (res.ok) {
-        const newData = await res.json() as DashboardRefreshData
+      const [dashRes, actionsRes] = await Promise.all([
+        fetch(`/api/dashboard/refresh?days=${d}`),
+        fetch('/api/actions'),
+      ])
+      if (dashRes.ok) {
+        const newData = await dashRes.json() as DashboardRefreshData
         setData(newData)
-        setLastUpdatedAt(new Date())
       }
+      if (actionsRes.ok) {
+        const actionsData = await actionsRes.json() as { actions: NextAction[] }
+        setActions(actionsData.actions.slice(0, 5))
+      }
+      setLastUpdatedAt(new Date())
     } finally {
       setRefreshing(false)
     }
@@ -87,21 +98,29 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         </DashboardModule>
       </div>
 
-      {/* Secondary row — Activity + Campaign + Replies */}
+      {/* Secondary row — Action Center + Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 stagger-grid">
+        <DashboardModule
+          title="Action Center"
+          badge={actions.length > 0 ? actions.length : undefined}
+          loading={refreshing}
+        >
+          <ActionCenterModule actions={actions} />
+        </DashboardModule>
+
         <DashboardModule title="Daily Activity" loading={refreshing} className="lg:col-span-2">
           <ActivityChart data={data.activity} />
+        </DashboardModule>
+      </div>
+
+      {/* Third row — Campaign + Replies */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 stagger-grid">
+        <DashboardModule title="Campaign Comparison" loading={refreshing}>
+          <CampaignChart data={data.campaigns} />
         </DashboardModule>
 
         <DashboardModule title="Recent Replies" loading={refreshing}>
           <RecentRepliesCompact replies={data.recentReplies} />
-        </DashboardModule>
-      </div>
-
-      {/* Third row — Campaign comparison full width */}
-      <div className="stagger-grid">
-        <DashboardModule title="Campaign Comparison" loading={refreshing}>
-          <CampaignChart data={data.campaigns} />
         </DashboardModule>
       </div>
     </div>

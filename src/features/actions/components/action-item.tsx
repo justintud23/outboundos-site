@@ -99,11 +99,58 @@ function relativeTime(date: Date): string {
   return `${diffDays}d ago`
 }
 
-export function ActionItem({ action }: { action: NextAction }) {
+interface ActionItemProps {
+  action: NextAction
+  compact?: boolean
+}
+
+export function ActionItem({ action, compact = false }: ActionItemProps) {
   const href = action.href ?? ACTION_HREF[action.type]
   const cta = ACTION_CTA[action.type]
   const config = TYPE_CONFIG[action.type]
   const Icon = config.icon
+
+  if (compact) {
+    return (
+      <div
+        className="flex items-center gap-3 px-2.5 py-2 rounded-[var(--radius-btn)] hover:bg-[var(--bg-surface-raised)] transition-colors duration-[var(--transition-fast)]"
+        style={{ borderLeft: `2px solid ${config.accent}` }}
+      >
+        <div
+          className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+          style={{ background: config.bg }}
+          aria-hidden="true"
+        >
+          <Icon size={14} className={config.text} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${config.text}`}>
+              {action.label}
+            </span>
+            {action.leadName && (
+              <span className="text-[var(--text-primary)] text-xs font-medium truncate">
+                {action.leadName}
+              </span>
+            )}
+          </div>
+          {action.description && (
+            <p className="text-[var(--text-muted)] text-[11px] truncate">{action.description}</p>
+          )}
+        </div>
+
+        {cta && (
+          <Link
+            href={href}
+            className={`text-[11px] px-2 py-1 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97]`}
+          >
+            {cta}
+          </Link>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
