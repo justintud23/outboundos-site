@@ -1,6 +1,13 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
   title: 'OutboundOS',
@@ -14,8 +21,13 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
+      <html lang="en" className={inter.variable}>
+        <body className={inter.className}>
+          <a href="#main-content" className="skip-to-content">
+            Skip to content
+          </a>
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   )

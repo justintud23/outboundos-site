@@ -18,7 +18,7 @@ export default async function LeadsPage() {
   return (
     <>
       <Header title="Leads" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <LeadsPageClient initialLeads={leads} initialTotal={total} />
       </div>
     </>

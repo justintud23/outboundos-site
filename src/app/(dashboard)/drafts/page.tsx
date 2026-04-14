@@ -18,7 +18,7 @@ export default async function DraftsPage() {
   return (
     <>
       <Header title="Drafts" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <DraftsClient initialDrafts={drafts} initialTotal={total} />
       </div>
     </>

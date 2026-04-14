@@ -18,7 +18,7 @@ export default async function RepliesPage() {
   return (
     <>
       <Header title="Replies" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <RepliesClient initialReplies={replies} initialTotal={total} />
       </div>
     </>

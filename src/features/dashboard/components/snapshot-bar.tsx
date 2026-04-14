@@ -1,6 +1,6 @@
 'use client'
 
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Radio } from 'lucide-react'
 
 interface SnapshotBarProps {
   lastUpdatedAt: Date
@@ -29,15 +29,16 @@ export function SnapshotBar({
   return (
     <div className="flex items-center justify-between flex-wrap gap-3">
       {/* Date range pills */}
-      <div className="flex gap-1">
+      <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-btn)] p-0.5">
         {(['7d', '30d'] as const).map((range) => (
           <button
             key={range}
             onClick={() => onDateRangeChange(range)}
             className={[
-              'px-3 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors duration-[var(--transition-base)]',
+              'px-3 py-1.5 rounded-[calc(var(--radius-btn)-2px)] text-xs font-medium cursor-pointer',
+              'transition-all duration-[var(--transition-base)]',
               dateRange === range
-                ? 'bg-[var(--bg-surface-raised)] text-[var(--text-primary)]'
+                ? 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
             ].join(' ')}
           >
@@ -47,23 +48,25 @@ export function SnapshotBar({
       </div>
 
       {/* Timestamp */}
-      <span className="text-[var(--text-muted)] text-xs">
-        Last updated at {timeStr}
+      <span className="text-[var(--text-muted)] text-xs tabular-nums">
+        Updated {timeStr}
       </span>
 
       {/* Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Live toggle */}
         <button
           onClick={onLiveToggle}
           className={[
-            'flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-btn)] text-xs font-medium transition-colors',
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium cursor-pointer',
+            'transition-all duration-[var(--transition-base)]',
             isLive
               ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
+              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]',
           ].join(' ')}
+          aria-label={isLive ? 'Disable live updates' : 'Enable live updates'}
         >
-          <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[var(--status-success)] animate-pulse' : 'bg-[var(--text-muted)]'}`} />
+          <Radio size={12} className={isLive ? 'animate-pulse' : ''} aria-hidden="true" />
           Live
         </button>
 
@@ -71,10 +74,10 @@ export function SnapshotBar({
         <button
           onClick={onRefresh}
           disabled={refreshing}
-          className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors disabled:opacity-50"
-          title="Refresh"
+          className="p-1.5 rounded-[var(--radius-btn)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)] transition-all duration-[var(--transition-base)] disabled:opacity-40 cursor-pointer"
+          aria-label="Refresh dashboard"
         >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       </div>
     </div>

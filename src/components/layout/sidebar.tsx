@@ -38,18 +38,19 @@ export function Sidebar() {
 
   const sidebarContent = (
     <aside
+      role="navigation"
+      aria-label="Main navigation"
       className={[
         'fixed left-0 top-0 h-full bg-[var(--bg-sidebar)] border-r border-[var(--border-default)] flex flex-col py-4 z-40',
         'transition-[width] duration-[var(--transition-slow)]',
         expanded ? 'w-[var(--sidebar-width-expanded)]' : 'w-[var(--sidebar-width-collapsed)]',
-        // Hide on mobile unless drawer is open
         mobileOpen ? '' : 'hidden lg:flex',
       ].join(' ')}
     >
       {/* Logo */}
       <div className={`flex items-center gap-3 mb-6 ${expanded ? 'px-5' : 'px-0 justify-center'}`}>
-        <div className="w-8 h-8 bg-[var(--accent-indigo)] rounded-lg flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">OS</span>
+        <div className="w-8 h-8 bg-[var(--accent-indigo)] rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.3)]">
+          <span className="text-white text-xs font-bold" aria-hidden="true">OS</span>
         </div>
         {expanded && (
           <span className="text-[var(--text-primary)] font-semibold text-sm whitespace-nowrap overflow-hidden">
@@ -72,20 +73,21 @@ export function Sidebar() {
         {/* Collapse toggle — desktop only */}
         <button
           onClick={toggle}
+          aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
           className={[
-            'hidden lg:flex items-center justify-center mt-2 rounded-lg transition-colors',
+            'hidden lg:flex items-center justify-center mt-2 rounded-lg cursor-pointer',
+            'transition-colors duration-[var(--transition-base)]',
             'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]',
             expanded ? 'w-full h-9 gap-2 px-3' : 'w-10 h-10',
           ].join(' ')}
-          title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
         >
           {expanded ? (
             <>
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} aria-hidden="true" />
               <span className="text-xs">Collapse</span>
             </>
           ) : (
-            <ChevronRight size={16} />
+            <ChevronRight size={16} aria-hidden="true" />
           )}
         </button>
       </div>
@@ -97,9 +99,12 @@ export function Sidebar() {
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-30 lg:hidden"
           onClick={() => setMobileOpen(false)}
-          aria-hidden="true"
+          onKeyDown={(e) => e.key === 'Escape' && setMobileOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close sidebar"
         />
       )}
       {sidebarContent}

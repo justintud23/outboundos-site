@@ -72,7 +72,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         refreshing={refreshing}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Primary row — KPIs + Funnel + Classification */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 stagger-grid">
         <DashboardModule title="KPI Summary" loading={refreshing}>
           <KpiSummary data={data.summary} />
         </DashboardModule>
@@ -84,17 +85,23 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         <DashboardModule title="Reply Classification" loading={refreshing}>
           <ClassificationChart data={data.classification} />
         </DashboardModule>
+      </div>
 
-        <DashboardModule title="Daily Activity" loading={refreshing}>
+      {/* Secondary row — Activity + Campaign + Replies */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 stagger-grid">
+        <DashboardModule title="Daily Activity" loading={refreshing} className="lg:col-span-2">
           <ActivityChart data={data.activity} />
-        </DashboardModule>
-
-        <DashboardModule title="Campaign Comparison" loading={refreshing}>
-          <CampaignChart data={data.campaigns} />
         </DashboardModule>
 
         <DashboardModule title="Recent Replies" loading={refreshing}>
           <RecentRepliesCompact replies={data.recentReplies} />
+        </DashboardModule>
+      </div>
+
+      {/* Third row — Campaign comparison full width */}
+      <div className="stagger-grid">
+        <DashboardModule title="Campaign Comparison" loading={refreshing}>
+          <CampaignChart data={data.campaigns} />
         </DashboardModule>
       </div>
     </div>

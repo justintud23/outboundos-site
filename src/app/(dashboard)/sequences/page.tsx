@@ -22,7 +22,7 @@ export default async function SequencesPage() {
   return (
     <>
       <Header title="Sequences" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <SequencesClient
           initialSequences={sequences}
           campaigns={campaigns.map((c) => ({ id: c.id, name: c.name }))}

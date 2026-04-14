@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   return (
     <>
       <Header title="Settings" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <SettingsClient initialMailboxes={mailboxes} />
       </div>
     </>

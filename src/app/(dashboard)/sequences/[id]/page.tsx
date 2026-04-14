@@ -33,7 +33,7 @@ export default async function SequenceDetailPage({
   return (
     <>
       <Header title={sequence.name} />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <SequenceDetailClient
           sequence={sequence}
           initialEnrollments={enrollments}

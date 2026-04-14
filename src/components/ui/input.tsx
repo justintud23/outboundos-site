@@ -11,6 +11,8 @@ export function Input({ className, ...props }: InputProps) {
         'placeholder:text-[var(--text-muted)]',
         'focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)]',
         'transition-all duration-[var(--transition-base)]',
+        'hover:border-[var(--border-glow)]',
+        'disabled:opacity-40 disabled:cursor-not-allowed',
         className,
       )}
       {...props}

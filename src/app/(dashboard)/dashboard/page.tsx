@@ -31,7 +31,7 @@ export default async function DashboardPage() {
   return (
     <>
       <Header title="Dashboard" />
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 lg:p-8">
         <DashboardClient
           initialData={{ summary, funnel, activity, classification, campaigns, recentReplies }}
         />

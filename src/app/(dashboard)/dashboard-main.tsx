@@ -7,7 +7,8 @@ export function DashboardMain({ children }: { children: React.ReactNode }) {
 
   return (
     <main
-      className="min-h-screen flex flex-col transition-[margin-left] duration-[var(--transition-slow)] lg:ml-[var(--sidebar-width)]"
+      id="main-content"
+      className="min-h-dvh flex flex-col transition-[margin-left] duration-[var(--transition-slow)] lg:ml-[var(--sidebar-width)]"
       style={{
         '--sidebar-width': expanded
           ? 'var(--sidebar-width-expanded)'
