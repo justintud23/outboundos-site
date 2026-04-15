@@ -11,7 +11,6 @@ if (!EMAIL || !PASSWORD) {
 }
 
 async function run() {
-  // Headed so you can complete 2FA manually
   const browser = await chromium.launch({ headless: false })
   const page = await browser.newPage()
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -30,33 +29,69 @@ async function run() {
   await page.getByRole('button', { name: /continue/i }).click()
   await page.waitForTimeout(1500)
 
-  // Step 3: if 2FA is required, wait for user to complete it in the browser window
+  // Step 3: if 2FA is required, wait for user to complete it
   if (page.url().includes('/factor-two') || page.url().includes('/sign-in')) {
     console.log('\n2FA required — complete it in the browser window (you have 60 seconds)...')
   }
 
-  // Wait until fully signed in (not on any sign-in page)
   await page.waitForURL((url) => !url.toString().includes('/sign-in'), { timeout: 60000 })
   console.log('Signed in. Current URL:', page.url())
 
-  // ── Capture pages ─────────────────────────────────────────────────────────────
-  const routes = [
-    { path: '/leads',     file: 'leads.png' },
-    { path: '/drafts',    file: 'drafts.png' },
-    { path: '/replies',   file: 'replies.png' },
-    { path: '/analytics', file: 'analytics.png' },
-  ]
-
-  for (const route of routes) {
-    console.log(`Capturing ${route.path}...`)
-    await page.goto(`${BASE_URL}${route.path}`, { waitUntil: 'networkidle' })
-    await page.waitForTimeout(2000)
-    await page.screenshot({ path: `public/screenshots/${route.file}`, fullPage: true })
-    console.log(`  → public/screenshots/${route.file}`)
+  // ── Helper ────────────────────────────────────────────────────────────────────
+  async function capture(path: string, file: string, opts?: { fullPage?: boolean; waitMs?: number }) {
+    console.log(`Capturing ${path}...`)
+    await page.goto(`${BASE_URL}${path}`, { waitUntil: 'networkidle' })
+    await page.waitForTimeout(opts?.waitMs ?? 2500)
+    // Hide scrollbar for cleaner screenshots
+    await page.addStyleTag({ content: '::-webkit-scrollbar { display: none; } * { scrollbar-width: none; }' })
+    await page.screenshot({ path: `public/screenshots/${file}`, fullPage: opts?.fullPage ?? false })
+    console.log(`  → public/screenshots/${file}`)
   }
 
+  // ── Capture pages ─────────────────────────────────────────────────────────────
+
+  // 1. Dashboard
+  await capture('/dashboard', 'dashboard.png')
+
+  // 2. Action Center
+  await capture('/action-center', 'action-center.png')
+
+  // 3. Lead Command Center — find first lead ID from the leads page
+  console.log('Finding a lead for Command Center screenshot...')
+  await page.goto(`${BASE_URL}/leads`, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  // Click first lead link in the table
+  const leadLink = page.locator('table tbody tr:first-child td:first-child a').first()
+  if (await leadLink.isVisible()) {
+    const href = await leadLink.getAttribute('href')
+    if (href) {
+      await capture(href, 'lead-command-center.png', { waitMs: 3000 })
+    } else {
+      console.log('  ⚠ Could not find lead link href, skipping Lead Command Center')
+    }
+  } else {
+    console.log('  ⚠ No leads found, skipping Lead Command Center')
+  }
+
+  // 4. Inbox
+  await capture('/inbox', 'inbox.png')
+
+  // 5. Templates
+  await capture('/templates', 'templates.png')
+
+  // 6. Pipeline
+  await capture('/pipeline', 'pipeline.png')
+
+  // 7. Analytics
+  await capture('/analytics', 'analytics.png')
+
+  // Legacy screenshots (keep backward compat)
+  await capture('/leads', 'leads.png')
+  await capture('/drafts', 'drafts.png')
+  await capture('/replies', 'replies.png')
+
   await browser.close()
-  console.log('Done.')
+  console.log('\nDone. Screenshots saved to public/screenshots/')
 }
 
 run().catch((err) => {
