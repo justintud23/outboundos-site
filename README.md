@@ -30,6 +30,11 @@ Threaded conversation view with reply classification and quick access to lead de
 
 ![Inbox](./public/screenshots/inbox.png)
 
+### Pipeline
+Drag-and-drop Kanban board showing every lead by status, with scores and last activity.
+
+![Pipeline](./public/screenshots/pipeline.png)
+
 ### Analytics
 Funnel metrics, campaign performance, reply classification breakdown, and daily activity trends.
 
