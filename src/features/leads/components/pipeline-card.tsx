@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
@@ -50,9 +51,13 @@ export function PipelineCard({ lead, nextAction }: PipelineCardProps) {
       {...listeners}
       className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-btn)] p-3 cursor-grab active:cursor-grabbing shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)] transition-all duration-[var(--transition-base)]"
     >
-      <p className="text-[var(--text-primary)] text-sm font-medium truncate">
+      <Link
+        href={`/leads/${lead.id}`}
+        className="text-[var(--text-primary)] text-sm font-medium truncate block hover:text-[var(--accent-indigo)] transition-colors"
+        onClick={(e) => e.stopPropagation()}
+      >
         {name}
-      </p>
+      </Link>
       {lead.company && (
         <p className="text-[var(--text-muted)] text-xs truncate mt-0.5">
           {lead.company}

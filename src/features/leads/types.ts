@@ -87,6 +87,63 @@ export const CLASSIFICATION_TO_STATUS: Record<string, LeadStatus> = {
   UNKNOWN: 'REPLIED',
 }
 
+// ─── Lead detail ────────────────────────────────────────────
+
+export type LeadDetailDTO = Pick<
+  Lead,
+  | 'id'
+  | 'email'
+  | 'firstName'
+  | 'lastName'
+  | 'company'
+  | 'title'
+  | 'linkedinUrl'
+  | 'phone'
+  | 'source'
+  | 'status'
+  | 'score'
+  | 'scoreReason'
+  | 'scoredAt'
+  | 'customFields'
+  | 'createdAt'
+  | 'updatedAt'
+> & {
+  lastActivityAt: Date
+}
+
+// ─── Timeline ───────────────────────────────────────────────
+
+export type TimelineItemType =
+  | 'EMAIL_SENT'
+  | 'REPLY_RECEIVED'
+  | 'STATUS_CHANGE'
+  | 'SEQUENCE_STEP'
+
+export interface TimelineItem {
+  id: string
+  type: TimelineItemType
+  description: string
+  timestamp: Date
+  metadata?: Record<string, unknown>
+}
+
+// ─── Sequence enrollment ────────────────────────────────────
+
+export interface LeadSequenceDTO {
+  enrollmentId: string
+  sequenceId: string
+  sequenceName: string
+  currentStepNumber: number
+  totalSteps: number
+  status: string
+  nextDueAt: Date | null
+  startedAt: Date
+  stoppedAt: Date | null
+  stoppedReason: string | null
+  currentStepSubject: string | null
+  nextStepSubject: string | null
+}
+
 // ─── Errors ──────────────────────────────────────────────────
 
 export class LeadNotFoundError extends Error {

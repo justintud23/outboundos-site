@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatEnumLabel } from '@/lib/format'
 import type { InboxThreadDTO, InboxFilter } from '../types'
@@ -88,7 +90,7 @@ export function ThreadList({
             key={thread.leadId}
             onClick={() => onSelectThread(thread.leadId)}
             className={[
-              'w-full text-left px-4 py-3 border-b border-[var(--border-subtle)] transition-colors duration-[var(--transition-fast)]',
+              'w-full text-left px-4 py-3 border-b border-[var(--border-subtle)] transition-colors duration-[var(--transition-fast)] group/thread',
               selectedLeadId === thread.leadId
                 ? 'bg-[var(--accent-indigo-glow)]/30'
                 : 'hover:bg-[var(--bg-surface-raised)]',
@@ -103,6 +105,14 @@ export function ThreadList({
                   <span className={`text-sm truncate ${thread.unreadCount > 0 ? 'text-[var(--text-primary)] font-semibold' : 'text-[var(--text-primary)]'}`}>
                     {thread.leadName}
                   </span>
+                  <Link
+                    href={`/leads/${thread.leadId}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[var(--text-muted)] hover:text-[var(--accent-indigo)] transition-colors opacity-0 group-hover/thread:opacity-100 flex-shrink-0"
+                    title="Open lead detail"
+                  >
+                    <ExternalLink size={12} />
+                  </Link>
                 </div>
                 {thread.leadCompany && (
                   <p className="text-[var(--text-muted)] text-xs truncate mt-0.5">{thread.leadCompany}</p>

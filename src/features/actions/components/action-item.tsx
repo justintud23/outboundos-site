@@ -110,7 +110,8 @@ interface ActionItemProps {
 }
 
 export function ActionItem({ action, compact = false }: ActionItemProps) {
-  const href = action.href ?? ACTION_HREF[action.type]
+  const defaultHref = action.leadId ? `/leads/${action.leadId}` : ACTION_HREF[action.type]
+  const href = action.href ?? defaultHref
   const cta = ACTION_CTA[action.type]
   const config = TYPE_CONFIG[action.type]
   const Icon = config.icon

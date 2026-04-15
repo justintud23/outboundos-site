@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Users, FileUp } from 'lucide-react'
 import { formatEnumLabel } from '@/lib/format'
@@ -85,10 +86,12 @@ export function LeadsTable({
                 className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-raised)] transition-colors duration-[var(--transition-fast)] group"
               >
                 <td className="py-3 px-4">
-                  <div className="text-[var(--text-primary)] font-medium">
-                    {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '\u2014'}
-                  </div>
-                  <div className="text-[var(--text-muted)] text-xs">{lead.email}</div>
+                  <Link href={`/leads/${lead.id}`} className="block group/name">
+                    <div className="text-[var(--text-primary)] font-medium group-hover/name:text-[var(--accent-indigo)] transition-colors">
+                      {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '\u2014'}
+                    </div>
+                    <div className="text-[var(--text-muted)] text-xs">{lead.email}</div>
+                  </Link>
                 </td>
                 <td className="py-3 px-4 text-[var(--text-secondary)]">{lead.company ?? '\u2014'}</td>
                 <td className="py-3 px-4 text-[var(--text-secondary)]">{lead.title ?? '\u2014'}</td>

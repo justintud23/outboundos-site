@@ -5,6 +5,7 @@ import { relativeTime } from '@/lib/format'
 
 interface GetNextActionsInput {
   organizationId: string
+  leadId?: string
   limit?: number
 }
 
@@ -33,9 +34,14 @@ function replyUrgencySuffix(date: Date): string {
 
 export async function getNextActions({
   organizationId,
+  leadId,
   limit = 15,
 }: GetNextActionsInput): Promise<NextAction[]> {
   const actions: NextAction[] = []
+
+  // When filtering by leadId, scope all queries to that lead
+  const leadFilter = leadId ? { leadId } : {}
+  const leadIdFilter = leadId ? { id: leadId } : {}
 
   const [
     pendingDrafts,
@@ -46,7 +52,7 @@ export async function getNextActions({
     interestedLeads,
   ] = await Promise.all([
     prisma.draft.findMany({
-      where: { organizationId, status: 'PENDING_REVIEW' },
+      where: { organizationId, status: 'PENDING_REVIEW', ...leadFilter },
       select: {
         id: true,
         subject: true,
@@ -62,6 +68,7 @@ export async function getNextActions({
         organizationId,
         status: 'APPROVED',
         outboundMessages: { none: {} },
+        ...leadFilter,
       },
       select: {
         id: true,
@@ -75,7 +82,7 @@ export async function getNextActions({
     }),
 
     prisma.inboundReply.findMany({
-      where: { organizationId, isRead: false },
+      where: { organizationId, isRead: false, ...leadFilter },
       select: {
         id: true,
         receivedAt: true,
@@ -92,6 +99,7 @@ export async function getNextActions({
         status: 'NEW',
         sequenceEnrollments: { none: {} },
         outboundMessages: { none: {} },
+        ...leadIdFilter,
       },
       select: { id: true, email: true, firstName: true, lastName: true, company: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
@@ -103,6 +111,7 @@ export async function getNextActions({
         organizationId,
         status: 'REPLIED',
         drafts: { none: { status: { in: ['PENDING_REVIEW', 'APPROVED'] } } },
+        ...leadIdFilter,
       },
       select: { id: true, email: true, firstName: true, lastName: true, company: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
@@ -110,7 +119,7 @@ export async function getNextActions({
     }),
 
     prisma.lead.findMany({
-      where: { organizationId, status: 'INTERESTED' },
+      where: { organizationId, status: 'INTERESTED', ...leadIdFilter },
       select: { id: true, email: true, firstName: true, lastName: true, company: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 10,
