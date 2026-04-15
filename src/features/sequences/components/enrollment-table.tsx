@@ -64,12 +64,12 @@ export function EnrollmentTable({ enrollments, onAction }: EnrollmentTableProps)
               <td className="py-3 px-4">
                 {enrollment.status === 'ACTIVE' && (
                   <div className="flex gap-2">
-                    <button onClick={() => void onAction(enrollment.id, 'pause')} className="text-xs text-[var(--status-warning)] hover:underline">Pause</button>
-                    <button onClick={() => void onAction(enrollment.id, 'stop')} className="text-xs text-[var(--status-danger)] hover:underline">Stop</button>
+                    <button onClick={() => void onAction(enrollment.id, 'pause')} className="text-xs font-medium text-[var(--status-warning)] hover:bg-[var(--status-warning-bg)] px-1.5 py-0.5 rounded-[var(--radius-btn)] transition-colors duration-[var(--transition-fast)] cursor-pointer">Pause</button>
+                    <button onClick={() => void onAction(enrollment.id, 'stop')} className="text-xs font-medium text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] px-1.5 py-0.5 rounded-[var(--radius-btn)] transition-colors duration-[var(--transition-fast)] cursor-pointer">Stop</button>
                   </div>
                 )}
                 {enrollment.status === 'PAUSED' && (
-                  <button onClick={() => void onAction(enrollment.id, 'resume')} className="text-xs text-[var(--status-success)] hover:underline">Resume</button>
+                  <button onClick={() => void onAction(enrollment.id, 'resume')} className="text-xs font-medium text-[var(--status-success)] hover:bg-[var(--status-success-bg)] px-1.5 py-0.5 rounded-[var(--radius-btn)] transition-colors duration-[var(--transition-fast)] cursor-pointer">Resume</button>
                 )}
               </td>
             </tr>

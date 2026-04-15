@@ -22,7 +22,7 @@ export function Header({ title }: HeaderProps) {
         >
           <Menu size={20} aria-hidden="true" />
         </button>
-        <h1 className="text-[var(--text-primary)] font-semibold text-base">{title}</h1>
+        <h1 className="text-[var(--text-primary)] font-semibold text-lg">{title}</h1>
       </div>
       <div className="flex items-center gap-3">
         <OrganizationSwitcher

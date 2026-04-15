@@ -195,7 +195,7 @@ export function InlineActionItem({ action, phase, onExecute, onUndo }: InlineAct
       ].join(' ')}
       style={{
         borderLeft: `${borderWidth}px solid ${isGhost ? 'var(--status-success)' : config.accent}`,
-        transition: isGhost ? 'border-color 0.2s ease-out, opacity 0.2s ease-out' : undefined,
+        transition: isGhost ? 'border-color var(--transition-fast) ease-out, opacity var(--transition-fast) ease-out' : undefined,
       }}
     >
       {/* Icon */}

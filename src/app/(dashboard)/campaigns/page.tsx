@@ -35,7 +35,7 @@ export default async function CampaignsPage() {
   return (
     <>
       <Header title="Campaigns" />
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-6 lg:p-8 space-y-6">
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Campaigns"      value={total} accent="cyan" />

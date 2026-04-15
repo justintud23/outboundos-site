@@ -78,20 +78,20 @@ export function TemplatesTable({ templates, onEdit, onActivate, onDuplicate }: T
                 <div className="flex gap-2">
                   <button
                     onClick={() => onEdit(template)}
-                    className="text-xs text-[var(--accent-indigo)] hover:text-[var(--accent-indigo-hover)] transition-colors"
+                    className="text-xs font-medium text-[var(--accent-indigo)] hover:text-[var(--accent-indigo-hover)] transition-colors duration-[var(--transition-fast)] cursor-pointer"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => onDuplicate(template)}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                    className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors duration-[var(--transition-fast)] cursor-pointer"
                   >
                     Duplicate
                   </button>
                   {!template.isActive && (
                     <button
                       onClick={() => onActivate(template.id)}
-                      className="text-xs text-[var(--status-success)] hover:underline"
+                      className="text-xs font-medium text-[var(--status-success)] hover:bg-[var(--status-success-bg)] px-1.5 py-0.5 rounded-[var(--radius-btn)] transition-colors duration-[var(--transition-fast)] cursor-pointer"
                     >
                       Activate
                     </button>

@@ -23,7 +23,7 @@ export function DashboardModule({ title, badge, children, loading, error, classN
       )}
     >
       <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-[var(--text-secondary)] text-xs font-medium uppercase tracking-wider">
+        <h3 className="text-[var(--text-muted)] text-xs font-medium uppercase tracking-wider">
           {title}
         </h3>
         {badge !== undefined && badge > 0 && (

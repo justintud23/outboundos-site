@@ -37,7 +37,7 @@ export function LeadHeader({ lead, statusOverride }: LeadHeaderProps) {
     [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-5 animate-fade-in-up">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-5 shadow-[var(--shadow-card)] animate-fade-in-up">
       {/* Back nav */}
       <div className="flex items-center gap-2 mb-4">
         <Link

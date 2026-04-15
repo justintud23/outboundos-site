@@ -41,7 +41,7 @@ export function StatCard({ label, value, sub, accent, icon: Icon }: StatCardProp
     <div
       className={clsx(
         'bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-5',
-        'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
+        'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)]',
         'transition-all duration-[var(--transition-base)]',
         'animate-fade-in-up',
         accent && 'border-l-[3px]',

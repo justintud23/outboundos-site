@@ -57,7 +57,7 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                     <button
                       onClick={() => onReview(draft)}
                       aria-label={`Review draft for ${displayName}`}
-                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--bg-surface-raised)] hover:bg-[var(--accent-indigo)] text-[var(--text-primary)] transition-colors duration-[var(--transition-base)]"
+                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--bg-surface-raised)] hover:bg-[var(--accent-indigo)] text-[var(--text-primary)] transition-colors duration-[var(--transition-base)] cursor-pointer"
                     >
                       Review
                     </button>
@@ -67,7 +67,7 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                       onClick={() => void onSend(draft)}
                       disabled={isSending}
                       aria-label={`Send draft to ${displayName}`}
-                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--status-success-bg)] hover:bg-[var(--status-success)]/25 text-[var(--status-success)] transition-colors duration-[var(--transition-base)] disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-xs px-3 py-1 rounded-[var(--radius-btn)] bg-[var(--status-success-bg)] hover:bg-[var(--status-success)]/25 text-[var(--status-success)] transition-colors duration-[var(--transition-base)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSending ? 'Sending…' : 'Send'}
                     </button>

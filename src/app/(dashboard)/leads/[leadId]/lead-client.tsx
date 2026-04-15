@@ -169,7 +169,7 @@ export function LeadCommandCenter({
         {/* LEFT — Primary content (2/3) */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tab switcher */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] animate-fade-in-up" style={{ animationDelay: '50ms' }}>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] animate-fade-in-up" style={{ animationDelay: '50ms' }}>
             <div className="flex border-b border-[var(--border-default)]">
               <button
                 onClick={() => setActiveTab('timeline')}
@@ -209,7 +209,7 @@ export function LeadCommandCenter({
         <div className="space-y-6">
           {/* Actions Panel */}
           <div
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] animate-fade-in-up"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] animate-fade-in-up"
             style={{ animationDelay: '100ms' }}
           >
             <div className="px-5 pt-4 pb-2">
@@ -232,7 +232,7 @@ export function LeadCommandCenter({
 
           {/* Sequence Card */}
           <div
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] animate-fade-in-up"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] animate-fade-in-up"
             style={{ animationDelay: '150ms' }}
           >
             <div className="px-5 pt-4 pb-2">
@@ -247,7 +247,7 @@ export function LeadCommandCenter({
 
           {/* Lead Metadata */}
           <div
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] animate-fade-in-up"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] animate-fade-in-up"
             style={{ animationDelay: '200ms' }}
           >
             <div className="px-5 pt-4 pb-2">
