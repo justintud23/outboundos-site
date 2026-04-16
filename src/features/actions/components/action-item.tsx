@@ -191,6 +191,11 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
         {action.description && (
           <p className="text-[var(--text-secondary)] text-xs truncate">{action.description}</p>
         )}
+        {action.previewText && (
+          <p className="text-[var(--text-secondary)] text-xs mt-0.5 truncate italic opacity-80">
+            &ldquo;{action.previewText}&rdquo;
+          </p>
+        )}
         {action.reason && (
           <p className="text-[var(--text-muted)] text-[11px] mt-0.5 truncate">{action.reason}</p>
         )}

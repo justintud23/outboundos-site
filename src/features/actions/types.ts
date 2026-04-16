@@ -21,6 +21,7 @@ export interface NextAction {
   replyId?: string
   sequenceId?: string
   href?: string
+  previewText?: string
   createdAt: Date
 }
 

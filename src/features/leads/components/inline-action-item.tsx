@@ -99,6 +99,12 @@ const TYPE_CONFIG: Record<ActionType, {
   },
 }
 
+const SHORTCUT_KEYS: Partial<Record<ActionType, string>> = {
+  APPROVE_DRAFT: 'A',
+  SEND_DRAFT: 'S',
+  MARK_CONVERTED: 'C',
+}
+
 const SUCCESS_LABELS: Partial<Record<ActionType, string>> = {
   APPROVE_DRAFT: 'Approved',
   SEND_DRAFT: 'Sent',
@@ -241,12 +247,19 @@ export function InlineActionItem({ action, phase, onExecute, onUndo }: InlineAct
           Undo
         </button>
       ) : cta && isInteractive ? (
-        <button
-          onClick={() => onExecute(action)}
-          className={`text-[11px] px-2 py-1 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97]`}
-        >
-          {cta}
-        </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => onExecute(action)}
+            className={`text-[11px] px-2 py-1 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] font-medium cursor-pointer active:scale-[0.97]`}
+          >
+            {cta}
+          </button>
+          {SHORTCUT_KEYS[action.type] && (
+            <kbd className="hidden sm:inline-flex items-center justify-center w-5 h-5 rounded bg-[var(--bg-surface-raised)] text-[var(--text-muted)] text-[9px] font-mono border border-[var(--border-default)]">
+              {SHORTCUT_KEYS[action.type]}
+            </kbd>
+          )}
+        </div>
       ) : null}
     </div>
   )

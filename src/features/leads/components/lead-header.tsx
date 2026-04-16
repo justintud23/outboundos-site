@@ -14,7 +14,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
 import type { LeadDetailDTO } from '../types'
+import type { EngagementScore } from '../utils/compute-engagement-score'
 import type { LeadStatus } from '@prisma/client'
+
+const TIER_CONFIG = {
+  hot: { label: 'Hot', variant: 'danger' as const, color: 'text-[var(--status-danger)]' },
+  warm: { label: 'Warm', variant: 'warning' as const, color: 'text-[var(--status-warning)]' },
+  cold: { label: 'Cold', variant: 'muted' as const, color: 'text-[var(--text-muted)]' },
+}
 
 const STATUS_VARIANT: Record<LeadStatus, 'default' | 'success' | 'warning' | 'danger' | 'muted'> = {
   NEW: 'default',
@@ -30,9 +37,10 @@ const STATUS_VARIANT: Record<LeadStatus, 'default' | 'success' | 'warning' | 'da
 interface LeadHeaderProps {
   lead: LeadDetailDTO
   statusOverride?: LeadStatus | null
+  engagement?: EngagementScore | null
 }
 
-export function LeadHeader({ lead, statusOverride }: LeadHeaderProps) {
+export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps) {
   const name =
     [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email
 
@@ -67,6 +75,11 @@ export function LeadHeader({ lead, statusOverride }: LeadHeaderProps) {
                 showIcon
               >
                 {lead.score}
+              </Badge>
+            )}
+            {engagement && (
+              <Badge variant={TIER_CONFIG[engagement.tier].variant}>
+                {TIER_CONFIG[engagement.tier].label} {engagement.score}
               </Badge>
             )}
           </div>

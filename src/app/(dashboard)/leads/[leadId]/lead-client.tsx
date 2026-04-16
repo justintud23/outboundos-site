@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { LeadHeader } from '@/features/leads/components/lead-header'
 import { LeadTimeline } from '@/features/leads/components/lead-timeline'
 import { LeadMessages } from '@/features/leads/components/lead-messages'
 import { LeadActionsPanel } from '@/features/leads/components/lead-actions-panel'
 import { LeadSequenceCard } from '@/features/leads/components/lead-sequence-card'
-import { executeAction } from '@/features/leads/components/inline-action-item'
+import { executeAction, isInlineAction } from '@/features/leads/components/inline-action-item'
+import { computeEngagementScore } from '@/features/leads/utils/compute-engagement-score'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -16,8 +17,14 @@ import {
 } from 'lucide-react'
 import type { LeadDetailDTO, TimelineItem, LeadSequenceDTO } from '@/features/leads/types'
 import type { ThreadMessageDTO } from '@/features/inbox/types'
-import type { NextAction } from '@/features/actions/types'
+import type { NextAction, ActionType } from '@/features/actions/types'
 import type { LeadStatus } from '@prisma/client'
+
+const SHORTCUT_MAP: Record<string, ActionType> = {
+  a: 'APPROVE_DRAFT',
+  s: 'SEND_DRAFT',
+  c: 'MARK_CONVERTED',
+}
 
 type Tab = 'timeline' | 'messages'
 
@@ -48,6 +55,12 @@ export function LeadCommandCenter({
   const [optimisticStatus, setOptimisticStatus] = useState<LeadStatus | null>(null)
   const [errorActionId, setErrorActionId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // Computed engagement score
+  const engagement = useMemo(
+    () => computeEngagementScore({ lead, timeline, sequence }),
+    [lead, timeline, sequence],
+  )
 
   // Track timers and in-flight state per action for cleanup
   const ghostTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -159,10 +172,39 @@ export function LeadCommandCenter({
     // but the user sees the row restored immediately.
   }, [])
 
+  // Keyboard shortcuts: A=approve, S=send, C=convert
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ignore when typing in form elements
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) {
+        return
+      }
+      const actionType = SHORTCUT_MAP[e.key.toLowerCase()]
+      if (!actionType) return
+
+      // Find the first matching visible action that hasn't been ghosted/dismissed
+      const match = actions.find(
+        (a) =>
+          a.type === actionType &&
+          isInlineAction(a.type) &&
+          !ghostIds.has(a.id) &&
+          !dismissedIds.has(a.id),
+      )
+      if (match) {
+        e.preventDefault()
+        handleExecute(match)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [actions, ghostIds, dismissedIds, handleExecute])
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Lead Header */}
-      <LeadHeader lead={lead} statusOverride={optimisticStatus} />
+      <LeadHeader lead={lead} statusOverride={optimisticStatus} engagement={engagement} />
 
       {/* Main 2-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -74,7 +74,7 @@ describe('getNextActions', () => {
     // Reply from 30 minutes ago → "respond promptly"
     const thirtyMinAgo = new Date(Date.now() - 30 * 60_000)
     mockPrisma.inboundReply.findMany.mockResolvedValue([
-      { id: 'reply-1', receivedAt: thirtyMinAgo, classification: 'POSITIVE', lead: fakeLead },
+      { id: 'reply-1', receivedAt: thirtyMinAgo, classification: 'POSITIVE', rawBody: 'Test reply body', lead: fakeLead },
     ])
 
     const result = await getNextActions({ organizationId: ORG_ID })
@@ -87,7 +87,7 @@ describe('getNextActions', () => {
   it('uses "follow up soon" for replies 1-24h old', async () => {
     const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000)
     mockPrisma.inboundReply.findMany.mockResolvedValue([
-      { id: 'reply-2', receivedAt: threeHoursAgo, classification: 'NEUTRAL', lead: fakeLead },
+      { id: 'reply-2', receivedAt: threeHoursAgo, classification: 'NEUTRAL', rawBody: 'Test reply body', lead: fakeLead },
     ])
 
     const result = await getNextActions({ organizationId: ORG_ID })
@@ -99,7 +99,7 @@ describe('getNextActions', () => {
   it('uses "urgency decreasing" for replies > 24h old', async () => {
     const twoDaysAgo = new Date(Date.now() - 48 * 3_600_000)
     mockPrisma.inboundReply.findMany.mockResolvedValue([
-      { id: 'reply-3', receivedAt: twoDaysAgo, classification: 'POSITIVE', lead: fakeLead },
+      { id: 'reply-3', receivedAt: twoDaysAgo, classification: 'POSITIVE', rawBody: 'Test reply body', lead: fakeLead },
     ])
 
     const result = await getNextActions({ organizationId: ORG_ID })
@@ -150,7 +150,7 @@ describe('getNextActions', () => {
 
   it('sorts by priority DESC, then createdAt DESC', async () => {
     mockPrisma.inboundReply.findMany.mockResolvedValue([
-      { id: 'reply-1', receivedAt: earlier, classification: 'NEUTRAL', lead: fakeLead },
+      { id: 'reply-1', receivedAt: earlier, classification: 'NEUTRAL', rawBody: 'Test reply body', lead: fakeLead },
     ])
     mockPrisma.draft.findMany.mockImplementation(async (args: { where: { status?: string } }) => {
       if (args.where.status === 'PENDING_REVIEW') {
@@ -199,7 +199,7 @@ describe('getNextActions', () => {
 
   it('includes id and reason fields on every action', async () => {
     mockPrisma.inboundReply.findMany.mockResolvedValue([
-      { id: 'reply-1', receivedAt: now, classification: 'POSITIVE', lead: fakeLead },
+      { id: 'reply-1', receivedAt: now, classification: 'POSITIVE', rawBody: 'Test reply body', lead: fakeLead },
     ])
 
     const result = await getNextActions({ organizationId: ORG_ID })
