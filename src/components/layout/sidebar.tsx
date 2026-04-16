@@ -42,7 +42,7 @@ export function Sidebar() {
       role="navigation"
       aria-label="Main navigation"
       className={[
-        'fixed left-0 top-0 h-full bg-[var(--bg-sidebar)] border-r border-[var(--border-default)] flex flex-col py-4 z-40',
+        'fixed left-0 top-0 h-full bg-[var(--bg-sidebar)] border-r border-[var(--border-default)] shadow-[var(--shadow-sidebar)] flex flex-col py-4 z-40',
         'transition-[width] duration-[var(--transition-slow)]',
         expanded ? 'w-[var(--sidebar-width-expanded)]' : 'w-[var(--sidebar-width-collapsed)]',
         mobileOpen ? '' : 'hidden lg:flex',

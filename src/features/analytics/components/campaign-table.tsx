@@ -75,7 +75,7 @@ export function CampaignTable({ data }: { data: CampaignPerformanceDTO[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-[var(--bg-surface)] z-10">
-          <tr className="border-b border-[var(--border-default)]">
+          <tr className="border-b border-[var(--border-default)] bg-[var(--bg-surface-raised)]/60">
             <th className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Campaign</th>
             <th className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Status</th>
             <SortHeader label="Sent" field="sent" />

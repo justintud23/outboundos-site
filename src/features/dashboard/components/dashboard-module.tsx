@@ -16,8 +16,7 @@ export function DashboardModule({ title, badge, children, loading, error, classN
     <div
       className={clsx(
         'bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)]',
-        'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:border-[var(--border-glow)]',
-        'transition-all duration-[var(--transition-base)] p-5 flex flex-col',
+        'shadow-[var(--shadow-card)] p-5 flex flex-col',
         'animate-fade-in-up',
         className,
       )}

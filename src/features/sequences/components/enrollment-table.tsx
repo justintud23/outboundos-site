@@ -30,7 +30,7 @@ export function EnrollmentTable({ enrollments, onAction }: EnrollmentTableProps)
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border-default)]">
+          <tr className="border-b border-[var(--border-default)] bg-[var(--bg-surface-raised)]/60">
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Lead</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Step</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Status</th>

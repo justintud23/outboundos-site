@@ -38,6 +38,7 @@
   /* ── Effects ── */
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 12px rgba(99, 102, 241, 0.04);
   --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 24px rgba(99, 102, 241, 0.08);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.4);
   --radius-card: 12px;
   --radius-btn: 8px;
   --radius-badge: 6px;

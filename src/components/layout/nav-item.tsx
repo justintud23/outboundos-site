@@ -26,7 +26,7 @@ export function NavItem({ href, icon: Icon, label, expanded }: NavItemProps) {
         'transition-all duration-[var(--transition-base)]',
         expanded ? 'h-10 gap-3 px-3' : 'justify-center w-10 h-10',
         {
-          'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]': isActive,
+          'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)] shadow-[inset_0_0_0_1px_rgba(99,102,241,0.12)]': isActive,
           'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]': !isActive,
         },
       )}

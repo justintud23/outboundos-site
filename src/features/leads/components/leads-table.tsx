@@ -63,7 +63,7 @@ export function LeadsTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border-default)] bg-[var(--bg-surface)]/50">
+          <tr className="border-b border-[var(--border-default)] bg-[var(--bg-surface-raised)]/60">
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Name</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Company</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Title</th>

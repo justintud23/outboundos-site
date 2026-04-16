@@ -12,7 +12,7 @@ export function Header({ title }: HeaderProps) {
   const { setMobileOpen } = useSidebar()
 
   return (
-    <header className="h-14 border-b border-[var(--border-default)] flex items-center justify-between px-6 bg-[var(--bg-surface)]/60 backdrop-blur-sm sticky top-0 z-20">
+    <header className="h-14 border-b border-[var(--border-default)] flex items-center justify-between px-6 bg-[var(--bg-surface)]/80 backdrop-blur-md sticky top-0 z-20">
       <div className="flex items-center gap-3">
         {/* Mobile hamburger */}
         <button
