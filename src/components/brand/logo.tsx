@@ -1,6 +1,7 @@
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg'
   variant?: 'light' | 'dark'
+  showText?: boolean
 }
 
 const SIZES = {
@@ -9,7 +10,7 @@ const SIZES = {
   lg: { icon: 44, text: 'text-2xl', gap: 'gap-3' },
 }
 
-export function Logo({ size = 'md', variant = 'dark' }: LogoProps) {
+export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoProps) {
   const s = SIZES[size]
   const textColor = variant === 'light' ? 'text-slate-900' : 'text-white'
 
@@ -43,9 +44,11 @@ export function Logo({ size = 'md', variant = 'dark' }: LogoProps) {
           />
         </svg>
       </div>
-      <span className={`${s.text} font-semibold tracking-tight ${textColor}`}>
-        Outbound<span className="text-indigo-500">OS</span>
-      </span>
+      {showText && (
+        <span className={`${s.text} font-semibold tracking-tight ${textColor}`}>
+          Outbound<span className="text-indigo-500">OS</span>
+        </span>
+      )}
     </div>
   )
 }

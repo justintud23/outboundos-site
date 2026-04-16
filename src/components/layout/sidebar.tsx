@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { useSidebar } from './sidebar-context'
+import { Logo } from '@/components/brand/logo'
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -48,15 +49,8 @@ export function Sidebar() {
       ].join(' ')}
     >
       {/* Logo */}
-      <div className={`flex items-center gap-3 mb-6 ${expanded ? 'px-5' : 'px-0 justify-center'}`}>
-        <div className="w-8 h-8 bg-[var(--accent-indigo)] rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.3)]">
-          <span className="text-white text-xs font-bold" aria-hidden="true">OS</span>
-        </div>
-        {expanded && (
-          <span className="text-[var(--text-primary)] font-semibold text-sm whitespace-nowrap overflow-hidden">
-            OutboundOS
-          </span>
-        )}
+      <div className={`flex items-center mb-6 ${expanded ? 'px-5' : 'px-0 justify-center'}`}>
+        <Logo size="sm" variant="dark" showText={expanded} />
       </div>
 
       {/* Nav items */}
