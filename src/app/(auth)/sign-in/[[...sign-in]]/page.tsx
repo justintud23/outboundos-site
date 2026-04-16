@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useSignIn } from '@clerk/nextjs'
+import { useSignIn, useAuth } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 type Step = 'identifier' | 'password' | 'redirecting'
 
 export default function SignInPage() {
   const { signIn } = useSignIn()
+  const { isSignedIn } = useAuth()
+  const router = useRouter()
 
   const [step, setStep] = useState<Step>('identifier')
   const [email, setEmail] = useState('')
@@ -15,6 +18,12 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Redirect if already signed in
+  if (isSignedIn) {
+    router.replace('/dashboard')
+    return null
+  }
 
   if (!signIn) {
     return (
@@ -58,7 +67,7 @@ export default function SignInPage() {
     if (signIn.status === 'needs_first_factor') {
       setStep('password')
     } else if (signIn.status === 'complete') {
-      await signIn.finalize()
+      await signIn.finalize({ navigate: () => router.push('/dashboard') })
     }
   }
 
@@ -74,7 +83,7 @@ export default function SignInPage() {
       return
     }
     if (signIn.status === 'complete') {
-      await signIn.finalize()
+      await signIn.finalize({ navigate: () => router.push('/dashboard') })
     }
   }
 

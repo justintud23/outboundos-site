@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useSignUp } from '@clerk/nextjs'
+import { useSignUp, useAuth } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 type Step = 'form' | 'verify' | 'redirecting'
 
 export default function SignUpPage() {
   const { signUp } = useSignUp()
+  const { isSignedIn } = useAuth()
+  const router = useRouter()
 
   const [step, setStep] = useState<Step>('form')
   const [email, setEmail] = useState('')
@@ -16,6 +19,12 @@ export default function SignUpPage() {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Redirect if already signed in
+  if (isSignedIn) {
+    router.replace('/dashboard')
+    return null
+  }
 
   if (!signUp) {
     return (
@@ -78,7 +87,7 @@ export default function SignUpPage() {
       return
     }
     if (signUp.status === 'complete') {
-      await signUp.finalize()
+      await signUp.finalize({ navigate: () => router.push('/dashboard') })
     }
     setLoading(false)
   }
