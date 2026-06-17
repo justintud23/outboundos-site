@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import type { SendGridRawEvent } from '../types'
 import { mapEventType } from './map-event-type'
+import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { LeadNotFoundError } from '@/features/leads/types'
 
 interface IngestResult {
   processed: number
@@ -21,7 +23,7 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
 
     const message = await prisma.outboundMessage.findUnique({
       where: { draftId: event.draftId },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, leadId: true },
     })
 
     if (!message) {
@@ -47,6 +49,37 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
       },
       update: {},
     })
+
+    // Suppression: an unsubscribe or spam complaint must stop further sends to
+    // this lead, not just be recorded as an event. There is no dedicated
+    // "suppressed"/"spam" LeadStatus, so both map to the terminal UNSUBSCRIBED
+    // status (BOUNCED means delivery failure; NOT_INTERESTED means a reply —
+    // neither fits a spam complaint). The `auto:` trigger keeps this idempotent
+    // (already-terminal leads no-op) and transitioning into the terminal status
+    // also stops the lead's ACTIVE sequence enrollments. The lead is resolved
+    // from the OutboundMessage (org-scoped linkage), not from request-supplied
+    // ids. This runs only inside ingestWebhookEvents, which the route calls
+    // after SendGrid signature verification — so it only fires on authentic
+    // webhooks.
+    if (eventType === 'UNSUBSCRIBED' || eventType === 'SPAM_REPORT') {
+      try {
+        await transitionLeadStatus({
+          organizationId: message.organizationId,
+          leadId: message.leadId,
+          newStatus: 'UNSUBSCRIBED',
+          trigger: eventType === 'SPAM_REPORT'
+            ? 'auto:sendgrid_spamreport'
+            : 'auto:sendgrid_unsubscribe',
+          metadata: { sgEventId: event.sg_event_id, providerEvent: event.event },
+        })
+      } catch (err) {
+        // Don't let a suppression failure abort the rest of the batch; the
+        // event itself is already recorded above.
+        if (!(err instanceof LeadNotFoundError)) {
+          console.error(`[ingestWebhookEvents] Failed to suppress lead for ${event.event} event sgEventId=${event.sg_event_id}:`, err)
+        }
+      }
+    }
 
     processed++
   }

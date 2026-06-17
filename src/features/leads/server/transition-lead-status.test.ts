@@ -117,6 +117,32 @@ describe('transitionLeadStatus', () => {
     expect(result.changed).toBe(true)
   })
 
+  it('stops ACTIVE sequence enrollments when transitioning into a terminal status', async () => {
+    mockFindFirst.mockResolvedValue(makeLead('CONTACTED'))
+    const enrollmentUpdateMany = vi.fn().mockResolvedValue({ count: 2 })
+    mockTransaction.mockImplementationOnce(async (fn: (tx: unknown) => unknown) =>
+      fn({
+        lead: { update: vi.fn().mockResolvedValue(makeLead('UNSUBSCRIBED')) },
+        leadStatusChange: { create: vi.fn().mockResolvedValue({}) },
+        sequenceEnrollment: { updateMany: enrollmentUpdateMany },
+      }),
+    )
+
+    await transitionLeadStatus({
+      organizationId: ORG,
+      leadId: 'lead-1',
+      newStatus: 'UNSUBSCRIBED',
+      trigger: 'auto:unsubscribe_link',
+    })
+
+    expect(enrollmentUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { leadId: 'lead-1', status: 'ACTIVE' },
+        data: expect.objectContaining({ status: 'STOPPED' }),
+      }),
+    )
+  })
+
   it('auto-transitions OUT of terminal states are blocked', async () => {
     mockFindFirst.mockResolvedValue(makeLead('UNSUBSCRIBED'))
 

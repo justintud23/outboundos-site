@@ -7,15 +7,23 @@ vi.mock('@/lib/db/prisma', () => ({
   },
 }))
 
+vi.mock('@/features/leads/server/transition-lead-status', () => ({
+  transitionLeadStatus: vi.fn(),
+}))
+
 import { prisma } from '@/lib/db/prisma'
+import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { LeadNotFoundError } from '@/features/leads/types'
 import { ingestWebhookEvents } from './ingest-webhook-events'
 
 const mockFindUnique = prisma.outboundMessage.findUnique as ReturnType<typeof vi.fn>
 const mockUpsert    = prisma.messageEvent.upsert    as ReturnType<typeof vi.fn>
+const mockTransition = transitionLeadStatus as ReturnType<typeof vi.fn>
 
 const baseMessage = {
   id: 'msg-1',
   organizationId: 'org-1',
+  leadId: 'lead-1',
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -37,7 +45,7 @@ describe('ingestWebhookEvents', () => {
     expect(result).toEqual({ processed: 1, skipped: 0 })
     expect(mockFindUnique).toHaveBeenCalledWith({
       where: { draftId: 'draft-1' },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, leadId: true },
     })
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -117,5 +125,80 @@ describe('ingestWebhookEvents', () => {
         create: expect.objectContaining({ providerTimestamp: null }),
       }),
     )
+  })
+
+  // ─── Suppression on unsubscribe / spamreport ──────────────────────────────
+
+  it('suppresses the lead (→ UNSUBSCRIBED) on an unsubscribe event', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    const result = await ingestWebhookEvents([
+      { event: 'unsubscribe', sg_event_id: 'evt-u', draftId: 'draft-1', timestamp: 1700000000 },
+    ])
+
+    expect(result).toEqual({ processed: 1, skipped: 0 })
+    expect(mockTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: 'org-1',
+        leadId: 'lead-1',
+        newStatus: 'UNSUBSCRIBED',
+        trigger: 'auto:sendgrid_unsubscribe',
+      }),
+    )
+  })
+
+  it('suppresses the lead (→ UNSUBSCRIBED) on a spamreport event', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([
+      { event: 'spamreport', sg_event_id: 'evt-s', draftId: 'draft-1' },
+    ])
+
+    expect(mockTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leadId: 'lead-1',
+        newStatus: 'UNSUBSCRIBED',
+        trigger: 'auto:sendgrid_spamreport',
+      }),
+    )
+  })
+
+  it('does not change lead status for non-suppression events (e.g. delivered)', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([
+      { event: 'delivered', sg_event_id: 'evt-d', draftId: 'draft-1' },
+    ])
+
+    expect(mockTransition).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for an already-terminal lead but still records the event', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+    // transitionLeadStatus internally no-ops an already-terminal lead.
+    mockTransition.mockResolvedValue({ changed: false, lead: {}, previousStatus: 'UNSUBSCRIBED' })
+
+    const result = await ingestWebhookEvents([
+      { event: 'unsubscribe', sg_event_id: 'evt-u2', draftId: 'draft-1' },
+    ])
+
+    expect(result).toEqual({ processed: 1, skipped: 0 })
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
+  it('records the event and does not throw if suppression fails (lead missing)', async () => {
+    mockFindUnique.mockResolvedValue({ ...baseMessage, leadId: 'gone' })
+    mockUpsert.mockResolvedValue({})
+    mockTransition.mockRejectedValue(new LeadNotFoundError('gone'))
+
+    const result = await ingestWebhookEvents([
+      { event: 'unsubscribe', sg_event_id: 'evt-u3', draftId: 'draft-1' },
+    ])
+
+    expect(result).toEqual({ processed: 1, skipped: 0 })
   })
 })
