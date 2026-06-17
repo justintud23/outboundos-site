@@ -15,7 +15,7 @@ export function ActionCenterList({ actions }: ActionCenterListProps) {
         </div>
         <div>
           <p className="text-[var(--text-primary)] text-lg font-semibold mb-1">
-            You're all caught up
+            You&apos;re all caught up
           </p>
           <p className="text-[var(--text-muted)] text-sm max-w-xs mx-auto">
             No actions need your attention right now. New actions will appear here as your pipeline moves.

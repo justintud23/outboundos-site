@@ -14,7 +14,7 @@ interface TemplatesClientProps {
 }
 
 export function TemplatesClient({ initialTemplates }: TemplatesClientProps) {
-  const [templates, setTemplates] = useState(initialTemplates)
+  const [templates] = useState(initialTemplates)
   const [editingTemplate, setEditingTemplate] = useState<TemplateDTO | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter] = useState<PromptType | 'ALL'>('ALL')

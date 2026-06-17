@@ -29,7 +29,6 @@ const SHORTCUT_MAP: Record<string, ActionType> = {
 type Tab = 'timeline' | 'messages'
 
 const GHOST_DURATION = 3000
-const DISMISS_DELAY = 300
 
 interface LeadCommandCenterProps {
   lead: LeadDetailDTO

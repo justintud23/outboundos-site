@@ -17,6 +17,29 @@ const STATUS_VARIANT: Record<CampaignStatus, 'default' | 'success' | 'warning' |
 
 type SortKey = 'sent' | 'delivered' | 'opened' | 'replied' | 'openRate' | 'replyRate'
 
+function SortHeader({
+  label,
+  field,
+  sortKey,
+  sortAsc,
+  onSort,
+}: {
+  label: string
+  field: SortKey
+  sortKey: SortKey
+  sortAsc: boolean
+  onSort: (field: SortKey) => void
+}) {
+  return (
+    <th
+      className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide cursor-pointer hover:text-[var(--text-secondary)] transition-colors select-none"
+      onClick={() => onSort(field)}
+    >
+      {label} {sortKey === field ? (sortAsc ? '↑' : '↓') : ''}
+    </th>
+  )
+}
+
 function InlineBar({ value, max }: { value: number; max: number }) {
   const width = max === 0 ? 0 : Math.min((value / max) * 100, 100)
   return (
@@ -60,17 +83,6 @@ export function CampaignTable({ data }: { data: CampaignPerformanceDTO[] }) {
 
   const maxSent = Math.max(...data.map((c) => c.sent), 1)
 
-  function SortHeader({ label, field }: { label: string; field: SortKey }) {
-    return (
-      <th
-        className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide cursor-pointer hover:text-[var(--text-secondary)] transition-colors select-none"
-        onClick={() => handleSort(field)}
-      >
-        {label} {sortKey === field ? (sortAsc ? '\u2191' : '\u2193') : ''}
-      </th>
-    )
-  }
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -78,11 +90,11 @@ export function CampaignTable({ data }: { data: CampaignPerformanceDTO[] }) {
           <tr className="border-b border-[var(--border-default)] bg-[var(--bg-surface-raised)]/60">
             <th className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Campaign</th>
             <th className="text-left py-3 px-3 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wide">Status</th>
-            <SortHeader label="Sent" field="sent" />
-            <SortHeader label="Delivered" field="delivered" />
-            <SortHeader label="Opened" field="opened" />
-            <SortHeader label="Replied" field="replied" />
-            <SortHeader label="Positive %" field="replyRate" />
+            <SortHeader label="Sent" field="sent" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+            <SortHeader label="Delivered" field="delivered" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+            <SortHeader label="Opened" field="opened" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+            <SortHeader label="Replied" field="replied" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+            <SortHeader label="Positive %" field="replyRate" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>

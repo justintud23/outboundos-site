@@ -7,10 +7,9 @@ import type { InboxThreadDTO, InboxFilter, ThreadDetailDTO } from '@/features/in
 
 interface InboxClientProps {
   initialThreads: InboxThreadDTO[]
-  initialTotal: number
 }
 
-export function InboxClient({ initialThreads, initialTotal }: InboxClientProps) {
+export function InboxClient({ initialThreads }: InboxClientProps) {
   const [threads, setThreads] = useState(initialThreads)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [threadDetail, setThreadDetail] = useState<ThreadDetailDTO | null>(null)

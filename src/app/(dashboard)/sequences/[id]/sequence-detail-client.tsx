@@ -15,7 +15,7 @@ interface SequenceDetailClientProps {
 }
 
 export function SequenceDetailClient({ sequence, initialEnrollments, leads }: SequenceDetailClientProps) {
-  const [enrollments, setEnrollments] = useState(initialEnrollments)
+  const [enrollments] = useState(initialEnrollments)
   const [showEnroll, setShowEnroll] = useState(false)
 
   const enrolledLeadIds = new Set(enrollments.map((e) => e.leadId))

@@ -158,6 +158,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o
 SENDGRID_API_KEY=
 SENDGRID_FROM_EMAIL=
+SENDGRID_WEBHOOK_VERIFICATION_KEY=   # ECDSA public key from SendGrid; verifies signed event webhooks (unset = verification skipped, dev only)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 

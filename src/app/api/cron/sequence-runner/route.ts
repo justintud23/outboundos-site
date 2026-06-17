@@ -5,7 +5,7 @@ import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 const STALE_LOCK_MINUTES = 10
 const BATCH_SIZE = 50
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   // Auth: verify CRON_SECRET
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET

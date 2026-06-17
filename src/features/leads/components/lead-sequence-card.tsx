@@ -33,7 +33,6 @@ export function LeadSequenceCard({ sequence }: LeadSequenceCardProps) {
   }
 
   const statusConfig = STATUS_CONFIG[sequence.status] ?? STATUS_CONFIG.ACTIVE
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ACTIVE fallback always exists
   const { icon: StatusIcon, variant: statusVariant } = statusConfig!
   const progress = sequence.totalSteps > 0
     ? Math.round((sequence.currentStepNumber / sequence.totalSteps) * 100)

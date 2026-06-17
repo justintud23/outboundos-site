@@ -18,7 +18,9 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Reset form state when a new draft is opened
+  // Reset form state when a new draft is opened. `draft` is the parent's
+  // `reviewingDraft` state, whose reference changes only on open/close/switch —
+  // exactly when a reset is wanted — so depending on the object is correct.
   useEffect(() => {
     if (draft) {
       setSubject(draft.subject)
@@ -27,7 +29,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
       setRejectionReason('')
       setError(null)
     }
-  }, [draft?.id])
+  }, [draft])
 
   // Escape key closes the drawer
   useEffect(() => {

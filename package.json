@@ -19,6 +19,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
+    "@sendgrid/eventwebhook": "^8.0.0",
     "@sendgrid/mail": "^8.1.6",
     "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",

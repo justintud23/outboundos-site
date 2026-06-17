@@ -13,13 +13,13 @@ export default async function InboxPage() {
   }
 
   const org = await resolveOrganization(orgId)
-  const { threads, total } = await getInboxThreads({ organizationId: org.id, limit: 25 })
+  const { threads } = await getInboxThreads({ organizationId: org.id, limit: 25 })
 
   return (
     <>
       <Header title="Inbox" />
       <div className="flex-1 overflow-hidden">
-        <InboxClient initialThreads={threads} initialTotal={total} />
+        <InboxClient initialThreads={threads} />
       </div>
     </>
   )

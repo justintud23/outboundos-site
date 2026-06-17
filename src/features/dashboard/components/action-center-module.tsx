@@ -13,7 +13,7 @@ export function ActionCenterModule({ actions }: ActionCenterModuleProps) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2">
         <CheckCircle2 size={20} className="text-[var(--status-success)]" aria-hidden="true" />
-        <p className="text-[var(--text-secondary)] text-xs font-medium">You're all caught up</p>
+        <p className="text-[var(--text-secondary)] text-xs font-medium">You&apos;re all caught up</p>
         <p className="text-[var(--text-muted)] text-[11px]">No actions need attention right now</p>
       </div>
     )

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useSyncExternalStore } from 'react'
 
 interface SidebarContextValue {
   expanded: boolean
@@ -13,29 +13,41 @@ const SidebarContext = createContext<SidebarContextValue | null>(null)
 
 const STORAGE_KEY = 'outboundos-sidebar'
 
-export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [expanded, setExpanded] = useState(true)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
+// The sidebar's expanded/collapsed state is persisted in localStorage. We model
+// it as an external store read via useSyncExternalStore so that the server and
+// the first client render agree ("expanded"), and the persisted value is applied
+// after hydration — without synchronously calling setState inside an effect.
+const sidebarListeners = new Set<() => void>()
 
-  // Read persisted state after mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'collapsed') {
-      setExpanded(false)
-    }
-    setHydrated(true)
-  }, [])
+function subscribeSidebar(callback: () => void): () => void {
+  sidebarListeners.add(callback)
+  return () => {
+    sidebarListeners.delete(callback)
+  }
+}
+
+function getSidebarSnapshot(): boolean {
+  return localStorage.getItem(STORAGE_KEY) !== 'collapsed'
+}
+
+function getSidebarServerSnapshot(): boolean {
+  return true
+}
+
+function setSidebarExpanded(expanded: boolean): void {
+  localStorage.setItem(STORAGE_KEY, expanded ? 'expanded' : 'collapsed')
+  sidebarListeners.forEach((listener) => listener())
+}
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const expanded = useSyncExternalStore(subscribeSidebar, getSidebarSnapshot, getSidebarServerSnapshot)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const toggle = useCallback(() => {
-    setExpanded((prev) => {
-      const next = !prev
-      localStorage.setItem(STORAGE_KEY, next ? 'expanded' : 'collapsed')
-      return next
-    })
+    setSidebarExpanded(!getSidebarSnapshot())
   }, [])
 
-  // Close mobile drawer on route changes (resize past breakpoint)
+  // Close mobile drawer on resize past the desktop breakpoint
   useEffect(() => {
     function handleResize() {
       if (window.innerWidth >= 1024) {
@@ -57,15 +69,6 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
       document.body.style.overflow = ''
     }
   }, [mobileOpen])
-
-  // Avoid layout flash — render nothing on server, render correct state after hydration
-  if (!hydrated) {
-    return (
-      <SidebarContext.Provider value={{ expanded: true, toggle, mobileOpen: false, setMobileOpen }}>
-        {children}
-      </SidebarContext.Provider>
-    )
-  }
 
   return (
     <SidebarContext.Provider value={{ expanded, toggle, mobileOpen, setMobileOpen }}>
