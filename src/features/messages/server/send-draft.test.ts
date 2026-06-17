@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     draft: { findFirst: vi.fn() },
-    mailbox: { findFirst: vi.fn() },
+    mailbox: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }))
@@ -38,7 +38,7 @@ import { DraftNotFoundError } from '@/features/drafts/types'
 
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: ReturnType<typeof vi.fn> }
-  mailbox: { findFirst: ReturnType<typeof vi.fn> }
+  mailbox: { findMany: ReturnType<typeof vi.fn> }
   $transaction: ReturnType<typeof vi.fn>
 }
 const mockGetEmailProvider = getEmailProvider as ReturnType<typeof vi.fn>
@@ -98,7 +98,7 @@ beforeEach(() => {
 describe('sendDraft', () => {
   it('sends the email and returns OutboundMessageDTO', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.mailbox.findFirst.mockResolvedValue(fakeMailbox)
+    mockPrisma.mailbox.findMany.mockResolvedValue([fakeMailbox])
     mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-abc-123' })
 
     mockPrisma.$transaction.mockImplementationOnce(
@@ -145,7 +145,7 @@ describe('sendDraft', () => {
 
   it('throws DraftAlreadySentError when OutboundMessage already exists for draft', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.mailbox.findFirst.mockResolvedValue(fakeMailbox)
+    mockPrisma.mailbox.findMany.mockResolvedValue([fakeMailbox])
     mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-abc' })
 
     const prismaUniqueError = new Prisma.PrismaClientKnownRequestError(
@@ -161,7 +161,7 @@ describe('sendDraft', () => {
 
   it('throws NoActiveMailboxError when org has no active mailbox', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.mailbox.findFirst.mockResolvedValue(null)
+    mockPrisma.mailbox.findMany.mockResolvedValue([])
 
     await expect(
       sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' }),
@@ -170,11 +170,11 @@ describe('sendDraft', () => {
 
   it('throws MailboxLimitExceededError when daily limit is reached', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.mailbox.findFirst.mockResolvedValue({
+    mockPrisma.mailbox.findMany.mockResolvedValue([{
       ...fakeMailbox,
       sentToday: 50,
       dailyLimit: 50,
-    })
+    }])
 
     await expect(
       sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' }),
@@ -186,12 +186,12 @@ describe('sendDraft', () => {
     yesterday.setDate(yesterday.getDate() - 1)
 
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.mailbox.findFirst.mockResolvedValue({
+    mockPrisma.mailbox.findMany.mockResolvedValue([{
       ...fakeMailbox,
       sentToday: 50,
       dailyLimit: 50,
       lastResetAt: yesterday,
-    })
+    }])
     mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-xyz' })
 
     mockPrisma.$transaction.mockImplementationOnce(
@@ -208,5 +208,84 @@ describe('sendDraft', () => {
     await expect(
       sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' }),
     ).resolves.toBeDefined()
+  })
+
+  // ─── Mailbox rotation ────────────────────────────────────────────────────
+
+  function mockTransactionOnce() {
+    const txMailboxUpdate = vi.fn().mockResolvedValue({})
+    const txOutboundCreate = vi.fn().mockResolvedValue(fakeMessage)
+    mockPrisma.$transaction.mockImplementationOnce(
+      async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          outboundMessage: { create: txOutboundCreate },
+          mailbox: { update: txMailboxUpdate },
+          auditLog: { create: vi.fn().mockResolvedValue({}) },
+        }),
+    )
+    return { txMailboxUpdate, txOutboundCreate }
+  }
+
+  const today = new Date()
+  const mbA = { ...fakeMailbox, id: 'mb-a', email: 'a@company.com', displayName: 'A', sentToday: 10, dailyLimit: 50, lastResetAt: today }
+  const mbB = { ...fakeMailbox, id: 'mb-b', email: 'b@company.com', displayName: 'B', sentToday: 2, dailyLimit: 50, lastResetAt: today }
+
+  it('rotates to the least-used (LRU) mailbox rather than the first returned', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    // mbA returned first by Postgres, but mbB has the lower effective sentToday.
+    mockPrisma.mailbox.findMany.mockResolvedValue([mbA, mbB])
+    mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-b' })
+    const { txMailboxUpdate } = mockTransactionOnce()
+
+    await sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' })
+
+    // Sent through mbB (least-used), not mbA which was returned first.
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'b@company.com' }))
+    expect(txMailboxUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'mb-b' } }))
+  })
+
+  it('breaks ties on equal usage by oldest lastResetAt', async () => {
+    const earlier = new Date(today.getTime() - 60_000) // reset earlier today
+    const tieOld = { ...fakeMailbox, id: 'mb-old', email: 'old@company.com', sentToday: 7, lastResetAt: earlier }
+    const tieNew = { ...fakeMailbox, id: 'mb-new', email: 'new@company.com', sentToday: 7, lastResetAt: today }
+
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    mockPrisma.mailbox.findMany.mockResolvedValue([tieNew, tieOld])
+    mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-old' })
+    const { txMailboxUpdate } = mockTransactionOnce()
+
+    await sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' })
+
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'old@company.com' }))
+    expect(txMailboxUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'mb-old' } }))
+  })
+
+  it('skips a full mailbox in favor of one with headroom', async () => {
+    const full = { ...fakeMailbox, id: 'mb-full', email: 'full@company.com', sentToday: 50, dailyLimit: 50, lastResetAt: today }
+    const open = { ...fakeMailbox, id: 'mb-open', email: 'open@company.com', sentToday: 30, dailyLimit: 50, lastResetAt: today }
+
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    // Full mailbox returned first; it must be skipped even though it sorts ahead.
+    mockPrisma.mailbox.findMany.mockResolvedValue([full, open])
+    mockSendEmail.mockResolvedValue({ sgMessageId: 'sg-open' })
+    const { txMailboxUpdate } = mockTransactionOnce()
+
+    await sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' })
+
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'open@company.com' }))
+    expect(txMailboxUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'mb-open' } }))
+  })
+
+  it('throws MailboxLimitExceededError when every active mailbox is full', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    mockPrisma.mailbox.findMany.mockResolvedValue([
+      { ...mbA, sentToday: 50, dailyLimit: 50 },
+      { ...mbB, sentToday: 50, dailyLimit: 50 },
+    ])
+
+    await expect(
+      sendDraft({ organizationId: 'org-1', draftId: 'draft-1', clerkUserId: 'user-1' }),
+    ).rejects.toBeInstanceOf(MailboxLimitExceededError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 })

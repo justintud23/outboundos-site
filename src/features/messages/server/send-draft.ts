@@ -44,23 +44,57 @@ export async function sendDraft({
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
-  // 3. Fetch active mailbox
-  const mailbox = await prisma.mailbox.findFirst({
+  // 3. Select a sending mailbox by rotating across the org's active mailboxes.
+  //    Spreading sends across every connected inbox is the whole point of
+  //    supporting multiple mailboxes: volume scaling and reputation spreading.
+  const mailboxes = await prisma.mailbox.findMany({
     where: { organizationId, isActive: true },
   })
 
-  if (!mailbox) {
+  if (mailboxes.length === 0) {
     throw new NoActiveMailboxError()
   }
 
-  // 5. Lazy daily reset + limit check
   const today = new Date()
-  const isNewDay = mailbox.lastResetAt.toDateString() !== today.toDateString()
-  const effectiveSentToday = isNewDay ? 0 : mailbox.sentToday
 
-  if (effectiveSentToday >= mailbox.dailyLimit) {
+  // Lazy daily reset: a mailbox last reset on a prior day is treated as having
+  // sent 0 today. (The counter and lastResetAt are actually written in the
+  // transaction below, on the first send of the day.)
+  const withUsage = mailboxes.map((m) => {
+    const isNewDay = m.lastResetAt.toDateString() !== today.toDateString()
+    return { mailbox: m, isNewDay, effectiveSentToday: isNewDay ? 0 : m.sentToday }
+  })
+
+  // Only mailboxes that still have daily headroom are eligible.
+  const candidates = withUsage.filter(
+    (c) => c.effectiveSentToday < c.mailbox.dailyLimit,
+  )
+
+  // Least-recently-used selection so volume spreads evenly instead of always
+  // hitting whichever mailbox Postgres returns first. Deterministic ordering:
+  //   1. lowest effective sentToday — the least-used mailbox today wins;
+  //   2. oldest lastResetAt         — tie-break toward the one untouched longest;
+  //   3. mailbox id (ascending)     — final tie-break for full determinism.
+  candidates.sort((a, b) => {
+    if (a.effectiveSentToday !== b.effectiveSentToday) {
+      return a.effectiveSentToday - b.effectiveSentToday
+    }
+    const resetDiff = a.mailbox.lastResetAt.getTime() - b.mailbox.lastResetAt.getTime()
+    if (resetDiff !== 0) return resetDiff
+    return a.mailbox.id < b.mailbox.id ? -1 : a.mailbox.id > b.mailbox.id ? 1 : 0
+  })
+
+  const selected = candidates[0]
+  if (!selected) {
+    // Every active mailbox has already hit its daily limit.
     throw new MailboxLimitExceededError()
   }
+  const { mailbox, isNewDay } = selected
+
+  // RACE: mailbox selection here and the counter increment in the transaction
+  // below are not atomic — concurrent sends can pick the same mailbox and both
+  // pass the headroom check before either increments, briefly overshooting
+  // dailyLimit. Fixing this is a separate upcoming task.
 
   // 5. Send via provider — OUTSIDE transaction
   const { sgMessageId } = await getEmailProvider().sendEmail({
