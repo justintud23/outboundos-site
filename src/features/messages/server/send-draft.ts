@@ -21,6 +21,56 @@ interface SendDraftInput {
   clerkUserId: string
 }
 
+function startOfDay(d: Date): Date {
+  const s = new Date(d)
+  s.setHours(0, 0, 0, 0)
+  return s
+}
+
+/**
+ * Atomically reserve one daily-send slot on a mailbox. Returns true iff a slot
+ * was claimed. Two conditional updates, each atomic at the row level (so they
+ * are race-free under concurrency, exactly like the sequence-runner's claim):
+ *
+ *   1. Lazy reset — zero sentToday at most ONCE per day. The `lastResetAt < startOfToday`
+ *      guard means the first concurrent send of a new day resets the counter and
+ *      stamps lastResetAt=startOfToday; every other concurrent send then sees a
+ *      non-stale lastResetAt and its reset is a no-op. No read-modify-write, so
+ *      no lost reset and no double-reset.
+ *   2. Conditional increment — bump sentToday ONLY while it is below the limit.
+ *      Because the guard lives in the WHERE clause, the database serializes the
+ *      row updates: at most `dailyLimit` increments can ever succeed, no matter
+ *      how many sends race. count === 0 means the mailbox just filled up.
+ */
+async function reserveMailboxSlot(
+  mailboxId: string,
+  dailyLimit: number,
+  startOfToday: Date,
+): Promise<boolean> {
+  await prisma.mailbox.updateMany({
+    where: { id: mailboxId, lastResetAt: { lt: startOfToday } },
+    data: { sentToday: 0, lastResetAt: startOfToday },
+  })
+
+  const reservation = await prisma.mailbox.updateMany({
+    where: { id: mailboxId, sentToday: { lt: dailyLimit } },
+    data: { sentToday: { increment: 1 } },
+  })
+
+  return reservation.count === 1
+}
+
+/**
+ * Release a previously reserved slot (atomic decrement, guarded so it can never
+ * underflow below 0). Used to roll back a reservation when the send fails.
+ */
+async function releaseMailboxSlot(mailboxId: string): Promise<void> {
+  await prisma.mailbox.updateMany({
+    where: { id: mailboxId, sentToday: { gt: 0 } },
+    data: { sentToday: { decrement: 1 } },
+  })
+}
+
 export async function sendDraft({
   organizationId,
   draftId,
@@ -57,14 +107,16 @@ export async function sendDraft({
     throw new NoActiveMailboxError()
   }
 
-  const today = new Date()
+  const now = new Date()
+  const startOfToday = startOfDay(now)
 
-  // Lazy daily reset: a mailbox last reset on a prior day is treated as having
-  // sent 0 today. (The counter and lastResetAt are actually written in the
-  // transaction below, on the first send of the day.)
+  // Lazy daily reset (snapshot, for SELECTION ONLY): a mailbox last reset before
+  // today is treated as having sent 0 today when ordering candidates. The
+  // authoritative reset and the limit enforcement happen atomically at
+  // reservation time below, not here.
   const withUsage = mailboxes.map((m) => {
-    const isNewDay = m.lastResetAt.toDateString() !== today.toDateString()
-    return { mailbox: m, isNewDay, effectiveSentToday: isNewDay ? 0 : m.sentToday }
+    const isNewDay = m.lastResetAt < startOfToday
+    return { mailbox: m, effectiveSentToday: isNewDay ? 0 : m.sentToday }
   })
 
   // Only mailboxes that still have daily headroom are eligible.
@@ -86,17 +138,11 @@ export async function sendDraft({
     return a.mailbox.id < b.mailbox.id ? -1 : a.mailbox.id > b.mailbox.id ? 1 : 0
   })
 
-  const selected = candidates[0]
-  if (!selected) {
-    // Every active mailbox has already hit its daily limit.
+  const tentative = candidates[0]
+  if (!tentative) {
+    // Every active mailbox is already at its daily limit (per snapshot).
     throw new MailboxLimitExceededError()
   }
-  const { mailbox, isNewDay } = selected
-
-  // RACE: mailbox selection here and the counter increment in the transaction
-  // below are not atomic — concurrent sends can pick the same mailbox and both
-  // pass the headroom check before either increments, briefly overshooting
-  // dailyLimit. Fixing this is a separate upcoming task.
 
   // Per-recipient one-click unsubscribe URL (RFC 8058). The token is an opaque,
   // signed blob — no raw leadId in the query string — that the future
@@ -110,13 +156,17 @@ export async function sendDraft({
   //    wins the insert, and the loser never reaches the provider call. This is
   //    what makes a double-send impossible — idempotency no longer depends on a
   //    post-send insert that runs only AFTER the email has already gone out.
+  //    The draft claim comes BEFORE the mailbox reservation so a duplicate send
+  //    reports DraftAlreadySent/InProgress rather than a misleading capacity
+  //    error. mailboxId is provisional (the reservation below may roll to
+  //    another mailbox) and is corrected at finalize.
   let claim: Awaited<ReturnType<typeof prisma.outboundMessage.create>>
   try {
     claim = await prisma.outboundMessage.create({
       data: {
         organizationId,
         leadId: draft.leadId,
-        mailboxId: mailbox.id,
+        mailboxId: tentative.mailbox.id,
         draftId,
         ...(draft.campaignId && { campaignId: draft.campaignId }),
         subject: draft.subject,
@@ -133,46 +183,63 @@ export async function sendDraft({
     throw err
   }
 
-  // 5. Send via provider. We own the claim, so this runs at most once per draft.
+  // 5. RESERVE a daily slot atomically BEFORE the send — we are now claiming
+  //    capacity, not just recording it afterward. reserveMailboxSlot does a
+  //    conditional increment guarded by the limit in the WHERE clause (mirroring
+  //    the sequence-runner's atomic claim), so even with many simultaneous sends
+  //    competing for the same mailbox it is IMPOSSIBLE for more than dailyLimit
+  //    increments to succeed. If the LRU mailbox fills between selection and
+  //    reservation, roll to the next eligible mailbox in order.
+  let reserved: (typeof candidates)[number]['mailbox'] | null = null
+  for (const c of candidates) {
+    if (await reserveMailboxSlot(c.mailbox.id, c.mailbox.dailyLimit, startOfToday)) {
+      reserved = c.mailbox
+      break
+    }
+  }
+  if (!reserved) {
+    // Every eligible mailbox filled up before we could reserve. Release the
+    // draft claim so the draft stays retryable, and report capacity.
+    await prisma.outboundMessage.delete({ where: { id: claim.id } }).catch(() => {})
+    throw new MailboxLimitExceededError()
+  }
+  const sendingMailbox = reserved
+
+  // 6. Send via provider. We own both the draft claim and a mailbox slot.
   let sgMessageId: string | null
   try {
     ;({ sgMessageId } = await getEmailProvider().sendEmail({
       to: draft.lead.email,
-      fromEmail: mailbox.email,
-      fromName: mailbox.displayName,
+      fromEmail: sendingMailbox.email,
+      fromName: sendingMailbox.displayName,
       subject: draft.subject,
       body: draft.body,
       customArgs: { draftId, leadId: draft.leadId },
       listUnsubscribe: { url: unsubscribeUrl },
     }))
   } catch (sendErr) {
-    // DEFINITE failure: the provider threw, so no email was delivered. Release
-    // the claim by deleting the QUEUED row so a deliberate retry can re-claim
-    // and send cleanly — a failed send must not wedge the draft as "sent".
-    // (Delete, not mark-FAILED: a FAILED row would still occupy the unique
-    // draftId and force the retry to special-case it; deleting returns the
-    // draft to a pristine, never-attempted state. The provider error is
-    // surfaced to the caller.)
+    // DEFINITE failure: the provider threw, so no email went out. Roll BOTH
+    // pre-send reservations back: release the mailbox slot (atomic decrement) so
+    // a transient failure doesn't permanently consume daily quota, and delete
+    // the QUEUED claim row so a deliberate retry can re-claim and re-send.
+    await releaseMailboxSlot(sendingMailbox.id).catch((relErr) => {
+      console.error(`[sendDraft] Failed to release mailbox slot ${sendingMailbox.id} after send error:`, relErr)
+    })
     await prisma.outboundMessage.delete({ where: { id: claim.id } }).catch((delErr) => {
       console.error(`[sendDraft] Failed to release claim ${claim.id} after send error:`, delErr)
     })
     throw sendErr
   }
 
-  // 6. FINALIZE: flip the claim QUEUED -> SENT and fill sgMessageId, increment
-  //    the mailbox counter, and write the AuditLog — atomically.
+  // 7. FINALIZE: flip the claim QUEUED -> SENT, fill sgMessageId, correct the
+  //    mailboxId to whichever mailbox we actually reserved, and write the
+  //    AuditLog — atomically. The mailbox counter is NOT touched here: it was
+  //    already incremented exactly once by the reservation in step 5.
   const sentAt = new Date()
   const finalized = await prisma.$transaction(async (tx) => {
     const message = await tx.outboundMessage.update({
       where: { id: claim.id },
-      data: { status: 'SENT', sgMessageId, sentAt },
-    })
-
-    await tx.mailbox.update({
-      where: { id: mailbox.id },
-      data: isNewDay
-        ? { sentToday: 1, lastResetAt: today }
-        : { sentToday: { increment: 1 } },
+      data: { status: 'SENT', sgMessageId, sentAt, mailboxId: sendingMailbox.id },
     })
 
     await tx.auditLog.create({
@@ -182,7 +249,7 @@ export async function sendDraft({
         action: 'message.sent',
         entityType: 'OutboundMessage',
         entityId: message.id,
-        metadata: { draftId, leadId: draft.leadId, mailboxId: mailbox.id },
+        metadata: { draftId, leadId: draft.leadId, mailboxId: sendingMailbox.id },
       },
     })
 
