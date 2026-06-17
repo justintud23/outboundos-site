@@ -49,6 +49,18 @@ export class DraftAlreadySentError extends Error {
   }
 }
 
+// Raised when a send for this draft is already claimed and in flight: a QUEUED
+// OutboundMessage row exists whose claim is still fresh (another invocation is
+// mid-send). Distinct from DraftAlreadySentError, which means a send already
+// COMPLETED. A caller seeing this should not retry immediately.
+export class DraftSendInProgressError extends Error {
+  constructor() {
+    super('A send for this draft is already in progress.')
+    this.name = 'DraftSendInProgressError'
+    Object.setPrototypeOf(this, DraftSendInProgressError.prototype)
+  }
+}
+
 import type { LeadStatus } from '@prisma/client'
 
 export class LeadInTerminalStateError extends Error {
