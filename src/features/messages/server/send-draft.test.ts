@@ -12,6 +12,10 @@ vi.mock('@/lib/email', () => ({
   getEmailProvider: vi.fn(),
 }))
 
+vi.mock('@/lib/email/unsubscribe-token', () => ({
+  signUnsubscribeToken: vi.fn(() => 'test-unsub-token'),
+}))
+
 vi.mock('@/features/leads/server/transition-lead-status', () => ({
   transitionLeadStatus: vi.fn().mockResolvedValue({ changed: true, lead: {}, previousStatus: 'NEW' }),
 }))
@@ -27,6 +31,7 @@ vi.mock('@/features/leads/types', async (importOriginal) => {
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
+import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 import { sendDraft } from './send-draft'
 import {
   DraftNotApprovedError,
@@ -42,6 +47,7 @@ const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
 }
 const mockGetEmailProvider = getEmailProvider as ReturnType<typeof vi.fn>
+const mockSignUnsubscribeToken = signUnsubscribeToken as ReturnType<typeof vi.fn>
 const mockSendEmail = vi.fn()
 
 const fakeDraft = {
@@ -93,6 +99,8 @@ const fakeMessage = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetEmailProvider.mockReturnValue({ sendEmail: mockSendEmail })
+  mockSignUnsubscribeToken.mockReturnValue('test-unsub-token')
+  process.env.NEXT_PUBLIC_APP_URL = 'https://app.test'
 })
 
 describe('sendDraft', () => {
@@ -124,7 +132,10 @@ describe('sendDraft', () => {
       subject: 'Hello Jane',
       body: 'Hi Jane, ...',
       customArgs: { draftId: 'draft-1', leadId: 'lead-1' },
+      listUnsubscribe: { url: 'https://app.test/api/unsubscribe?token=test-unsub-token' },
     })
+    // Token signed over the lead + org, not a raw id placed in the URL.
+    expect(mockSignUnsubscribeToken).toHaveBeenCalledWith({ leadId: 'lead-1', organizationId: 'org-1' })
   })
 
   it('throws DraftNotFoundError when draft does not exist', async () => {

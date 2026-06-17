@@ -98,4 +98,57 @@ describe('SendGridProvider', () => {
     const callArg = mockSgMail.send.mock.calls[0]?.[0] as Record<string, unknown>
     expect(callArg).not.toHaveProperty('customArgs')
   })
+
+  it('forwards RFC 8058 List-Unsubscribe headers when listUnsubscribe is provided', async () => {
+    mockSgMail.send.mockResolvedValue([
+      { statusCode: 202, headers: { 'x-message-id': 'sg-1' }, body: '' },
+      {},
+    ])
+    const provider = new SendGridProvider('test-key')
+    await provider.sendEmail({
+      to: 'lead@acme.com', fromEmail: 'c@d.com', fromName: 'X', subject: 'S', body: 'B',
+      listUnsubscribe: { url: 'https://app.test/api/unsubscribe?token=abc123' },
+    })
+    expect(mockSgMail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: {
+          'List-Unsubscribe': '<https://app.test/api/unsubscribe?token=abc123>',
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      }),
+    )
+  })
+
+  it('includes a mailto target in List-Unsubscribe when provided', async () => {
+    mockSgMail.send.mockResolvedValue([
+      { statusCode: 202, headers: { 'x-message-id': 'sg-1' }, body: '' },
+      {},
+    ])
+    const provider = new SendGridProvider('test-key')
+    await provider.sendEmail({
+      to: 'lead@acme.com', fromEmail: 'c@d.com', fromName: 'X', subject: 'S', body: 'B',
+      listUnsubscribe: { url: 'https://app.test/u?token=abc', mailto: 'unsub@company.com' },
+    })
+    expect(mockSgMail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'List-Unsubscribe': '<https://app.test/u?token=abc>, <mailto:unsub@company.com>',
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }),
+      }),
+    )
+  })
+
+  it('omits headers from SendGrid payload when listUnsubscribe is not provided', async () => {
+    mockSgMail.send.mockResolvedValue([
+      { statusCode: 202, headers: {}, body: '' },
+      {},
+    ])
+    const provider = new SendGridProvider('test-key')
+    await provider.sendEmail({
+      to: 'a@b.com', fromEmail: 'c@d.com', fromName: 'X', subject: 'S', body: 'B',
+    })
+    const callArg = mockSgMail.send.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(callArg).not.toHaveProperty('headers')
+  })
 })

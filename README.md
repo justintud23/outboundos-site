@@ -159,6 +159,7 @@ OPENAI_MODEL=gpt-4o
 SENDGRID_API_KEY=
 SENDGRID_FROM_EMAIL=
 SENDGRID_WEBHOOK_VERIFICATION_KEY=   # ECDSA public key from SendGrid; verifies signed event webhooks (unset = verification skipped, dev only)
+UNSUBSCRIBE_TOKEN_SECRET=            # secret for signing one-click unsubscribe tokens (RFC 8058 List-Unsubscribe); any long random string
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 

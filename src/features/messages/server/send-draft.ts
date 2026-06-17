@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
+import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 import type { OutboundMessageDTO } from '../types'
 import {
   DraftNotApprovedError,
@@ -96,6 +97,12 @@ export async function sendDraft({
   // pass the headroom check before either increments, briefly overshooting
   // dailyLimit. Fixing this is a separate upcoming task.
 
+  // Per-recipient one-click unsubscribe URL (RFC 8058). The token is an opaque,
+  // signed blob — no raw leadId in the query string — that the future
+  // /api/unsubscribe endpoint will decrypt back to { leadId, organizationId }.
+  const unsubscribeToken = signUnsubscribeToken({ leadId: draft.leadId, organizationId })
+  const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${unsubscribeToken}`
+
   // 5. Send via provider — OUTSIDE transaction
   const { sgMessageId } = await getEmailProvider().sendEmail({
     to: draft.lead.email,
@@ -104,6 +111,7 @@ export async function sendDraft({
     subject: draft.subject,
     body: draft.body,
     customArgs: { draftId, leadId: draft.leadId },
+    listUnsubscribe: { url: unsubscribeUrl },
   })
 
   // 6. Write OutboundMessage + update mailbox + AuditLog atomically
