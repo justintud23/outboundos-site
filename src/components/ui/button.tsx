@@ -32,10 +32,10 @@ export function Button({
     'focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]',
     'active:scale-[0.97]',
     {
-      'bg-[var(--accent-indigo)] text-white hover:bg-[var(--accent-indigo-hover)] shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:shadow-[0_0_20px_rgba(99,102,241,0.25)]': variant === 'primary',
+      'bg-[var(--accent-indigo)] text-[var(--text-inverse)] hover:bg-[var(--accent-indigo-hover)]': variant === 'primary',
       'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)]': variant === 'ghost',
-      'border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-indigo)] hover:text-[var(--text-primary)]': variant === 'outline',
-      'bg-[var(--status-danger-bg)] text-[var(--status-danger)] hover:bg-[var(--status-danger)] hover:text-white': variant === 'danger',
+      'border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]': variant === 'outline',
+      'bg-[var(--status-danger-bg)] text-[var(--status-danger)] hover:bg-[var(--status-danger)] hover:text-[var(--text-inverse)]': variant === 'danger',
       'px-3 py-1.5 text-sm gap-1.5': size === 'sm',
       'px-4 py-2 text-sm gap-2': size === 'md',
       'opacity-40 cursor-not-allowed pointer-events-none': disabled,

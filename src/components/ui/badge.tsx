@@ -23,7 +23,7 @@ export function Badge({ children, variant = 'default', showIcon = false }: Badge
       className={clsx(
         `inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-badge)] text-xs font-medium`,
         {
-          'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]': variant === 'default',
+          'bg-[var(--bg-surface-overlay)] text-[var(--text-secondary)] ring-1 ring-inset ring-[var(--border-default)]': variant === 'default',
           'bg-[var(--status-success-bg)] text-[var(--status-success)]': variant === 'success',
           'bg-[var(--status-warning-bg)] text-[var(--status-warning)]': variant === 'warning',
           'bg-[var(--status-danger-bg)] text-[var(--status-danger)]': variant === 'danger',

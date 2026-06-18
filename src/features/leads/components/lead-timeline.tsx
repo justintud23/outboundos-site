@@ -46,7 +46,7 @@ const TYPE_CONFIG: Record<
   SEQUENCE_STEP: {
     icon: GitBranch,
     color: 'text-[var(--accent-indigo)]',
-    bg: 'rgba(99, 102, 241, 0.10)',
+    bg: 'var(--accent-indigo-glow)',
     label: 'Sequence',
   },
 }

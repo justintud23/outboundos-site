@@ -31,11 +31,11 @@ const TYPE_CONFIG: Record<ActionType, {
   },
   APPROVE_DRAFT: {
     accent: 'var(--accent-indigo)',
-    bg: 'rgba(99, 102, 241, 0.10)',
+    bg: 'var(--accent-indigo-glow)',
     text: 'text-[var(--accent-indigo)]',
     icon: FileCheck,
     ctaBg: 'bg-[var(--accent-indigo-glow)]',
-    ctaHoverBg: 'hover:bg-[rgba(99,102,241,0.28)]',
+    ctaHoverBg: 'hover:bg-[var(--primary-glow-strong)]',
   },
   SEND_DRAFT: {
     accent: 'var(--accent-cyan)',
@@ -55,11 +55,11 @@ const TYPE_CONFIG: Record<ActionType, {
   },
   ENROLL_SEQUENCE: {
     accent: 'var(--accent-indigo)',
-    bg: 'rgba(99, 102, 241, 0.08)',
+    bg: 'var(--accent-indigo-glow)',
     text: 'text-[var(--accent-indigo-hover)]',
     icon: GitBranch,
-    ctaBg: 'bg-[rgba(99,102,241,0.10)]',
-    ctaHoverBg: 'hover:bg-[rgba(99,102,241,0.20)]',
+    ctaBg: 'bg-[var(--accent-indigo-glow)]',
+    ctaHoverBg: 'hover:bg-[var(--primary-glow-strong)]',
   },
   REVIEW_INTERESTED_LEAD: {
     accent: 'var(--status-success)',

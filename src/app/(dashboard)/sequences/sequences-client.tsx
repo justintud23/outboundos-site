@@ -27,7 +27,7 @@ export function SequencesClient({ initialSequences, campaigns }: SequencesClient
         </p>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-white hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
+          className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-[var(--text-inverse)] hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
         >
           {showCreate ? 'Cancel' : 'Create Sequence'}
         </button>

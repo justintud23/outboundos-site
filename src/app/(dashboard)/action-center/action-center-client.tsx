@@ -16,7 +16,7 @@ const TYPE_COLORS: Record<ActionType, string> = {
   APPROVE_DRAFT: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]',
   SEND_DRAFT: 'bg-[rgba(56,189,248,0.12)] text-[var(--accent-cyan)]',
   FOLLOW_UP: 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]',
-  ENROLL_SEQUENCE: 'bg-[rgba(99,102,241,0.10)] text-[var(--accent-indigo-hover)]',
+  ENROLL_SEQUENCE: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo-hover)]',
   REVIEW_INTERESTED_LEAD: 'bg-[var(--status-success-bg)] text-[var(--status-success)]',
   MARK_CONVERTED: 'bg-[rgba(52,211,153,0.12)] text-[var(--chart-positive)]',
   NO_ACTION: 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]',

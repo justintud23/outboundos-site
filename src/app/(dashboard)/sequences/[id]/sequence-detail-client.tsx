@@ -78,7 +78,7 @@ export function SequenceDetailClient({ sequence, initialEnrollments, leads }: Se
           </h2>
           <button
             onClick={() => setShowEnroll(true)}
-            className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-white hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
+            className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-[var(--text-inverse)] hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
           >
             Enroll Leads
           </button>

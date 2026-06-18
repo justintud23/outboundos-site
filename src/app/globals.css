@@ -1,65 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  /* ── Backgrounds (Deep navy surface hierarchy) ── */
-  --bg-base: #020617;
-  --bg-surface: #0e1223;
-  --bg-surface-raised: #151a2e;
-  --bg-surface-overlay: #1c2039;
-  --bg-sidebar: #060a18;
+  /* ── Backgrounds (Neutral graphite surface hierarchy — "Signal") ── */
+  --bg-base: #0b0d10;
+  --bg-surface: #14171c;
+  --bg-surface-raised: #1b1f26;
+  --bg-surface-overlay: #222831;
+  --bg-sidebar: #0e1116;
 
-  /* ── Borders & Dividers ── */
-  --border-default: #1e293b;
-  --border-subtle: #141b2d;
-  --border-glow: rgba(99, 102, 241, 0.18);
+  /* ── Borders & Dividers (graphite; hover-glow is a NEUTRAL lighten, not lime) ── */
+  --border-default: #262b33;
+  --border-subtle: #1b1f26;
+  --border-glow: rgba(244, 246, 248, 0.10);
 
   /* ── Text ── */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --text-inverse: #020617;
+  --text-primary: #f4f6f8;
+  --text-secondary: #9ba3af;
+  --text-muted: #6e7682; /* tertiary/de-emphasized labels (~3.6:1 on base) */
+  --text-inverse: #0b0d10; /* dark ink for text/icons ON lime surfaces */
 
-  /* ── Accent Colors (Indigo primary spectrum) ── */
-  --accent-indigo: #6366f1;
-  --accent-indigo-hover: #818cf8;
-  --accent-indigo-glow: rgba(99, 102, 241, 0.16);
+  /* ── Signal: electric lime is the single energy color. ──
+     NOTE: the historical token name `--accent-indigo` is retained so existing
+     call sites keep working, but it now resolves to the lime SIGNAL. Use it only
+     for primary CTAs, active/live/positive states, focus, and the spotlight. */
+  --accent-lime: #b6f23d;
+  --accent-lime-hover: #c8ff5e;
+  --accent-indigo: var(--accent-lime);
+  --accent-indigo-hover: var(--accent-lime-hover);
+  --accent-indigo-glow: rgba(182, 242, 61, 0.12);
+  --primary-glow-strong: rgba(182, 242, 61, 0.24);
+  /* Categorical (informational) accents — NOT the brand signal. */
   --accent-cyan: #38bdf8;
   --accent-magenta: #a78bfa;
   --accent-warm: #fb923c;
 
-  /* ── Semantic Status ── */
-  --status-success: #22c55e;
-  --status-success-bg: rgba(34, 197, 94, 0.12);
-  --status-warning: #eab308;
-  --status-warning-bg: rgba(234, 179, 8, 0.12);
-  --status-danger: #ef4444;
-  --status-danger-bg: rgba(239, 68, 68, 0.12);
+  /* ── Semantic Status (Signal tuning — these, never lime, carry meaning) ── */
+  --status-success: #4ade80;
+  --status-success-bg: rgba(74, 222, 128, 0.13);
+  --status-warning: #facc15;
+  --status-warning-bg: rgba(250, 204, 21, 0.13);
+  --status-danger: #f87171;
+  --status-danger-bg: rgba(248, 113, 113, 0.14);
 
-  /* ── Effects ── */
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 12px rgba(99, 102, 241, 0.04);
-  --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 24px rgba(99, 102, 241, 0.08);
-  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.4);
-  --radius-card: 12px;
-  --radius-btn: 8px;
-  --radius-badge: 6px;
+  /* ── Effects (crisp graphite depth — no indigo glow) ── */
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 8px rgba(0, 0, 0, 0.55);
+  --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 20px rgba(0, 0, 0, 0.65);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.5);
+  --radius-card: 10px;
+  --radius-btn: 6px;
+  --radius-badge: 4px;
 
   /* ── Transitions ── */
   --transition-fast: 120ms ease;
   --transition-base: 180ms ease;
   --transition-slow: 260ms ease;
 
-  /* ── Focus ── */
-  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(99, 102, 241, 0.5);
+  /* ── Focus (lime signal ring) ── */
+  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(182, 242, 61, 0.55);
+
+  /* ── Monospace numerals (data-terminal feel) ── */
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
   /* ── Sidebar ── */
   --sidebar-width-expanded: 240px;
   --sidebar-width-collapsed: 60px;
 
-  /* ── Chart Colors (fixed per-series) ── */
-  --chart-sent: #6366f1;
+  /* ── Chart Colors (fixed per-series; primary series = lime signal) ── */
+  --chart-sent: #b6f23d;
   --chart-delivered: #38bdf8;
   --chart-opened: #a78bfa;
-  --chart-replied: #22c55e;
+  --chart-replied: #4ade80;
   --chart-positive: #34d399;
 
   /* ── Spacing scale (4px base) ── */
@@ -83,16 +93,23 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle radial gradient background for depth */
+/* Subtle graphite depth — a barely-there lime ambient up top, neutral elsewhere */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 100%, rgba(56, 189, 248, 0.03) 0%, transparent 60%);
+    radial-gradient(ellipse at 20% 0%, rgba(182, 242, 61, 0.035) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(255, 255, 255, 0.018) 0%, transparent 60%);
   pointer-events: none;
+}
+
+/* ── Monospace numerals: every element already marked `tabular-nums` (stat
+   values, table figures, counts, timestamps) renders in JetBrains Mono for the
+   data-terminal feel. Prose is unaffected — it's never tagged tabular-nums. ── */
+.tabular-nums {
+  font-family: var(--font-mono);
 }
 
 /* ── Accessibility: reduced motion ── */
@@ -115,7 +132,7 @@ body::before {
   z-index: 9999;
   padding: var(--space-2) var(--space-4);
   background: var(--accent-indigo);
-  color: white;
+  color: var(--text-inverse); /* dark ink on lime — AA */
   border-radius: var(--radius-btn);
   font-size: 0.875rem;
   font-weight: 500;
@@ -126,9 +143,9 @@ body::before {
   left: var(--space-4);
 }
 
-/* ── Focus visible utility ── */
+/* ── Focus visible utility (lime signal) ── */
 *:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.5);
+  outline: 2px solid rgba(182, 242, 61, 0.6);
   outline-offset: 2px;
 }
 

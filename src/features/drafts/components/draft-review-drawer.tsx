@@ -123,7 +123,7 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
               <button
                 onClick={handleApprove}
                 disabled={submitting}
-                className="flex-1 bg-[var(--accent-indigo)] hover:bg-[var(--accent-indigo-hover)] disabled:opacity-50 text-white rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
+                className="flex-1 bg-[var(--accent-indigo)] hover:bg-[var(--accent-indigo-hover)] disabled:opacity-50 text-[var(--text-inverse)] rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
               >
                 {submitting ? 'Approving\u2026' : 'Approve'}
               </button>
