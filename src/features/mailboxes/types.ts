@@ -14,6 +14,10 @@ export interface MailboxDTO {
   effectiveDailyLimit: number // today's ramped limit (== dailyLimit when not warming)
   warmupDay: number // 1-based day in the ramp
   isWarmingUp: boolean
+  // Circuit breaker (bounce/spam auto-pause):
+  autoPaused: boolean
+  pausedAt: Date | null
+  pauseReason: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -32,6 +36,9 @@ export function toMailboxDTO(m: Mailbox, now: Date = new Date()): MailboxDTO {
     effectiveDailyLimit: effectiveDailyLimit(m, now),
     warmupDay: warmupDay(m.warmupStartedAt, now),
     isWarmingUp: isWarmingUp(m, now),
+    autoPaused: m.autoPaused,
+    pausedAt: m.pausedAt,
+    pauseReason: m.pauseReason,
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
   }

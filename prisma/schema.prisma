@@ -355,6 +355,18 @@ model Mailbox {
   warmupEnabled   Boolean  @default(true)
   warmupStartedAt DateTime @default(now())
 
+  // Circuit breaker: when recent bounce / spam-complaint rates breach safe
+  // thresholds (see features/mailboxes/breaker.ts) the mailbox is AUTO-paused to
+  // protect domain/IP reputation. These are distinct from isActive (the user's
+  // manual on/off) so the UI can show *why* it stopped and we never auto-resume
+  // something a human turned off. breakerResetAt is the floor of the breaker's
+  // rolling window; it is bumped to now() when a human resumes a tripped mailbox
+  // so the bounces that tripped it don't immediately re-trip it.
+  autoPaused     Boolean   @default(false)
+  pausedAt       DateTime?
+  pauseReason    String?
+  breakerResetAt DateTime  @default(now())
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

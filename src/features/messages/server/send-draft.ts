@@ -56,8 +56,13 @@ async function reserveMailboxSlot(
     data: { sentToday: 0, lastResetAt: startOfToday },
   })
 
+  // The isActive/autoPaused guards are defense-in-depth: candidates are already
+  // filtered, but if a mailbox is disabled or breaker-paused in the window
+  // between selection and reservation, this conditional UPDATE matches 0 rows
+  // and the caller rolls to the next mailbox — a paused mailbox can NEVER be
+  // reserved, atomically.
   const reservation = await prisma.mailbox.updateMany({
-    where: { id: mailboxId, sentToday: { lt: limitToday } },
+    where: { id: mailboxId, isActive: true, autoPaused: false, sentToday: { lt: limitToday } },
     data: { sentToday: { increment: 1 } },
   })
 
@@ -103,8 +108,10 @@ export async function sendDraft({
   // 3. Select a sending mailbox by rotating across the org's active mailboxes.
   //    Spreading sends across every connected inbox is the whole point of
   //    supporting multiple mailboxes: volume scaling and reputation spreading.
+  // Exclude both user-disabled (isActive: false) and breaker-paused
+  // (autoPaused: true) mailboxes — neither can be selected or reserved.
   const mailboxes = await prisma.mailbox.findMany({
-    where: { organizationId, isActive: true },
+    where: { organizationId, isActive: true, autoPaused: false },
   })
 
   if (mailboxes.length === 0) {

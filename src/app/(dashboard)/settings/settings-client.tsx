@@ -57,6 +57,20 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
     setMailboxes((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
   }
 
+  async function handleReactivate(mb: MailboxDTO) {
+    const res = await fetch(`/api/mailboxes/${mb.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: true }),
+    })
+    if (!res.ok) {
+      setError('Failed to reactivate mailbox.')
+      return
+    }
+    const updated = (await res.json()) as MailboxDTO
+    setMailboxes((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
+  }
+
   return (
     <div className="space-y-8 max-w-xl">
       <div>
@@ -79,28 +93,52 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-0.5 rounded-[var(--radius-badge)] ${mb.isActive ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]' : 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]'}`}>
-                  {mb.isActive ? 'Active' : 'Inactive'}
-                </span>
+                {mb.autoPaused ? (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-[var(--radius-badge)] bg-[var(--status-danger-bg)] text-[var(--status-danger)]"
+                    title={mb.pauseReason ?? 'Auto-paused by the bounce/spam circuit breaker'}
+                  >
+                    Auto-paused
+                  </span>
+                ) : (
+                  <span className={`text-xs px-2 py-0.5 rounded-[var(--radius-badge)] ${mb.isActive ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]' : 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]'}`}>
+                    {mb.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                )}
                 <div className="text-right">
                   {/* Show TODAY's effective (ramped) limit, not the raw dailyLimit. */}
                   <span className="text-[var(--text-muted)] text-xs block">
                     {mb.sentToday}/{mb.effectiveDailyLimit} today
                   </span>
-                  {mb.isWarmingUp && (
+                  {mb.autoPaused ? (
+                    <span className="text-[var(--status-danger)] text-[11px] block">
+                      paused — {mb.pauseReason ?? 'bounce/spam threshold exceeded'}
+                    </span>
+                  ) : mb.isWarmingUp ? (
                     <span className="text-[var(--accent-indigo)] text-[11px] block">
                       warming up · day {mb.warmupDay} (cap rises to {mb.dailyLimit})
                     </span>
-                  )}
+                  ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleWarmup(mb)}
-                  className="text-xs px-2 py-0.5 rounded-[var(--radius-badge)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-glow)] transition-colors"
-                  title={mb.warmupEnabled ? 'Warmup on — disable to send at full daily limit' : 'Warmup off — enable to ramp daily volume'}
-                >
-                  Warmup {mb.warmupEnabled ? 'on' : 'off'}
-                </button>
+                {mb.autoPaused ? (
+                  <button
+                    type="button"
+                    onClick={() => handleReactivate(mb)}
+                    className="text-xs px-2 py-0.5 rounded-[var(--radius-badge)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-glow)] transition-colors"
+                    title="Clear the auto-pause and resume sending (resets the breaker window)"
+                  >
+                    Reactivate
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleWarmup(mb)}
+                    className="text-xs px-2 py-0.5 rounded-[var(--radius-badge)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-glow)] transition-colors"
+                    title={mb.warmupEnabled ? 'Warmup on — disable to send at full daily limit' : 'Warmup off — enable to ramp daily volume'}
+                  >
+                    Warmup {mb.warmupEnabled ? 'on' : 'off'}
+                  </button>
+                )}
               </div>
             </div>
           ))}

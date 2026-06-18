@@ -80,15 +80,16 @@ interface MailboxRow {
   lastResetAt: Date
   warmupEnabled: boolean
   warmupStartedAt: Date
+  autoPaused: boolean
 }
 
 // ── Typed shapes for the Prisma mock callbacks (no `any`) ──
 type IncDec = { increment?: number; decrement?: number }
 interface UpdateManyArgs {
-  where: { id: string; lastResetAt?: { lt: Date }; sentToday?: { lt?: number; gt?: number } }
+  where: { id: string; isActive?: boolean; autoPaused?: boolean; lastResetAt?: { lt: Date }; sentToday?: { lt?: number; gt?: number } }
   data: { sentToday?: number | IncDec; lastResetAt?: Date }
 }
-interface FindManyArgs { where: { organizationId: string; isActive: boolean } }
+interface FindManyArgs { where: { organizationId: string; isActive: boolean; autoPaused: boolean } }
 interface CreateArgs { data: Record<string, unknown> }
 interface UpdateArgs { where: { id: string }; data: Record<string, unknown> }
 interface FindFirstArgs { where: { id: string } }
@@ -121,6 +122,7 @@ function mailbox(overrides: Partial<MailboxRow> & { id: string }): MailboxRow {
     // warmup-specific tests opt in explicitly.
     warmupEnabled: false,
     warmupStartedAt: new Date(),
+    autoPaused: false,
     ...overrides,
   }
 }
@@ -161,7 +163,12 @@ beforeEach(() => {
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
     Object.values(store)
-      .filter((m) => m.organizationId === where.organizationId && m.isActive === where.isActive)
+      .filter(
+        (m) =>
+          m.organizationId === where.organizationId &&
+          m.isActive === where.isActive &&
+          m.autoPaused === where.autoPaused,
+      )
       .map((m) => ({ ...m })),
   )
 
@@ -180,7 +187,10 @@ beforeEach(() => {
       return { count: 0 }
     }
     if (where.sentToday?.lt !== undefined && typeof sd === 'object' && sd.increment !== undefined) {
-      // conditional reserve
+      // conditional reserve — also honors the isActive/autoPaused guards in the
+      // reservation WHERE (a paused/inactive mailbox can never be reserved).
+      if (where.isActive !== undefined && row.isActive !== where.isActive) return { count: 0 }
+      if (where.autoPaused !== undefined && row.autoPaused !== where.autoPaused) return { count: 0 }
       if (row.sentToday < where.sentToday.lt) {
         row.sentToday += sd.increment
         return { count: 1 }
@@ -373,6 +383,31 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'b@company.com' }))
     expect(store['mb-b'].sentToday).toBe(3) // chosen + reserved
     expect(store['mb-a'].sentToday).toBe(10) // untouched
+  })
+
+  // ─── Circuit-breaker pause excludes a mailbox ─────────────────────────────
+
+  it('rotation skips an auto-paused mailbox in favor of an active one', async () => {
+    setMailboxes([
+      // Paused mailbox is the least-used (would win LRU) — must still be skipped.
+      mailbox({ id: 'mb-paused', sentToday: 0, email: 'paused@company.com', autoPaused: true }),
+      mailbox({ id: 'mb-ok', sentToday: 5, email: 'ok@company.com', autoPaused: false }),
+    ])
+
+    await sendDraft(INPUT)
+
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'ok@company.com' }))
+    expect(store['mb-ok'].sentToday).toBe(6) // reserved
+    expect(store['mb-paused'].sentToday).toBe(0) // never selected or reserved
+  })
+
+  it('a paused-only org has no usable mailbox → NoActiveMailboxError, nothing reserved or sent', async () => {
+    setMailboxes([mailbox({ id: 'mb-1', sentToday: 0, autoPaused: true })])
+
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(NoActiveMailboxError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(store['mb-1'].sentToday).toBe(0)
   })
 
   // ─── Claim-before-send / dedupe preserved ─────────────────────────────────

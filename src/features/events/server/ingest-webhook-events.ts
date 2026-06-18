@@ -4,6 +4,7 @@ import type { SendGridRawEvent } from '../types'
 import { mapEventType } from './map-event-type'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { LeadNotFoundError } from '@/features/leads/types'
+import { evaluateMailboxBreaker } from '@/features/mailboxes/server/evaluate-mailbox-breaker'
 
 interface IngestResult {
   processed: number
@@ -23,7 +24,7 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
 
     const message = await prisma.outboundMessage.findUnique({
       where: { draftId: event.draftId },
-      select: { id: true, organizationId: true, leadId: true },
+      select: { id: true, organizationId: true, leadId: true, mailboxId: true },
     })
 
     if (!message) {
@@ -78,6 +79,18 @@ export async function ingestWebhookEvents(events: SendGridRawEvent[]): Promise<I
         if (!(err instanceof LeadNotFoundError)) {
           console.error(`[ingestWebhookEvents] Failed to suppress lead for ${event.event} event sgEventId=${event.sg_event_id}:`, err)
         }
+      }
+    }
+
+    // Circuit breaker: a bounce or spam complaint may push this mailbox's recent
+    // rate past the safe threshold — re-evaluate and auto-pause if so. Best-effort
+    // and idempotent: a failure here must never abort the rest of the batch (the
+    // event is already recorded above), and an already-paused mailbox is a no-op.
+    if (eventType === 'BOUNCED' || eventType === 'SPAM_REPORT') {
+      try {
+        await evaluateMailboxBreaker(message.mailboxId)
+      } catch (err) {
+        console.error(`[ingestWebhookEvents] Circuit-breaker eval failed for mailbox=${message.mailboxId} sgEventId=${event.sg_event_id}:`, err)
       }
     }
 

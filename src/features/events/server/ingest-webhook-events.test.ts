@@ -11,19 +11,26 @@ vi.mock('@/features/leads/server/transition-lead-status', () => ({
   transitionLeadStatus: vi.fn(),
 }))
 
+vi.mock('@/features/mailboxes/server/evaluate-mailbox-breaker', () => ({
+  evaluateMailboxBreaker: vi.fn(),
+}))
+
 import { prisma } from '@/lib/db/prisma'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { evaluateMailboxBreaker } from '@/features/mailboxes/server/evaluate-mailbox-breaker'
 import { LeadNotFoundError } from '@/features/leads/types'
 import { ingestWebhookEvents } from './ingest-webhook-events'
 
 const mockFindUnique = prisma.outboundMessage.findUnique as ReturnType<typeof vi.fn>
 const mockUpsert    = prisma.messageEvent.upsert    as ReturnType<typeof vi.fn>
 const mockTransition = transitionLeadStatus as ReturnType<typeof vi.fn>
+const mockBreaker = evaluateMailboxBreaker as ReturnType<typeof vi.fn>
 
 const baseMessage = {
   id: 'msg-1',
   organizationId: 'org-1',
   leadId: 'lead-1',
+  mailboxId: 'mb-1',
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -45,7 +52,7 @@ describe('ingestWebhookEvents', () => {
     expect(result).toEqual({ processed: 1, skipped: 0 })
     expect(mockFindUnique).toHaveBeenCalledWith({
       where: { draftId: 'draft-1' },
-      select: { id: true, organizationId: true, leadId: true },
+      select: { id: true, organizationId: true, leadId: true, mailboxId: true },
     })
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -200,5 +207,48 @@ describe('ingestWebhookEvents', () => {
     ])
 
     expect(result).toEqual({ processed: 1, skipped: 0 })
+  })
+
+  // ─── Circuit breaker ──────────────────────────────────────────────────────
+
+  it('evaluates the breaker for the mailbox on a BOUNCED event', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([{ event: 'bounce', sg_event_id: 'evt-b', draftId: 'draft-1' }])
+
+    expect(mockBreaker).toHaveBeenCalledWith('mb-1')
+  })
+
+  it('evaluates the breaker on a spamreport event (in addition to lead suppression)', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([{ event: 'spamreport', sg_event_id: 'evt-s', draftId: 'draft-1' }])
+
+    expect(mockBreaker).toHaveBeenCalledWith('mb-1')
+    expect(mockTransition).toHaveBeenCalled() // suppression still happens
+  })
+
+  it('does NOT evaluate the breaker for non-bounce/spam events (e.g. delivered)', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+
+    await ingestWebhookEvents([{ event: 'delivered', sg_event_id: 'evt-d', draftId: 'draft-1' }])
+
+    expect(mockBreaker).not.toHaveBeenCalled()
+  })
+
+  it('best-effort: a breaker failure does not abort the batch; the event is still recorded', async () => {
+    mockFindUnique.mockResolvedValue(baseMessage)
+    mockUpsert.mockResolvedValue({})
+    mockBreaker.mockRejectedValueOnce(new Error('breaker boom'))
+
+    const result = await ingestWebhookEvents([
+      { event: 'bounce', sg_event_id: 'evt-b2', draftId: 'draft-1' },
+    ])
+
+    expect(result).toEqual({ processed: 1, skipped: 0 })
+    expect(mockUpsert).toHaveBeenCalled()
   })
 })
