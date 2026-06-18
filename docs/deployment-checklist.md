@@ -13,24 +13,34 @@ Vercel (web) + Neon (PostgreSQL). Estimated time: ~20 minutes.
 
 ---
 
-## 2. Run Migrations Against Neon
+## 2. Migrations (applied automatically on deploy)
 
-Set both connection strings in your environment (a local `.env` works):
+**You normally do not run migrations by hand.** Every Vercel deploy runs the
+`vercel-build` script, which applies pending migrations before building:
+
+```
+postinstall (prisma generate) → require-direct-url guard → prisma migrate deploy → next build
+```
+
+Your only responsibility is to set `DIRECT_URL` in the Vercel env (see step 4).
+`prisma.config.ts` points `migrate` at `DIRECT_URL`, and the guard **fails the
+build** if `DIRECT_URL` is missing in a deploy env — it never silently falls
+back to the pooled `DATABASE_URL`.
+
+> **Why direct?** Neon's pooler uses PgBouncer in transaction mode, which breaks Prisma's advisory locks during migrations. Migrations must always use the direct (non-pooled) connection — never the pooled URL.
+
+### Manual emergency fallback
+
+If you ever need to apply migrations by hand (e.g. backfilling an existing DB
+before the first `vercel-build`, or recovering from a failed deploy), set both
+connection strings and run migrate directly — it picks up `DIRECT_URL` via
+`prisma.config.ts`:
 
 ```bash
 DATABASE_URL="postgresql://...pooled..."   # app runtime (migrate ignores this)
 DIRECT_URL="postgresql://...direct..."     # migrate uses this
-```
-
-Then just run migrate — `prisma.config.ts` resolves the CLI datasource to
-`DIRECT_URL` automatically (falling back to `DATABASE_URL` only if `DIRECT_URL`
-is unset, e.g. local single-Postgres dev):
-
-```bash
 npx prisma migrate deploy
 ```
-
-> **Why direct?** Neon's pooler uses PgBouncer in transaction mode, which breaks Prisma's advisory locks during migrations. `prisma.config.ts` points the migrate connection at `DIRECT_URL` so migrations always use the direct (non-pooled) connection — never run `migrate` against the pooled URL.
 
 Optionally seed demo data (the seed script connects with `DATABASE_URL`):
 
@@ -58,7 +68,7 @@ In the Vercel project → Settings → Environment Variables, add all of the fol
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Neon **pooled** connection string (app runtime) |
-| `DIRECT_URL` | Neon **direct** (non-pooled) connection string (migrations). Set it in Vercel too so any future migrate run from that environment uses the direct connection. |
+| `DIRECT_URL` | Neon **direct** (non-pooled) connection string (migrations). **Required — set for both Production AND Preview.** `vercel-build` runs `prisma migrate deploy` using this; if it is missing the build fails fast (by design). |
 
 ### Clerk Auth
 | Variable | Value |
@@ -108,9 +118,15 @@ git push origin main
 
 Or use the Vercel dashboard → Deployments → Redeploy.
 
-**What Vercel runs:**
+**What Vercel runs** (Vercel uses the `vercel-build` script when present, instead of `build`):
 1. `npm install` → triggers `postinstall: prisma generate` (generates Prisma client)
-2. `next build` → compiles the app
+2. `vercel-build`:
+   1. `node scripts/require-direct-url.mjs` → fails the build if `DIRECT_URL` is unset in the deploy env
+   2. `prisma migrate deploy` → applies pending migrations via the direct connection
+   3. `next build` → compiles the app
+
+Because these are chained with `&&`, a failed guard or a failed/partial
+migration aborts the build — `next build` never runs on a bad migration.
 
 ---
 
@@ -128,20 +144,19 @@ Or use the Vercel dashboard → Deployments → Redeploy.
 
 ## Ongoing Migrations
 
-When you add a new Prisma migration locally:
+When you add a new Prisma migration, create it locally and commit it:
 
 ```bash
-# 1. Create migration locally
 npx prisma migrate dev --name your-migration-name
-
-# 2. Apply to production — with DATABASE_URL (pooled) and DIRECT_URL (direct)
-#    set in the environment, migrate uses DIRECT_URL automatically.
-npx prisma migrate deploy
 ```
 
-> Migrations are still applied manually (there is no automated migrate step in
-> CI/Vercel). The only change is that you no longer override `DATABASE_URL`
-> inline — set `DIRECT_URL` once and `migrate` picks it up via `prisma.config.ts`.
+On the next push, Vercel's `vercel-build` runs `prisma migrate deploy`
+automatically against the direct connection — **no manual production step**. Just
+ensure the migration file is committed and `DIRECT_URL` is set in Vercel.
+
+> CI (`.github/workflows/ci.yml`) runs lint / typecheck / tests only — it does
+> **not** run `build` or `vercel-build`, so it never touches a database and stays
+> green without one. Migrations are exercised only by a real Vercel deploy.
 
 ---
 
