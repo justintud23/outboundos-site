@@ -39,7 +39,8 @@ vercel deploy
 Set these environment variables in the Vercel project dashboard:
 
 ```
-DATABASE_URL
+DATABASE_URL          # pooled connection — app runtime
+DIRECT_URL            # direct (non-pooled) connection — Prisma CLI migrations
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 CLERK_SECRET_KEY
 NEXT_PUBLIC_CLERK_SIGN_IN_URL
@@ -54,11 +55,16 @@ SENDGRID_WEBHOOK_SECRET
 NEXT_PUBLIC_APP_URL
 ```
 
-Run migrations against the production database before promoting:
+Run migrations against the production database before promoting. With
+`DATABASE_URL` (pooled) and `DIRECT_URL` (direct) both set, `migrate` uses the
+direct connection automatically via `prisma.config.ts`:
 
 ```bash
-DATABASE_URL=<prod-url> npx prisma migrate deploy
+npx prisma migrate deploy
 ```
+
+> On Neon, point `DIRECT_URL` at the non-pooler host — the pooler's transaction
+> mode breaks Prisma's advisory locks during migrations.
 
 ---
 

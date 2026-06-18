@@ -2,8 +2,13 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Prisma v7: database URL is configured in prisma.config.ts (reads DATABASE_URL env var).
-// The `url` field is no longer supported in schema.prisma as of Prisma v7.
+// Prisma v7: connection URLs live in prisma.config.ts, not here — the `url` and
+// `directUrl` fields are no longer supported in schema.prisma as of v7.
+//   - App runtime connects via @prisma/adapter-pg using the pooled DATABASE_URL
+//     (see src/lib/db/prisma.ts).
+//   - Prisma CLI migrations use prisma.config.ts's datasource.url, which prefers
+//     the direct (non-pooled) DIRECT_URL — Neon's pooler breaks the advisory
+//     locks Prisma takes during `migrate`.
 datasource db {
   provider = "postgresql"
 }

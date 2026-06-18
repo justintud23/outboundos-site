@@ -15,15 +15,24 @@ Vercel (web) + Neon (PostgreSQL). Estimated time: ~20 minutes.
 
 ## 2. Run Migrations Against Neon
 
-From your local machine, using the **direct** connection string:
+Set both connection strings in your environment (a local `.env` works):
 
 ```bash
-DATABASE_URL="postgresql://...direct-connection-string..." npx prisma migrate deploy
+DATABASE_URL="postgresql://...pooled..."   # app runtime (migrate ignores this)
+DIRECT_URL="postgresql://...direct..."     # migrate uses this
 ```
 
-> **Why direct?** Neon's pooler uses PgBouncer in transaction mode, which breaks Prisma's advisory locks during migrations. Always use the direct connection for `migrate deploy`.
+Then just run migrate — `prisma.config.ts` resolves the CLI datasource to
+`DIRECT_URL` automatically (falling back to `DATABASE_URL` only if `DIRECT_URL`
+is unset, e.g. local single-Postgres dev):
 
-Optionally seed demo data:
+```bash
+npx prisma migrate deploy
+```
+
+> **Why direct?** Neon's pooler uses PgBouncer in transaction mode, which breaks Prisma's advisory locks during migrations. `prisma.config.ts` points the migrate connection at `DIRECT_URL` so migrations always use the direct (non-pooled) connection — never run `migrate` against the pooled URL.
+
+Optionally seed demo data (the seed script connects with `DATABASE_URL`):
 
 ```bash
 DATABASE_URL="postgresql://...direct-connection-string..." npx tsx prisma/seed.ts
@@ -48,7 +57,8 @@ In the Vercel project → Settings → Environment Variables, add all of the fol
 ### Database
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | Neon **pooled** connection string |
+| `DATABASE_URL` | Neon **pooled** connection string (app runtime) |
+| `DIRECT_URL` | Neon **direct** (non-pooled) connection string (migrations). Set it in Vercel too so any future migrate run from that environment uses the direct connection. |
 
 ### Clerk Auth
 | Variable | Value |
@@ -124,14 +134,19 @@ When you add a new Prisma migration locally:
 # 1. Create migration locally
 npx prisma migrate dev --name your-migration-name
 
-# 2. Apply to production (direct connection)
-DATABASE_URL="postgresql://...direct..." npx prisma migrate deploy
+# 2. Apply to production — with DATABASE_URL (pooled) and DIRECT_URL (direct)
+#    set in the environment, migrate uses DIRECT_URL automatically.
+npx prisma migrate deploy
 ```
+
+> Migrations are still applied manually (there is no automated migrate step in
+> CI/Vercel). The only change is that you no longer override `DATABASE_URL`
+> inline — set `DIRECT_URL` once and `migrate` picks it up via `prisma.config.ts`.
 
 ---
 
 ## Notes
 
 - `postinstall: "prisma generate"` in `package.json` ensures the client is generated on every Vercel build — no manual step needed
-- The `prisma.config.ts` reads `DATABASE_URL` from env — the same var used at runtime
+- `prisma.config.ts` resolves the CLI/migrate connection to `DIRECT_URL` (falling back to `DATABASE_URL`); the app runtime connects separately via `@prisma/adapter-pg` using the pooled `DATABASE_URL`
 - Neon's free tier includes 0.5 GB storage and auto-suspend after 5 minutes of inactivity (wakes in ~500ms)

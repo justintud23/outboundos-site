@@ -147,7 +147,8 @@ npm run dev
 ### Environment Variables
 
 ```env
-DATABASE_URL=
+DATABASE_URL=                        # pooled connection — app runtime
+DIRECT_URL=                          # direct (non-pooled) connection — Prisma CLI migrations (Neon: non-pooler host)
 CLERK_SECRET_KEY=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in

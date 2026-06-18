@@ -9,7 +9,13 @@ export default defineConfig({
     path: "prisma/migrations",
     seed: "npx tsx prisma/seed.ts",
   },
+  // Connection URL used by Prisma CLI commands (migrate, introspect, db pull).
+  // The app RUNTIME does not use this — it connects via @prisma/adapter-pg with
+  // the pooled DATABASE_URL (see src/lib/db/prisma.ts). Migrations need Neon's
+  // DIRECT (non-pooled) connection because the pooler's transaction mode breaks
+  // Prisma's advisory locks, so prefer DIRECT_URL here and fall back to
+  // DATABASE_URL for local dev (a single Postgres with no pooler).
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
