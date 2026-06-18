@@ -55,7 +55,10 @@ export async function POST(request: Request) {
     fileName: file.name,
   })
 
-  // Score imported leads (fire-and-forget errors — import already succeeded)
+  // Score imported leads (fire-and-forget errors — import already succeeded).
+  // Scoring is chunked with per-chunk failure isolation, so a partial failure
+  // returns scores for the leads that succeeded and explicit null ("unscored")
+  // for the rest — the array carries per-lead truth.
   let scoreResults: Awaited<ReturnType<typeof scoreLeads>> = []
   if (importResult.leads.length > 0) {
     try {
@@ -65,12 +68,24 @@ export async function POST(request: Request) {
       })
     } catch (err) {
       console.error('Scoring failed after import:', err)
-      // Import succeeded — return result with scoring failure noted
+      // Hard failure before any scoring (e.g. DB error) — import still succeeded.
       return NextResponse.json({
         ...importResult,
         scoringError: 'Scoring failed — leads were imported but not yet scored.',
       })
     }
+  }
+
+  // AI failures now degrade per-lead to score: null rather than throwing. If
+  // EVERY lead came back unscored, surface the same not-scored signal; a partial
+  // result is conveyed by the per-lead nulls in `scores`.
+  const allUnscored = scoreResults.length > 0 && scoreResults.every((r) => r.score === null)
+  if (allUnscored) {
+    return NextResponse.json({
+      ...importResult,
+      scores: scoreResults,
+      scoringError: 'Scoring failed — leads were imported but not yet scored.',
+    })
   }
 
   return NextResponse.json({ ...importResult, scores: scoreResults })
