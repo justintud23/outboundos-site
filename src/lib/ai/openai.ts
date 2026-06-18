@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
 import { DraftGenerationError } from './provider'
+import { UNTRUSTED_DATA_PREAMBLE, fenceUntrusted } from './prompt-safety'
 
 // Per-request timeout: a hung OpenAI request must not stall the whole operation.
 const REQUEST_TIMEOUT_MS = 30_000
@@ -31,17 +32,29 @@ export class OpenAIProvider implements AIProvider {
     leads: LeadScoreInput[],
     promptTemplate: string,
   ): Promise<LeadScoreOutput[]> {
-    const leadContext = leads
-      .map(
-        (l) =>
-          `ID: ${l.id} | Email: ${l.email} | Name: ${[l.firstName, l.lastName].filter(Boolean).join(' ')} | Title: ${l.title ?? 'Unknown'} | Company: ${l.company ?? 'Unknown'}`,
-      )
-      .join('\n')
+    // JSON-encode lead fields so untrusted values (name/company/title from CSV)
+    // are escaped — newlines/pipes/quotes can't forge extra rows or break the
+    // structure. The block is then fenced as untrusted data.
+    const leadData = JSON.stringify(
+      leads.map((l) => ({
+        id: l.id,
+        email: l.email,
+        firstName: l.firstName ?? null,
+        lastName: l.lastName ?? null,
+        title: l.title ?? null,
+        company: l.company ?? null,
+      })),
+    )
 
-    // JSON mode requires an object at the top level, so the array is nested under
-    // a "scores" key.
+    // Instructions live in the system prompt, OUTSIDE the untrusted section. The
+    // data/instruction-separation preamble is appended by code so it holds even
+    // if the org's prompt template is edited. JSON mode requires an object top
+    // level, so the array is nested under a "scores" key.
     const systemPrompt = `${promptTemplate}
 
+${UNTRUSTED_DATA_PREAMBLE}
+
+Score each lead in the data. Use each lead's exact "id" value as "leadId".
 Return a JSON object of the form:
 { "scores": [ { "leadId": "<id>", "score": <0-100>, "reason": "<one sentence>" } ] }
 
@@ -52,7 +65,7 @@ Respond with ONLY that JSON object. No markdown, no explanation.`
         model: this.model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: leadContext },
+          { role: 'user', content: fenceUntrusted('lead_data', leadData) },
         ],
         temperature: 0.2,
         response_format: JSON_RESPONSE_FORMAT,
@@ -65,9 +78,14 @@ Respond with ONLY that JSON object. No markdown, no explanation.`
       }
       return (parsed.scores as LeadScoreOutput[]).map((item) => ({
         leadId: item.leadId,
-        // Clamp numeric scores; if the model omitted/garbled one, mark it unscored
-        // rather than inventing a 0.
-        score: typeof item.score === 'number' ? Math.max(0, Math.min(100, item.score)) : null,
+        // Accept ONLY an in-range numeric score. Out-of-range or non-numeric
+        // (garbage, or an injected attacker value like 9999) → null/unscored,
+        // never clamped to a boundary the attacker could target and never a
+        // fabricated 0.
+        score:
+          typeof item.score === 'number' && Number.isFinite(item.score) && item.score >= 0 && item.score <= 100
+            ? item.score
+            : null,
         reason: item.reason,
       }))
     } catch (err) {
@@ -87,11 +105,19 @@ Respond with ONLY that JSON object. No markdown, no explanation.`
     lead: EmailDraftInput,
     promptTemplate: string,
   ): Promise<EmailDraftOutput> {
-    const leadContext = `Email: ${lead.email} | Name: ${[lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'Unknown'} | Title: ${lead.title ?? 'Unknown'} | Company: ${lead.company ?? 'Unknown'}`
+    const leadData = JSON.stringify({
+      email: lead.email,
+      firstName: lead.firstName ?? null,
+      lastName: lead.lastName ?? null,
+      title: lead.title ?? null,
+      company: lead.company ?? null,
+    })
 
     const systemPrompt = `${promptTemplate}
 
-Write a personalized outbound sales email for the lead below.
+${UNTRUSTED_DATA_PREAMBLE}
+
+Write a personalized outbound sales email for the lead in the data below.
 Return ONLY a JSON object: { "subject": "<subject line>", "body": "<email body>" }
 No markdown, no explanation.`
 
@@ -100,7 +126,7 @@ No markdown, no explanation.`
         model: this.model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: leadContext },
+          { role: 'user', content: fenceUntrusted('lead_data', leadData) },
         ],
         temperature: 0.4,
         response_format: JSON_RESPONSE_FORMAT,
@@ -131,10 +157,17 @@ No markdown, no explanation.`
       'UNSUBSCRIBE_REQUEST', 'REFERRAL', 'UNKNOWN',
     ]
 
-    // Append the JSON-object instruction so JSON mode's "must contain 'json'"
-    // requirement holds even for custom templates that omit it.
+    // Instructions + the data-handling preamble + the valid categories are all
+    // system-appended by CODE, so an edited template can't drop the injection
+    // guard. The reply body (untrusted) goes in the user role, fenced. JSON mode's
+    // "must contain json" requirement is satisfied by the output-format line.
     const systemPrompt = `${promptTemplate}
 
+${UNTRUSTED_DATA_PREAMBLE}
+
+Classify the reply in the user message into EXACTLY ONE of these categories:
+${VALID.join(', ')}.
+If you cannot classify it confidently, use UNKNOWN.
 Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-1.0> }`
 
     try {
@@ -142,7 +175,7 @@ Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-
         model: this.model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: input.rawBody },
+          { role: 'user', content: fenceUntrusted('reply_body', input.rawBody) },
         ],
         temperature: 0.1,
         response_format: JSON_RESPONSE_FORMAT,
