@@ -2,29 +2,32 @@ const STATS = [
   {
     value: '73%',
     label: "of 'interested' replies aren't followed up within 24 hours",
+    grad: 'from-[#5b54f0] to-[#7c6cf5]',
   },
   {
     value: '47%',
     label: 'of pipeline goes stale due to bad prioritization',
+    grad: 'from-[#ff7a66] to-[#f6ad3c]',
   },
   {
     value: '4.2 hrs',
     label: 'average daily time spent on outbound admin',
+    grad: 'from-[#0fb6a7] to-[#5b54f0]',
   },
 ]
 
 export function ProblemSection() {
   return (
-    <section className="border-t border-white/5 py-24 md:py-32">
+    <section className="border-t border-[var(--border-subtle)] py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] md:text-4xl lg:text-5xl">
             Cold email tools give you data.{' '}
-            <span className="text-slate-400">
+            <span className="text-[var(--text-muted)]">
               They don&apos;t tell you what to do with it.
             </span>
           </h2>
-          <p className="mt-8 text-lg leading-relaxed text-slate-300">
+          <p className="mt-8 text-lg leading-relaxed text-[var(--text-secondary)]">
             You open Smartlead. You see 47 replies, 12 hot leads, 230 stale prospects,
             and 89 drafts waiting for approval. Now what? Most teams burn 30+ minutes
             every morning just deciding where to start. By the time they reach the
@@ -36,12 +39,14 @@ export function ProblemSection() {
           {STATS.map((stat) => (
             <div
               key={stat.value}
-              className="rounded-xl border border-white/5 bg-[var(--bg-surface)]/60 p-8 backdrop-blur transition-colors hover:border-white/10"
+              className="rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-8 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]"
             >
-              <p className="bg-gradient-to-br from-indigo-300 to-violet-300 bg-clip-text text-5xl font-bold tracking-tight text-transparent md:text-6xl">
+              <p
+                className={`bg-gradient-to-br ${stat.grad} bg-clip-text text-5xl font-bold tabular-nums tracking-tight text-transparent md:text-6xl`}
+              >
                 {stat.value}
               </p>
-              <p className="mt-4 text-sm leading-relaxed text-slate-400">
+              <p className="mt-4 text-sm leading-relaxed text-[var(--text-secondary)]">
                 {stat.label}
               </p>
             </div>

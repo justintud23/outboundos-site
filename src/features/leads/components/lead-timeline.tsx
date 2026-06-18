@@ -28,19 +28,19 @@ const TYPE_CONFIG: Record<
   EMAIL_SENT: {
     icon: Send,
     color: 'text-[var(--accent-cyan)]',
-    bg: 'rgba(56, 189, 248, 0.10)',
+    bg: 'color-mix(in srgb, var(--accent-cyan) 10%, transparent)',
     label: 'Email Sent',
   },
   REPLY_RECEIVED: {
     icon: MessageSquare,
     color: 'text-[var(--accent-magenta)]',
-    bg: 'rgba(167, 139, 250, 0.10)',
+    bg: 'color-mix(in srgb, var(--accent-magenta) 10%, transparent)',
     label: 'Reply Received',
   },
   STATUS_CHANGE: {
     icon: ArrowRightLeft,
     color: 'text-[var(--status-warning)]',
-    bg: 'rgba(234, 179, 8, 0.10)',
+    bg: 'color-mix(in srgb, var(--status-warning) 10%, transparent)',
     label: 'Status Changed',
   },
   SEQUENCE_STEP: {

@@ -34,18 +34,18 @@ export function FAQ() {
   const [open, setOpen] = useState<number | null>(0)
 
   return (
-    <section className="border-t border-white/5 py-24 md:py-32">
+    <section className="border-t border-[var(--border-subtle)] py-24 md:py-32">
       <div className="mx-auto max-w-3xl px-6">
         <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] md:text-4xl lg:text-5xl">
             Frequently asked questions
           </h2>
-          <p className="mt-6 text-lg leading-relaxed text-slate-300">
+          <p className="mt-6 text-lg leading-relaxed text-[var(--text-secondary)]">
             The questions every founder asks before booking a demo.
           </p>
         </div>
 
-        <div className="mt-12 divide-y divide-white/5 overflow-hidden rounded-xl border border-white/5 bg-[var(--bg-surface)]/60 backdrop-blur">
+        <div className="mt-12 divide-y divide-[var(--border-subtle)] overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-card)]">
           {QUESTIONS.map((item, idx) => {
             const isOpen = open === idx
             const panelId = `faq-panel-${idx}`
@@ -59,15 +59,15 @@ export function FAQ() {
                     aria-expanded={isOpen}
                     aria-controls={panelId}
                     onClick={() => setOpen(isOpen ? null : idx)}
-                    className="flex w-full items-center justify-between gap-6 px-6 py-5 text-left transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400/50"
+                    className="flex w-full items-center justify-between gap-6 px-6 py-5 text-left transition-colors hover:bg-[var(--bg-surface-raised)] focus-visible:bg-[var(--bg-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-indigo)]"
                   >
-                    <span className="text-base font-semibold text-white md:text-lg">
+                    <span className="text-base font-semibold text-[var(--text-primary)] md:text-lg">
                       {item.q}
                     </span>
                     <ChevronDown
                       size={20}
                       aria-hidden="true"
-                      className={`flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+                      className={`flex-shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${
                         isOpen ? 'rotate-180' : ''
                       }`}
                     />
@@ -80,7 +80,7 @@ export function FAQ() {
                   hidden={!isOpen}
                   className="px-6 pb-6 pt-0"
                 >
-                  <p className="text-sm leading-relaxed text-slate-300 md:text-base">
+                  <p className="text-sm leading-relaxed text-[var(--text-secondary)] md:text-base">
                     {item.a}
                   </p>
                 </div>

@@ -30,10 +30,10 @@ export default function SignUpPage() {
     return (
       <div className="w-full max-w-sm">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 rounded w-48" />
-          <div className="h-4 bg-slate-200 rounded w-64" />
-          <div className="h-10 bg-slate-200 rounded" />
-          <div className="h-10 bg-slate-200 rounded" />
+          <div className="h-8 bg-[var(--bg-surface-overlay)] rounded w-48" />
+          <div className="h-4 bg-[var(--bg-surface-overlay)] rounded w-64" />
+          <div className="h-10 bg-[var(--bg-surface-overlay)] rounded" />
+          <div className="h-10 bg-[var(--bg-surface-overlay)] rounded" />
         </div>
       </div>
     )
@@ -96,9 +96,9 @@ export default function SignUpPage() {
     return (
       <div className="w-full max-w-sm text-center">
         <div className="flex items-center justify-center mb-4">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-[var(--accent-indigo)] border-t-transparent rounded-full animate-spin" />
         </div>
-        <p className="text-slate-500 text-sm">Redirecting to provider...</p>
+        <p className="text-[var(--text-muted)] text-sm">Redirecting to provider...</p>
       </div>
     )
   }
@@ -107,10 +107,10 @@ export default function SignUpPage() {
     <div className="w-full max-w-sm">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-900">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
           {step === 'form' ? 'Create an account' : 'Verify your email'}
         </h1>
-        <p className="text-slate-500 text-sm mt-1.5">
+        <p className="text-[var(--text-muted)] text-sm mt-1.5">
           {step === 'form'
             ? 'Get started with OutboundOS.'
             : `We sent a code to ${email}`}
@@ -135,15 +135,15 @@ export default function SignUpPage() {
 
           {/* Divider */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-slate-400 text-xs uppercase tracking-wide font-medium">or</span>
-            <div className="flex-1 h-px bg-slate-200" />
+            <div className="flex-1 h-px bg-[var(--bg-surface-overlay)]" />
+            <span className="text-[var(--text-muted)] text-xs uppercase tracking-wide font-medium">or</span>
+            <div className="flex-1 h-px bg-[var(--bg-surface-overlay)]" />
           </div>
 
           {/* Form */}
           <form onSubmit={handleFormSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                 Email address
               </label>
               <input
@@ -154,11 +154,11 @@ export default function SignUpPage() {
                 placeholder="you@company.com"
                 autoComplete="email"
                 required
-                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-base sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-base sm:text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:border-[var(--accent-indigo)] transition-colors"
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                 Password
               </label>
               <div className="relative">
@@ -170,12 +170,12 @@ export default function SignUpPage() {
                   placeholder="Create a password"
                   autoComplete="new-password"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-base sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors pr-16"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-base sm:text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:border-[var(--accent-indigo)] transition-colors pr-16"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-medium cursor-pointer transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] text-xs font-medium cursor-pointer transition-colors"
                 >
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
@@ -184,7 +184,7 @@ export default function SignUpPage() {
             <button
               type="submit"
               disabled={loading || !email.trim() || !password}
-              className="w-full px-4 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--accent-indigo)] text-[var(--text-inverse)] text-sm font-medium hover:bg-[var(--accent-indigo-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? 'Creating account...' : 'Create account'}
             </button>
@@ -194,7 +194,7 @@ export default function SignUpPage() {
 
       {step === 'verify' && (
         <form onSubmit={handleVerify}>
-          <label htmlFor="code" className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="code" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
             Verification code
           </label>
           <input
@@ -207,12 +207,12 @@ export default function SignUpPage() {
             inputMode="numeric"
             autoFocus
             required
-            className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-base sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors tracking-widest text-center"
+            className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-base sm:text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:border-[var(--accent-indigo)] transition-colors tracking-widest text-center"
           />
           <button
             type="submit"
             disabled={loading || !code}
-            className="w-full mt-4 px-4 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="w-full mt-4 px-4 py-2.5 rounded-lg bg-[var(--accent-indigo)] text-[var(--text-inverse)] text-sm font-medium hover:bg-[var(--accent-indigo-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? 'Verifying...' : 'Verify email'}
           </button>
@@ -220,9 +220,9 @@ export default function SignUpPage() {
       )}
 
       {/* Footer */}
-      <p className="text-center text-sm text-slate-500 mt-8">
+      <p className="text-center text-sm text-[var(--text-muted)] mt-8">
         Already have an account?{' '}
-        <Link href="/sign-in" className="text-indigo-600 hover:text-indigo-700 font-medium">
+        <Link href="/sign-in" className="text-[var(--accent-indigo)] hover:text-[var(--accent-indigo-hover)] font-medium">
           Sign in
         </Link>
       </p>
@@ -235,7 +235,7 @@ function OAuthButton({ onClick, icon, label }: { onClick: () => void; icon: Reac
     <button
       onClick={onClick}
       type="button"
-      className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors cursor-pointer"
+      className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] text-sm font-medium hover:bg-[var(--bg-surface-raised)] hover:border-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] transition-colors cursor-pointer"
     >
       {icon}
       {label}

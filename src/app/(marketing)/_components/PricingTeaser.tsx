@@ -2,24 +2,21 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
 const TIERS = [
-  { name: 'Starter', price: '$97' },
-  { name: 'Growth', price: '$297' },
-  { name: 'Scale', price: '$697' },
-  { name: 'Managed', price: '$3,500' },
+  { name: 'Starter', price: '$97', featured: false },
+  { name: 'Growth', price: '$297', featured: true },
+  { name: 'Scale', price: '$697', featured: false },
+  { name: 'Managed', price: '$3,500', featured: false },
 ]
 
 export function PricingTeaser() {
   return (
-    <section
-      id="pricing"
-      className="border-t border-white/5 py-24 md:py-32"
-    >
+    <section id="pricing" className="border-t border-[var(--border-subtle)] py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] md:text-4xl lg:text-5xl">
             Pricing built for outbound teams.
           </h2>
-          <p className="mt-6 text-lg leading-relaxed text-slate-300">
+          <p className="mt-6 text-lg leading-relaxed text-[var(--text-secondary)]">
             Four tiers, from solo operators to full-service agencies. Every plan
             includes the Decision Engine, AI drafts, and reply intelligence.
           </p>
@@ -29,14 +26,21 @@ export function PricingTeaser() {
           {TIERS.map((tier) => (
             <div
               key={tier.name}
-              className="rounded-xl border border-white/5 bg-[var(--bg-surface)]/60 p-6 backdrop-blur"
+              className={`relative rounded-[var(--radius-card)] border bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] ${
+                tier.featured
+                  ? 'border-[var(--accent-indigo)] ring-1 ring-[var(--accent-indigo-glow)]'
+                  : 'border-[var(--border-default)]'
+              }`}
             >
-              <p className="text-sm font-medium text-slate-400">{tier.name}</p>
-              <p className="mt-3 text-3xl font-bold tracking-tight text-white">
-                {tier.price}
-                <span className="ml-1 text-base font-normal text-slate-500">
-                  /mo
+              {tier.featured && (
+                <span className="absolute -top-2.5 left-6 rounded-full bg-[var(--accent-indigo)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-inverse)]">
+                  Popular
                 </span>
+              )}
+              <p className="text-sm font-medium text-[var(--text-secondary)]">{tier.name}</p>
+              <p className="mt-3 text-3xl font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
+                {tier.price}
+                <span className="ml-1 text-base font-normal text-[var(--text-muted)]">/mo</span>
               </p>
             </div>
           ))}
@@ -45,13 +49,10 @@ export function PricingTeaser() {
         <div className="mt-12 flex justify-center">
           <Link
             href="/pricing"
-            className="group inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-7 text-base font-semibold text-white backdrop-blur transition-colors hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+            className="group inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-btn)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-7 text-base font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-colors hover:border-[var(--text-muted)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
           >
             View All Plans
-            <ArrowRight
-              size={18}
-              className="transition-transform group-hover:translate-x-0.5"
-            />
+            <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       </div>

@@ -13,6 +13,20 @@ import { ACTION_CTA, ACTION_HREF, getUrgencyTier } from '../types'
 import { relativeTime } from '@/lib/format'
 import type { LucideIcon } from 'lucide-react'
 
+// Each action type gets a Prism spectrum tone. Tints are derived from the
+// accent token via color-mix() so they always stay in-hue with the token —
+// no hardcoded rgba that can drift from the palette. `text` defaults to the
+// accent token but can be overridden with a deeper shade for AA on the tint.
+function tone(token: string, text: string = token) {
+  return {
+    accent: `var(${token})`,
+    bg: `color-mix(in srgb, var(${token}) 11%, transparent)`,
+    text: `text-[var(${text})]`,
+    ctaBg: `bg-[color-mix(in_srgb,var(${token})_11%,transparent)]`,
+    ctaHoverBg: `hover:bg-[color-mix(in_srgb,var(${token})_18%,transparent)]`,
+  }
+}
+
 const TYPE_CONFIG: Record<ActionType, {
   accent: string
   bg: string
@@ -21,70 +35,16 @@ const TYPE_CONFIG: Record<ActionType, {
   ctaBg: string
   ctaHoverBg: string
 }> = {
-  REVIEW_REPLY: {
-    accent: 'var(--accent-magenta)',
-    bg: 'rgba(167, 139, 250, 0.10)',
-    text: 'text-[var(--accent-magenta)]',
-    icon: MessageSquare,
-    ctaBg: 'bg-[rgba(167,139,250,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(167,139,250,0.22)]',
-  },
-  APPROVE_DRAFT: {
-    accent: 'var(--accent-indigo)',
-    bg: 'var(--accent-indigo-glow)',
-    text: 'text-[var(--accent-indigo)]',
-    icon: FileCheck,
-    ctaBg: 'bg-[var(--accent-indigo-glow)]',
-    ctaHoverBg: 'hover:bg-[var(--primary-glow-strong)]',
-  },
-  SEND_DRAFT: {
-    accent: 'var(--accent-cyan)',
-    bg: 'rgba(56, 189, 248, 0.10)',
-    text: 'text-[var(--accent-cyan)]',
-    icon: Send,
-    ctaBg: 'bg-[rgba(56,189,248,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(56,189,248,0.22)]',
-  },
-  FOLLOW_UP: {
-    accent: 'var(--status-warning)',
-    bg: 'rgba(234, 179, 8, 0.10)',
-    text: 'text-[var(--status-warning)]',
-    icon: Reply,
-    ctaBg: 'bg-[var(--status-warning-bg)]',
-    ctaHoverBg: 'hover:bg-[rgba(234,179,8,0.22)]',
-  },
-  ENROLL_SEQUENCE: {
-    accent: 'var(--accent-indigo)',
-    bg: 'var(--accent-indigo-glow)',
-    text: 'text-[var(--accent-indigo-hover)]',
-    icon: GitBranch,
-    ctaBg: 'bg-[var(--accent-indigo-glow)]',
-    ctaHoverBg: 'hover:bg-[var(--primary-glow-strong)]',
-  },
-  REVIEW_INTERESTED_LEAD: {
-    accent: 'var(--status-success)',
-    bg: 'rgba(34, 197, 94, 0.10)',
-    text: 'text-[var(--status-success)]',
-    icon: Star,
-    ctaBg: 'bg-[var(--status-success-bg)]',
-    ctaHoverBg: 'hover:bg-[rgba(34,197,94,0.22)]',
-  },
-  MARK_CONVERTED: {
-    accent: 'var(--chart-positive)',
-    bg: 'rgba(52, 211, 153, 0.10)',
-    text: 'text-[var(--chart-positive)]',
-    icon: UserCheck,
-    ctaBg: 'bg-[rgba(52,211,153,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(52,211,153,0.22)]',
-  },
-  NO_ACTION: {
-    accent: 'var(--text-muted)',
-    bg: 'rgba(71, 85, 105, 0.10)',
-    text: 'text-[var(--text-muted)]',
-    icon: FileCheck,
-    ctaBg: 'bg-[var(--bg-surface-raised)]',
-    ctaHoverBg: 'hover:bg-[var(--bg-surface-overlay)]',
-  },
+  REVIEW_REPLY: { ...tone('--accent-magenta'), icon: MessageSquare },
+  // Primary "go" actions use the indigo signal; text uses the deeper hover
+  // shade so the small label clears AA on the pale indigo tint.
+  APPROVE_DRAFT: { ...tone('--accent-indigo', '--accent-indigo-hover'), icon: FileCheck },
+  SEND_DRAFT: { ...tone('--accent-cyan'), icon: Send },
+  FOLLOW_UP: { ...tone('--status-warning'), icon: Reply },
+  ENROLL_SEQUENCE: { ...tone('--accent-indigo', '--accent-indigo-hover'), icon: GitBranch },
+  REVIEW_INTERESTED_LEAD: { ...tone('--status-success'), icon: Star }, // positive
+  MARK_CONVERTED: { ...tone('--status-success'), icon: UserCheck }, // won
+  NO_ACTION: { ...tone('--text-muted'), icon: FileCheck },
 }
 
 function UrgencyDot({ priority }: { priority: number }) {

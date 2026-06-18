@@ -1,76 +1,88 @@
 @import "tailwindcss";
 
 :root {
-  /* ── Backgrounds (Neutral graphite surface hierarchy — "Signal") ── */
-  --bg-base: #0b0d10;
-  --bg-surface: #14171c;
-  --bg-surface-raised: #1b1f26;
-  --bg-surface-overlay: #222831;
-  --bg-sidebar: #0e1116;
+  /* ════════════════════════════════════════════════════════════════════
+     "PRISM" — expressive light theme (Attio-DNA).
+     Warm-white canvas, an indigo-violet PRIMARY, and a curated spectrum of
+     categorical accents (violet / terracotta / teal / amber). Light mode only.
+     All token NAMES are preserved so the token-driven app inherits the theme;
+     the legacy `--accent-lime`/`--accent-indigo` names now resolve to the
+     indigo-violet PRIMARY. Color values verified for WCAG AA (see contrast
+     notes inline).
+     ════════════════════════════════════════════════════════════════════ */
 
-  /* ── Borders & Dividers (graphite; hover-glow is a NEUTRAL lighten, not lime) ── */
-  --border-default: #262b33;
-  --border-subtle: #1b1f26;
-  --border-glow: rgba(244, 246, 248, 0.10);
+  /* ── Backgrounds (warm-white surface hierarchy) ── */
+  --bg-base: #faf9f6;            /* page canvas (warm paper) */
+  --bg-surface: #ffffff;         /* cards / primary surfaces */
+  --bg-surface-raised: #f5f4f0;  /* hover / secondary surfaces / inset */
+  --bg-surface-overlay: #eeedf2; /* chips, default badge bg (faint cool) */
+  --bg-sidebar: #f7f6f2;         /* sidebar (one step off canvas) */
 
-  /* ── Text ── */
-  --text-primary: #f4f6f8;
-  --text-secondary: #9ba3af;
-  --text-muted: #6e7682; /* tertiary/de-emphasized labels (~3.6:1 on base) */
-  --text-inverse: #0b0d10; /* dark ink for text/icons ON lime surfaces */
+  /* ── Borders & Dividers (hairline; hover-glow is a subtle dark line) ── */
+  --border-default: #e8e7e2;
+  --border-subtle: #f0efeb;
+  --border-glow: rgba(22, 24, 29, 0.14);
 
-  /* ── Signal: electric lime is the single energy color. ──
-     NOTE: the historical token name `--accent-indigo` is retained so existing
-     call sites keep working, but it now resolves to the lime SIGNAL. Use it only
-     for primary CTAs, active/live/positive states, focus, and the spotlight. */
-  --accent-lime: #b6f23d;
-  --accent-lime-hover: #c8ff5e;
-  --accent-indigo: var(--accent-lime);
-  --accent-indigo-hover: var(--accent-lime-hover);
-  --accent-indigo-glow: rgba(182, 242, 61, 0.12);
-  --primary-glow-strong: rgba(182, 242, 61, 0.24);
-  /* Categorical (informational) accents — NOT the brand signal. */
-  --accent-cyan: #38bdf8;
-  --accent-magenta: #a78bfa;
-  --accent-warm: #fb923c;
+  /* ── Text (ink ≈16.9:1 · secondary ≈6.6:1 · muted tertiary ≈3.3:1) ── */
+  --text-primary: #16181d;
+  --text-secondary: #545a64;
+  --text-muted: #767b85;   /* tertiary/de-emphasized labels & timestamps */
+  --text-inverse: #ffffff; /* white text/icons ON the primary surface */
 
-  /* ── Semantic Status (Signal tuning — these, never lime, carry meaning) ── */
-  --status-success: #4ade80;
-  --status-success-bg: rgba(74, 222, 128, 0.13);
-  --status-warning: #facc15;
-  --status-warning-bg: rgba(250, 204, 21, 0.13);
-  --status-danger: #f87171;
-  --status-danger-bg: rgba(248, 113, 113, 0.14);
+  /* ── PRIMARY signal: indigo-violet. ──
+     The historical `--accent-lime`/`--accent-indigo` names are retained (now
+     pointing at the indigo-violet primary) so existing call sites work. Use
+     for primary CTAs, focus, active/live/positive states, and the spotlight. */
+  --accent-lime: #5b54f0;
+  --accent-lime-hover: #4a43e0;
+  --accent-indigo: #5b54f0;          /* primary · white-on-indigo ≈5.3:1 AA */
+  --accent-indigo-hover: #4a43e0;
+  --accent-indigo-glow: rgba(91, 84, 240, 0.10);
+  --primary-glow-strong: rgba(91, 84, 240, 0.18);
+  /* Categorical (informational) accents — deep enough to read AA as small
+     text on their own tints; vivid enough to feel like the Prism spectrum. */
+  --accent-cyan: #0a7068;    /* teal       · on-tint ≈4.9:1 */
+  --accent-magenta: #6d28d9; /* violet     · on-tint ≈5.8:1 */
+  --accent-warm: #b8430f;    /* terracotta · on-tint ≈4.5:1 */
 
-  /* ── Effects (crisp graphite depth — no indigo glow) ── */
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 8px rgba(0, 0, 0, 0.55);
-  --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 20px rgba(0, 0, 0, 0.65);
-  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.5);
-  --radius-card: 10px;
-  --radius-btn: 6px;
-  --radius-badge: 4px;
+  /* ── Semantic Status (text-capable shades · all ≥4.5:1 on their tints) ── */
+  --status-success: #0a6f43;
+  --status-success-bg: rgba(10, 111, 67, 0.12);
+  --status-warning: #855910;
+  --status-warning-bg: rgba(133, 89, 16, 0.14);
+  --status-danger: #cc2626;
+  --status-danger-bg: rgba(204, 38, 38, 0.10);
+
+  /* ── Effects (soft, faintly-tinted depth for a light canvas) ── */
+  --shadow-card: 0 1px 2px rgba(22, 24, 29, 0.04), 0 4px 14px rgba(40, 38, 60, 0.06);
+  --shadow-card-hover: 0 2px 6px rgba(22, 24, 29, 0.07), 0 16px 36px rgba(91, 84, 240, 0.12);
+  --shadow-sidebar: 1px 0 0 rgba(22, 24, 29, 0.06);
+  --radius-card: 16px;
+  --radius-btn: 11px;
+  --radius-badge: 7px;
 
   /* ── Transitions ── */
   --transition-fast: 120ms ease;
   --transition-base: 180ms ease;
   --transition-slow: 260ms ease;
 
-  /* ── Focus (lime signal ring) ── */
-  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(182, 242, 61, 0.55);
+  /* ── Focus (indigo signal ring) ── */
+  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(91, 84, 240, 0.55);
 
-  /* ── Monospace numerals (data-terminal feel) ── */
+  /* ── Type ── */
+  --font-display: var(--font-space-grotesk), "Inter", system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
   /* ── Sidebar ── */
   --sidebar-width-expanded: 240px;
   --sidebar-width-collapsed: 60px;
 
-  /* ── Chart Colors (fixed per-series; primary series = lime signal) ── */
-  --chart-sent: #b6f23d;
-  --chart-delivered: #38bdf8;
-  --chart-opened: #a78bfa;
-  --chart-replied: #4ade80;
-  --chart-positive: #34d399;
+  /* ── Chart Colors (vivid Prism spectrum — large fills, brightness preferred) ── */
+  --chart-sent: #5b54f0;
+  --chart-delivered: #0fb6a7;
+  --chart-opened: #7c6cf5;
+  --chart-replied: #23c08a;
+  --chart-positive: #14b87a;
 
   /* ── Spacing scale (4px base) ── */
   --space-1: 4px;
@@ -93,16 +105,25 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle graphite depth — a barely-there lime ambient up top, neutral elsewhere */
+/* Prism aurora wash — a quiet spectrum ambient (violet → terracotta → teal)
+   behind the whole canvas. Deliberately faint so it reads as warmth, not noise. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(182, 242, 61, 0.035) 0%, transparent 55%),
-    radial-gradient(ellipse at 80% 100%, rgba(255, 255, 255, 0.018) 0%, transparent 60%);
+    radial-gradient(46% 55% at 12% 0%, rgba(124, 108, 245, 0.10) 0%, transparent 60%),
+    radial-gradient(40% 50% at 92% 4%, rgba(255, 122, 102, 0.07) 0%, transparent 62%),
+    radial-gradient(46% 60% at 78% 100%, rgba(15, 182, 167, 0.05) 0%, transparent 64%);
   pointer-events: none;
+}
+
+/* ── Display type: Space Grotesk for headings (real <h*> tags) + opt-in
+   `.font-display` utility for styled heading divs. Tightened tracking. ── */
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 /* ── Monospace numerals: every element already marked `tabular-nums` (stat
@@ -132,7 +153,7 @@ body::before {
   z-index: 9999;
   padding: var(--space-2) var(--space-4);
   background: var(--accent-indigo);
-  color: var(--text-inverse); /* dark ink on lime — AA */
+  color: var(--text-inverse); /* white on indigo — AA */
   border-radius: var(--radius-btn);
   font-size: 0.875rem;
   font-weight: 500;
@@ -143,9 +164,9 @@ body::before {
   left: var(--space-4);
 }
 
-/* ── Focus visible utility (lime signal) ── */
+/* ── Focus visible utility (indigo signal) ── */
 *:focus-visible {
-  outline: 2px solid rgba(182, 242, 61, 0.6);
+  outline: 2px solid rgba(91, 84, 240, 0.6);
   outline-offset: 2px;
 }
 

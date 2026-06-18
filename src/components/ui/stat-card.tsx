@@ -31,9 +31,9 @@ const ICON_BG_COLORS: Record<string, string> = {
   success: 'bg-[var(--status-success-bg)] text-[var(--status-success)]',
   warning: 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]',
   danger: 'bg-[var(--status-danger-bg)] text-[var(--status-danger)]',
-  cyan: 'bg-[rgba(56,189,248,0.12)] text-[var(--accent-cyan)]',
-  violet: 'bg-[rgba(167,139,250,0.12)] text-[var(--accent-magenta)]',
-  warm: 'bg-[rgba(251,146,60,0.12)] text-[var(--accent-warm)]',
+  cyan: 'bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)] text-[var(--accent-cyan)]',
+  violet: 'bg-[color-mix(in_srgb,var(--accent-magenta)_12%,transparent)] text-[var(--accent-magenta)]',
+  warm: 'bg-[color-mix(in_srgb,var(--accent-warm)_12%,transparent)] text-[var(--accent-warm)]',
 }
 
 export function StatCard({ label, value, sub, accent, icon: Icon }: StatCardProps) {

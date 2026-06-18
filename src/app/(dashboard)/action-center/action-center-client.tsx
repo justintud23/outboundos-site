@@ -12,13 +12,13 @@ interface ActionCenterClientProps {
 }
 
 const TYPE_COLORS: Record<ActionType, string> = {
-  REVIEW_REPLY: 'bg-[rgba(167,139,250,0.12)] text-[var(--accent-magenta)]',
-  APPROVE_DRAFT: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo)]',
-  SEND_DRAFT: 'bg-[rgba(56,189,248,0.12)] text-[var(--accent-cyan)]',
+  REVIEW_REPLY: 'bg-[color-mix(in_srgb,var(--accent-magenta)_12%,transparent)] text-[var(--accent-magenta)]',
+  APPROVE_DRAFT: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo-hover)]',
+  SEND_DRAFT: 'bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)] text-[var(--accent-cyan)]',
   FOLLOW_UP: 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]',
   ENROLL_SEQUENCE: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo-hover)]',
   REVIEW_INTERESTED_LEAD: 'bg-[var(--status-success-bg)] text-[var(--status-success)]',
-  MARK_CONVERTED: 'bg-[rgba(52,211,153,0.12)] text-[var(--chart-positive)]',
+  MARK_CONVERTED: 'bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)] text-[var(--status-success)]',
   NO_ACTION: 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]',
 }
 

@@ -28,7 +28,7 @@ export function Header({ title }: HeaderProps) {
         <OrganizationSwitcher
           appearance={{
             elements: {
-              rootBox: 'text-sm [&_*]:!text-white',
+              rootBox: 'text-sm [&_*]:!text-[var(--text-primary)]',
               organizationSwitcherTrigger:
                 'hover:bg-[var(--bg-surface-raised)] py-1 px-2 rounded-md cursor-pointer',
               organizationSwitcherTriggerIcon: '!text-[var(--text-secondary)]',

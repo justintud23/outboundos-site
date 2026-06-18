@@ -12,7 +12,13 @@ const SIZES = {
 
 export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoProps) {
   const s = SIZES[size]
-  const textColor = variant === 'light' ? 'text-slate-900' : 'text-white'
+  // Prism is a light theme — the wordmark reads in ink on every surface, so we
+  // drive it from tokens. `variant === 'light'` (white text) is reserved for
+  // the rare dark surface; default resolves to token ink.
+  const textColor = variant === 'light' ? 'text-white' : 'text-[var(--text-primary)]'
+  // On a dark/brand surface the indigo "OS" would vanish — use a light peach
+  // accent from the Prism spectrum; on light surfaces keep the indigo signal.
+  const osColor = variant === 'light' ? 'text-[#ffb3a6]' : 'text-[var(--accent-indigo)]'
 
   return (
     <div className={`flex items-center ${s.gap}`}>
@@ -20,10 +26,10 @@ export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoPro
         className="relative flex items-center justify-center rounded-xl"
         style={{ width: s.icon, height: s.icon }}
       >
-        {/* Gradient background */}
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25" />
-        {/* Glow ring */}
-        <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-br from-indigo-400/20 to-violet-400/20 blur-[1px]" />
+        {/* Prism gradient mark (indigo → violet) */}
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[#5b54f0] via-[#6a5bf2] to-[#7c6cf5] shadow-[0_6px_16px_rgba(91,84,240,0.35)]" />
+        {/* Soft glow ring */}
+        <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-br from-[#5b54f0]/30 to-[#7c6cf5]/25 blur-[1px]" />
         {/* Icon mark */}
         <svg
           viewBox="0 0 24 24"
@@ -45,8 +51,8 @@ export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoPro
         </svg>
       </div>
       {showText && (
-        <span className={`${s.text} font-semibold tracking-tight ${textColor}`}>
-          Outbound<span className="text-indigo-500">OS</span>
+        <span className={`${s.text} font-display font-semibold tracking-tight ${textColor}`}>
+          Outbound<span className={osColor}>OS</span>
         </span>
       )}
     </div>

@@ -35,35 +35,35 @@ const TYPE_CONFIG: Record<ActionType, {
 }> = {
   REVIEW_REPLY: {
     accent: 'var(--accent-magenta)',
-    bg: 'rgba(167, 139, 250, 0.10)',
+    bg: 'color-mix(in srgb, var(--accent-magenta) 10%, transparent)',
     text: 'text-[var(--accent-magenta)]',
     icon: MessageSquare,
-    ctaBg: 'bg-[rgba(167,139,250,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(167,139,250,0.22)]',
+    ctaBg: 'bg-[color-mix(in_srgb,var(--accent-magenta)_12%,transparent)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--accent-magenta)_22%,transparent)]',
   },
   APPROVE_DRAFT: {
     accent: 'var(--accent-indigo)',
     bg: 'var(--accent-indigo-glow)',
-    text: 'text-[var(--accent-indigo)]',
+    text: 'text-[var(--accent-indigo-hover)]',
     icon: FileCheck,
     ctaBg: 'bg-[var(--accent-indigo-glow)]',
     ctaHoverBg: 'hover:bg-[var(--primary-glow-strong)]',
   },
   SEND_DRAFT: {
     accent: 'var(--accent-cyan)',
-    bg: 'rgba(56, 189, 248, 0.10)',
+    bg: 'color-mix(in srgb, var(--accent-cyan) 10%, transparent)',
     text: 'text-[var(--accent-cyan)]',
     icon: Send,
-    ctaBg: 'bg-[rgba(56,189,248,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(56,189,248,0.22)]',
+    ctaBg: 'bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--accent-cyan)_22%,transparent)]',
   },
   FOLLOW_UP: {
     accent: 'var(--status-warning)',
-    bg: 'rgba(234, 179, 8, 0.10)',
+    bg: 'color-mix(in srgb, var(--status-warning) 10%, transparent)',
     text: 'text-[var(--status-warning)]',
     icon: Reply,
     ctaBg: 'bg-[var(--status-warning-bg)]',
-    ctaHoverBg: 'hover:bg-[rgba(234,179,8,0.22)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-warning)_22%,transparent)]',
   },
   ENROLL_SEQUENCE: {
     accent: 'var(--accent-indigo)',
@@ -75,23 +75,23 @@ const TYPE_CONFIG: Record<ActionType, {
   },
   REVIEW_INTERESTED_LEAD: {
     accent: 'var(--status-success)',
-    bg: 'rgba(34, 197, 94, 0.10)',
+    bg: 'color-mix(in srgb, var(--status-success) 10%, transparent)',
     text: 'text-[var(--status-success)]',
     icon: Star,
     ctaBg: 'bg-[var(--status-success-bg)]',
-    ctaHoverBg: 'hover:bg-[rgba(34,197,94,0.22)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-success)_22%,transparent)]',
   },
   MARK_CONVERTED: {
-    accent: 'var(--chart-positive)',
-    bg: 'rgba(52, 211, 153, 0.10)',
-    text: 'text-[var(--chart-positive)]',
+    accent: 'var(--status-success)',
+    bg: 'color-mix(in srgb, var(--status-success) 10%, transparent)',
+    text: 'text-[var(--status-success)]',
     icon: UserCheck,
-    ctaBg: 'bg-[rgba(52,211,153,0.12)]',
-    ctaHoverBg: 'hover:bg-[rgba(52,211,153,0.22)]',
+    ctaBg: 'bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-success)_22%,transparent)]',
   },
   NO_ACTION: {
     accent: 'var(--text-muted)',
-    bg: 'rgba(71, 85, 105, 0.10)',
+    bg: 'color-mix(in srgb, var(--text-muted) 10%, transparent)',
     text: 'text-[var(--text-muted)]',
     icon: FileCheck,
     ctaBg: 'bg-[var(--bg-surface-raised)]',
@@ -207,7 +207,7 @@ export function InlineActionItem({ action, phase, onExecute, onUndo }: InlineAct
       {/* Icon */}
       <div
         className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
-        style={{ background: isGhost ? 'rgba(34, 197, 94, 0.10)' : config.bg }}
+        style={{ background: isGhost ? 'color-mix(in srgb, var(--status-success) 10%, transparent)' : config.bg }}
         aria-hidden="true"
       >
         {isGhost ? (
