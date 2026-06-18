@@ -7,6 +7,7 @@ vi.mock('@/lib/db/prisma', () => ({
     outboundMessage: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
@@ -48,7 +49,7 @@ type Fn = ReturnType<typeof vi.fn>
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: Fn }
   mailbox: { findMany: Fn; updateMany: Fn }
-  outboundMessage: { create: Fn; findUnique: Fn; update: Fn; delete: Fn }
+  outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; update: Fn; delete: Fn }
   $transaction: Fn
 }
 const mockGetEmailProvider = getEmailProvider as ReturnType<typeof vi.fn>
@@ -64,6 +65,7 @@ const fakeDraft = {
   body: 'Hi Jane, ...',
   status: 'APPROVED',
   campaignId: null,
+  sequenceEnrollmentId: null, // not part of a sequence → no threading by default
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-02'),
   lead: { id: 'lead-1', email: 'jane@acme.com', status: 'NEW' },
@@ -214,6 +216,7 @@ beforeEach(() => {
     ...data,
   }))
   mockPrisma.outboundMessage.findUnique.mockResolvedValue(null)
+  mockPrisma.outboundMessage.findMany.mockResolvedValue([]) // no prior thread by default
   mockPrisma.outboundMessage.update.mockImplementation(async ({ where, data }: UpdateArgs) => ({
     ...baseRow,
     id: where.id,
@@ -408,6 +411,75 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     expect(mockSendEmail).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
     expect(store['mb-1'].sentToday).toBe(0)
+  })
+
+  // ─── Threading (In-Reply-To / References) ─────────────────────────────────
+
+  it('first send: sets a Message-ID, no In-Reply-To/References, keeps the draft subject', async () => {
+    // fakeDraft has sequenceEnrollmentId: null → no thread lookup, no prior chain.
+    await sendDraft(INPUT)
+
+    const sent = mockSendEmail.mock.calls[0]?.[0] as {
+      messageId?: string
+      inReplyTo?: string
+      references?: string[]
+      subject?: string
+    }
+    expect(sent.messageId).toMatch(/^<.+@.+>$/)
+    expect(sent.inReplyTo).toBeUndefined()
+    expect(sent.references).toBeUndefined()
+    expect(sent.subject).toBe('Hello Jane')
+    // Not part of a sequence → no prior-chain query.
+    expect(mockPrisma.outboundMessage.findMany).not.toHaveBeenCalled()
+  })
+
+  it('follow-up send: In-Reply-To = prior message, References = full chain, subject = "Re: <original>"', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      subject: 'Follow up #2',
+      sequenceEnrollmentId: 'enr-1',
+    })
+    // Prior thread (oldest → newest). Root subject is the original step-1 subject.
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { messageId: '<m1@app.test>', subject: 'Intro to Acme' },
+    ])
+
+    await sendDraft(INPUT)
+
+    const sent = mockSendEmail.mock.calls[0]?.[0] as {
+      inReplyTo?: string
+      references?: string[]
+      subject?: string
+    }
+    expect(sent.inReplyTo).toBe('<m1@app.test>')
+    expect(sent.references).toEqual(['<m1@app.test>'])
+    // Threaded onto the ORIGINAL subject, not the step's own subject.
+    expect(sent.subject).toBe('Re: Intro to Acme')
+  })
+
+  it('3-step sequence builds the References chain cumulatively, In-Reply-To = most recent', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      sequenceEnrollmentId: 'enr-1',
+    })
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { messageId: '<m1@app.test>', subject: 'Intro' },
+      { messageId: '<m2@app.test>', subject: 'Re: Intro' },
+    ])
+
+    await sendDraft(INPUT)
+
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { inReplyTo?: string; references?: string[]; subject?: string }
+    expect(sent.references).toEqual(['<m1@app.test>', '<m2@app.test>'])
+    expect(sent.inReplyTo).toBe('<m2@app.test>')
+    // Root subject "Intro" → "Re: Intro" (not doubled even though step-2 was "Re: Intro").
+    expect(sent.subject).toBe('Re: Intro')
+  })
+
+  it('persists our Message-ID on the claim row', async () => {
+    await sendDraft(INPUT)
+    const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { messageId?: string }
+    expect(createData.messageId).toMatch(/^<.+@.+>$/)
   })
 
   // ─── Claim-before-send / dedupe preserved ─────────────────────────────────

@@ -15,6 +15,7 @@ import { transitionLeadStatus } from '@/features/leads/server/transition-lead-st
 import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
+import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 
 interface SendDraftInput {
   organizationId: string
@@ -164,6 +165,34 @@ export async function sendDraft({
   const unsubscribeToken = signUnsubscribeToken({ leadId: draft.leadId, organizationId })
   const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${unsubscribeToken}`
 
+  // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
+  // the same sequence enrollment (the thread), we set In-Reply-To = the prior
+  // message and References = the full prior chain (oldest→newest), and reuse the
+  // original thread subject as "Re: <subject>". The first email in a sequence (no
+  // prior sent messages) gets only its own Message-ID. Drafts not tied to a
+  // sequence enrollment never thread.
+  const messageId = generateMessageId()
+  const priorMessages = draft.sequenceEnrollmentId
+    ? await prisma.outboundMessage.findMany({
+        where: {
+          organizationId,
+          status: 'SENT',
+          messageId: { not: null },
+          draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
+        },
+        orderBy: { sentAt: 'asc' },
+        select: { messageId: true, subject: true },
+      })
+    : []
+  const priorMessageIds = priorMessages
+    .map((m) => m.messageId)
+    .filter((id): id is string => id !== null)
+  const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
+  // Reuse the thread's original subject (oldest message) as "Re: ..."; never
+  // double-prefix. First send keeps the draft's own subject.
+  const threadRoot = priorMessages[0]
+  const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
+
   // 4. CLAIM the draft BEFORE the network send. Creating the OutboundMessage in
   //    QUEUED state first means the unique draftId constraint reserves this
   //    draft atomically: two concurrent/retried sends race here, exactly one
@@ -183,9 +212,10 @@ export async function sendDraft({
         mailboxId: tentative.mailbox.id,
         draftId,
         ...(draft.campaignId && { campaignId: draft.campaignId }),
-        subject: draft.subject,
+        subject: effectiveSubject,
         body: draft.body,
         status: 'QUEUED',
+        messageId,
       },
     })
   } catch (err) {
@@ -231,10 +261,13 @@ export async function sendDraft({
       to: draft.lead.email,
       fromEmail: sendingMailbox.email,
       fromName: sendingMailbox.displayName,
-      subject: draft.subject,
+      subject: effectiveSubject,
       body: draft.body,
       customArgs: { draftId, leadId: draft.leadId },
       listUnsubscribe: { url: unsubscribeUrl },
+      messageId,
+      ...(inReplyTo && { inReplyTo }),
+      ...(references && references.length > 0 && { references }),
     }))
   } catch (sendErr) {
     // DEFINITE failure: the provider threw, so no email went out. Roll BOTH

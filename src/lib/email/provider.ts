@@ -12,6 +12,14 @@ export interface SendEmailInput {
   // intent here rather than raw mail headers so the EmailProvider interface
   // stays transport-neutral — each provider maps this to its own mechanism.
   listUnsubscribe?: { url: string; mailto?: string }
+  // RFC 5322 threading. All angle-bracketed (e.g. "<id@host>"). `messageId` is
+  // THIS email's Message-ID (we generate and control it). `inReplyTo` and
+  // `references` thread a follow-up to prior emails: inReplyTo = the immediately
+  // prior message, references = the full chain oldest→newest. Transport-neutral —
+  // the provider maps these to the right mail headers.
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
 }
 
 export interface SendEmailOutput {

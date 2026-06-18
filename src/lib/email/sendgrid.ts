@@ -24,9 +24,19 @@ export class SendGridProvider implements EmailProvider {
   }
 
   async sendEmail(input: SendEmailInput): Promise<SendEmailOutput> {
-    const unsubscribeHeaders = input.listUnsubscribe
-      ? buildListUnsubscribeHeaders(input.listUnsubscribe)
-      : undefined
+    // Merge all custom headers into one map. SendGrid does not reserve Message-ID /
+    // In-Reply-To / References, so setting them here makes our generated Message-ID
+    // the real RFC 5322 Message-ID and threads follow-ups. References is the full
+    // chain joined by spaces, oldest → newest.
+    const outgoingHeaders: Record<string, string> = {
+      ...(input.listUnsubscribe ? buildListUnsubscribeHeaders(input.listUnsubscribe) : {}),
+    }
+    if (input.messageId) outgoingHeaders['Message-ID'] = input.messageId
+    if (input.inReplyTo) outgoingHeaders['In-Reply-To'] = input.inReplyTo
+    if (input.references && input.references.length > 0) {
+      outgoingHeaders['References'] = input.references.join(' ')
+    }
+    const hasHeaders = Object.keys(outgoingHeaders).length > 0
 
     const [response] = await sgMail.send({
       to: input.to,
@@ -36,7 +46,7 @@ export class SendGridProvider implements EmailProvider {
       // customArgs are echoed back in every SendGrid webhook event —
       // enables webhook-to-message correlation without a database lookup.
       ...(input.customArgs && { customArgs: input.customArgs }),
-      ...(unsubscribeHeaders && { headers: unsubscribeHeaders }),
+      ...(hasHeaders && { headers: outgoingHeaders }),
     })
 
     const headers = response.headers as Record<string, string>

@@ -436,6 +436,11 @@ model OutboundMessage {
   draft          Draft?        @relation(fields: [draftId], references: [id])
 
   sgMessageId String?       @unique
+  // Our OWN RFC 5322 Message-ID (angle-bracketed), generated and set as the
+  // Message-ID header on send. SendGrid's sgMessageId (x-message-id) is an
+  // internal id, NOT the RFC Message-ID, so we control our own to thread
+  // follow-ups via In-Reply-To / References. Unique; nullable for pre-feature rows.
+  messageId   String?       @unique
   subject     String
   body        String
   status      MessageStatus @default(QUEUED)

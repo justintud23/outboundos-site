@@ -151,4 +151,43 @@ describe('SendGridProvider', () => {
     const callArg = mockSgMail.send.mock.calls[0]?.[0] as Record<string, unknown>
     expect(callArg).not.toHaveProperty('headers')
   })
+
+  it('forwards RFC 5322 threading headers (Message-ID / In-Reply-To / References)', async () => {
+    mockSgMail.send.mockResolvedValue([
+      { statusCode: 202, headers: { 'x-message-id': 'sg-1' }, body: '' },
+      {},
+    ])
+    const provider = new SendGridProvider('test-key')
+    await provider.sendEmail({
+      to: 'a@b.com', fromEmail: 'c@d.com', fromName: 'X', subject: 'Re: S', body: 'B',
+      messageId: '<m3@app.test>',
+      inReplyTo: '<m2@app.test>',
+      references: ['<m1@app.test>', '<m2@app.test>'],
+    })
+    expect(mockSgMail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Message-ID': '<m3@app.test>',
+          'In-Reply-To': '<m2@app.test>',
+          'References': '<m1@app.test> <m2@app.test>', // space-separated chain
+        }),
+      }),
+    )
+  })
+
+  it('sets only Message-ID (no In-Reply-To/References) for a first send', async () => {
+    mockSgMail.send.mockResolvedValue([
+      { statusCode: 202, headers: { 'x-message-id': 'sg-1' }, body: '' },
+      {},
+    ])
+    const provider = new SendGridProvider('test-key')
+    await provider.sendEmail({
+      to: 'a@b.com', fromEmail: 'c@d.com', fromName: 'X', subject: 'S', body: 'B',
+      messageId: '<m1@app.test>',
+    })
+    const callArg = mockSgMail.send.mock.calls[0]?.[0] as { headers?: Record<string, string> }
+    expect(callArg.headers?.['Message-ID']).toBe('<m1@app.test>')
+    expect(callArg.headers).not.toHaveProperty('In-Reply-To')
+    expect(callArg.headers).not.toHaveProperty('References')
+  })
 })
