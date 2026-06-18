@@ -1,12 +1,29 @@
 import OpenAI from 'openai'
 import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
+import { DraftGenerationError } from './provider'
+
+// Per-request timeout: a hung OpenAI request must not stall the whole operation.
+const REQUEST_TIMEOUT_MS = 30_000
+// Bounded retries with exponential backoff. The OpenAI SDK retries ONLY transient
+// failures (connection errors, request timeouts, 408/409/429, and 5xx) — it never
+// retries a 400/validation error. So this is safe: a bad request fails fast.
+const MAX_RETRIES = 2
+
+// JSON mode: the model is constrained to emit a valid JSON OBJECT (not a bare
+// array), so JSON.parse always succeeds. Note: every prompt that uses this must
+// contain the word "json" (an OpenAI requirement) and should ask for an object.
+const JSON_RESPONSE_FORMAT = { type: 'json_object' } as const
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
   private model: string
 
   constructor(apiKey: string, model: string) {
-    this.client = new OpenAI({ apiKey })
+    this.client = new OpenAI({
+      apiKey,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRetries: MAX_RETRIES,
+    })
     this.model = model
   }
 
@@ -21,12 +38,14 @@ export class OpenAIProvider implements AIProvider {
       )
       .join('\n')
 
+    // JSON mode requires an object at the top level, so the array is nested under
+    // a "scores" key.
     const systemPrompt = `${promptTemplate}
 
-Return a JSON array with one object per lead:
-[{ "leadId": "<id>", "score": <0-100>, "reason": "<one sentence>" }]
+Return a JSON object of the form:
+{ "scores": [ { "leadId": "<id>", "score": <0-100>, "reason": "<one sentence>" } ] }
 
-Respond with ONLY the JSON array. No markdown, no explanation.`
+Respond with ONLY that JSON object. No markdown, no explanation.`
 
     try {
       const response = await this.client.chat.completions.create({
@@ -36,23 +55,30 @@ Respond with ONLY the JSON array. No markdown, no explanation.`
           { role: 'user', content: leadContext },
         ],
         temperature: 0.2,
+        response_format: JSON_RESPONSE_FORMAT,
       })
 
       const content = response.choices[0]?.message.content ?? ''
-      const raw: unknown = JSON.parse(content)
-      if (!Array.isArray(raw)) {
-        throw new SyntaxError('Expected JSON array, got: ' + typeof raw)
+      const parsed = JSON.parse(content) as { scores?: unknown }
+      if (!Array.isArray(parsed.scores)) {
+        throw new SyntaxError('Expected a { scores: [...] } object')
       }
-      return (raw as LeadScoreOutput[]).map((item) => ({
-        ...item,
-        score: Math.max(0, Math.min(100, item.score)),
+      return (parsed.scores as LeadScoreOutput[]).map((item) => ({
+        leadId: item.leadId,
+        // Clamp numeric scores; if the model omitted/garbled one, mark it unscored
+        // rather than inventing a 0.
+        score: typeof item.score === 'number' ? Math.max(0, Math.min(100, item.score)) : null,
+        reason: item.reason,
       }))
     } catch (err) {
-      // Fallback: return 0 score for all leads so import never hard-fails
+      // Explicit fallback: leave leads UNSCORED (score: null), never a fake 0.
+      // Scoring runs during import — degrade so the import still succeeds, but be
+      // honest that these weren't scored (null != "scored 0").
+      console.warn('[OpenAIProvider.scoreLeads] scoring failed — leaving leads unscored', err)
       return leads.map((l) => ({
         leadId: l.id,
-        score: 0,
-        reason: `Failed to parse AI response: ${err instanceof Error ? err.message : 'unknown error'}`,
+        score: null,
+        reason: `AI scoring failed; lead left unscored (${err instanceof Error ? err.message : 'unknown error'}).`,
       }))
     }
   }
@@ -77,17 +103,22 @@ No markdown, no explanation.`
           { role: 'user', content: leadContext },
         ],
         temperature: 0.4,
+        response_format: JSON_RESPONSE_FORMAT,
       })
 
       const content = response.choices[0]?.message.content ?? ''
       const raw = JSON.parse(content) as { subject?: unknown; body?: unknown }
-      if (typeof raw.subject !== 'string' || typeof raw.body !== 'string') {
-        throw new SyntaxError('Expected { subject, body } strings')
+      if (typeof raw.subject !== 'string' || typeof raw.body !== 'string' || raw.body.trim() === '') {
+        throw new SyntaxError('Expected non-empty { subject, body } strings')
       }
       return { subject: raw.subject, body: raw.body }
     } catch (err) {
-      console.warn('[OpenAIProvider.draftEmail] fallback triggered', err)
-      return { subject: `Draft for ${lead.email}`, body: '' }
+      // SURFACE, never persist a silent empty draft. The caller/route turns this
+      // into a clear "draft generation failed, try again" signal.
+      throw new DraftGenerationError(
+        `AI draft generation failed for ${lead.email}. Please try again.`,
+        err,
+      )
     }
   }
 
@@ -100,14 +131,21 @@ No markdown, no explanation.`
       'UNSUBSCRIBE_REQUEST', 'REFERRAL', 'UNKNOWN',
     ]
 
+    // Append the JSON-object instruction so JSON mode's "must contain 'json'"
+    // requirement holds even for custom templates that omit it.
+    const systemPrompt = `${promptTemplate}
+
+Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-1.0> }`
+
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
-          { role: 'system', content: promptTemplate },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: input.rawBody },
         ],
         temperature: 0.1,
+        response_format: JSON_RESPONSE_FORMAT,
       })
 
       const content = response.choices[0]?.message.content ?? ''
@@ -129,7 +167,11 @@ No markdown, no explanation.`
         confidence,
       }
     } catch (err) {
-      console.warn('[OpenAIProvider.classifyReply] fallback triggered', err)
+      // Explicit fallback: UNKNOWN with 0 confidence is a defined "could not
+      // classify" state — NOT silent-empty data. We deliberately degrade rather
+      // than throw so an inbound reply is still persisted (losing the reply would
+      // be worse than leaving it unclassified for manual review).
+      console.warn('[OpenAIProvider.classifyReply] classification failed — defaulting to UNKNOWN', err)
       return { classification: 'UNKNOWN', confidence: 0 }
     }
   }

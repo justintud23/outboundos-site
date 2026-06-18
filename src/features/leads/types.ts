@@ -30,7 +30,7 @@ export interface ImportBatchResult {
 
 export interface LeadScoreResult {
   leadId: string
-  score: number
+  score: number | null // null = AI scoring failed; lead left explicitly unscored
   reason: string
   success: boolean
 }

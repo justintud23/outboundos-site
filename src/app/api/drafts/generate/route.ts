@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { generateDraft } from '@/features/drafts/server/generate-draft'
 import { PendingDraftExistsError, LeadNotFoundError } from '@/features/drafts/types'
+import { DraftGenerationError } from '@/lib/ai'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 export async function POST(request: Request) {
@@ -50,6 +51,14 @@ export async function POST(request: Request) {
     }
     if (err instanceof LeadNotFoundError) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    }
+    if (err instanceof DraftGenerationError) {
+      // AI generation failed — surface a clear, retryable signal. 502: upstream
+      // (the model) failed; no draft was persisted.
+      return NextResponse.json(
+        { code: 'DRAFT_GENERATION_FAILED', error: err.message },
+        { status: 502 },
+      )
     }
     console.error('[POST /api/drafts/generate]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

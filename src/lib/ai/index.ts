@@ -1,4 +1,5 @@
 export { getAIProvider } from './router'
+export { DraftGenerationError } from './provider'
 export type {
   AIProvider,
   LeadScoreInput,

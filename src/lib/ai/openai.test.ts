@@ -17,6 +17,18 @@ vi.mock('openai', () => {
 
 import OpenAI from 'openai'
 import { OpenAIProvider } from './openai'
+import { DraftGenerationError } from './provider'
+
+describe('OpenAIProvider construction', () => {
+  it('configures the client with a timeout and bounded retries', () => {
+    vi.clearAllMocks()
+    new OpenAIProvider('test-key', 'gpt-4o')
+    const ctor = OpenAI as unknown as ReturnType<typeof vi.fn>
+    expect(ctor).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'test-key', timeout: 30_000, maxRetries: 2 }),
+    )
+  })
+})
 
 describe('OpenAIProvider.scoreLeads', () => {
   let provider: OpenAIProvider
@@ -31,14 +43,14 @@ describe('OpenAIProvider.scoreLeads', () => {
     mockCreate = client.chat.completions.create
   })
 
-  it('returns a score and reason for each lead', async () => {
+  it('returns a score and reason for each lead (JSON-mode { scores: [...] })', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [
         {
           message: {
-            content: JSON.stringify([
-              { leadId: 'lead-1', score: 75, reason: 'Senior title at mid-size company' },
-            ]),
+            content: JSON.stringify({
+              scores: [{ leadId: 'lead-1', score: 75, reason: 'Senior title at mid-size company' }],
+            }),
           },
         },
       ],
@@ -53,7 +65,17 @@ describe('OpenAIProvider.scoreLeads', () => {
     expect(result[0]).toMatchObject({ leadId: 'lead-1', score: 75 })
   })
 
-  it('returns score 0 with error reason when parsing fails', async () => {
+  it('requests JSON mode (response_format json_object)', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ scores: [] }) } }],
+    })
+    await provider.scoreLeads([{ id: 'lead-1', email: 'a@b.com' }], 'Score.')
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ response_format: { type: 'json_object' } }),
+    )
+  })
+
+  it('leaves leads UNSCORED (score: null), not a fake 0, when parsing fails', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [{ message: { content: 'not valid json' } }],
     })
@@ -63,8 +85,19 @@ describe('OpenAIProvider.scoreLeads', () => {
       'Score this lead.',
     )
 
-    expect(result[0]?.score).toBe(0)
-    expect(result[0]?.reason).toContain('parse')
+    expect(result[0]?.score).toBeNull()
+    expect(result[0]?.reason).toMatch(/unscored/i)
+  })
+
+  it('leaves leads unscored when the AI call itself throws (transport failure)', async () => {
+    mockCreate.mockRejectedValueOnce(new Error('connection reset'))
+
+    const result = await provider.scoreLeads(
+      [{ id: 'lead-1', email: 'test@acme.com' }],
+      'Score this lead.',
+    )
+
+    expect(result[0]?.score).toBeNull()
   })
 })
 
@@ -81,7 +114,7 @@ describe('OpenAIProvider.draftEmail', () => {
     mockCreate = client.chat.completions.create
   })
 
-  it('returns subject and body from AI response', async () => {
+  it('returns subject and body from AI response (and requests JSON mode)', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [
         { message: { content: JSON.stringify({ subject: 'Hello Jane', body: 'Hi Jane...' }) } },
@@ -94,20 +127,37 @@ describe('OpenAIProvider.draftEmail', () => {
     )
 
     expect(result).toEqual({ subject: 'Hello Jane', body: 'Hi Jane...' })
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ response_format: { type: 'json_object' } }),
+    )
   })
 
-  it('returns fallback subject and empty body on parse failure', async () => {
+  it('SURFACES DraftGenerationError on parse failure (never a silent empty body)', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [{ message: { content: 'not valid json' } }],
     })
 
-    const result = await provider.draftEmail(
-      { id: 'lead-1', email: 'jane@acme.com' },
-      'You are a sales email writer.',
-    )
+    await expect(
+      provider.draftEmail({ id: 'lead-1', email: 'jane@acme.com' }, 'You are a sales email writer.'),
+    ).rejects.toBeInstanceOf(DraftGenerationError)
+  })
 
-    expect(result.subject).toBe('Draft for jane@acme.com')
-    expect(result.body).toBe('')
+  it('SURFACES DraftGenerationError when the model returns an empty body', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ subject: 'Hi', body: '' }) } }],
+    })
+
+    await expect(
+      provider.draftEmail({ id: 'lead-1', email: 'jane@acme.com' }, 'prompt'),
+    ).rejects.toBeInstanceOf(DraftGenerationError)
+  })
+
+  it('SURFACES DraftGenerationError when the AI call throws (transport failure)', async () => {
+    mockCreate.mockRejectedValueOnce(new Error('gateway timeout'))
+
+    await expect(
+      provider.draftEmail({ id: 'lead-1', email: 'jane@acme.com' }, 'prompt'),
+    ).rejects.toBeInstanceOf(DraftGenerationError)
   })
 })
 
@@ -135,7 +185,7 @@ describe('OpenAIProvider.classifyReply', () => {
     mockCreate = client.chat.completions.create
   })
 
-  it('returns classification and confidence from AI response', async () => {
+  it('returns classification and confidence from AI response (JSON mode + temperature)', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ classification: 'POSITIVE', confidence: 0.95 }) } }],
     })
@@ -143,7 +193,9 @@ describe('OpenAIProvider.classifyReply', () => {
     const result = await provider.classifyReply({ rawBody: 'I am very interested!' }, 'classify prompt')
 
     expect(result).toEqual({ classification: 'POSITIVE', confidence: 0.95 })
-    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ temperature: 0.1 }))
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: 0.1, response_format: { type: 'json_object' } }),
+    )
   })
 
   it('returns UNKNOWN with 0 confidence on parse failure', async () => {
@@ -177,20 +229,22 @@ describe('OpenAIProvider.classifyReply', () => {
     expect(result.classification).toBe('NEGATIVE')
   })
 
-  it('passes rawBody as user message and promptTemplate as system message', async () => {
+  it('passes rawBody as the user message and the template (+ JSON instruction) as system', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ classification: 'OUT_OF_OFFICE', confidence: 0.99 }) } }],
     })
 
     await provider.classifyReply({ rawBody: 'I am on holiday' }, 'system prompt here')
 
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messages: expect.arrayContaining([
-          { role: 'system', content: 'system prompt here' },
-          { role: 'user', content: 'I am on holiday' },
-        ]),
-      }),
-    )
+    const arg = mockCreate.mock.calls[0]?.[0] as {
+      messages: { role: string; content: string }[]
+    }
+    const system = arg.messages.find((m) => m.role === 'system')
+    const user = arg.messages.find((m) => m.role === 'user')
+    // The template is preserved; a JSON-object instruction is appended so JSON
+    // mode's "must contain json" requirement holds even for custom templates.
+    expect(system?.content).toContain('system prompt here')
+    expect(system?.content.toLowerCase()).toContain('json')
+    expect(user?.content).toBe('I am on holiday')
   })
 })
