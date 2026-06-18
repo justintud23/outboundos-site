@@ -343,6 +343,13 @@ model Mailbox {
   sentToday   Int      @default(0)
   lastResetAt DateTime @default(now())
 
+  // Warmup: new mailboxes ramp their daily volume up gradually (see
+  // features/mailboxes/warmup.ts) to protect sender reputation. Defaults to
+  // enabled for NEW mailboxes; the migration backfills existing mailboxes to
+  // false so already-established inboxes are not suddenly throttled.
+  warmupEnabled   Boolean  @default(true)
+  warmupStartedAt DateTime @default(now())
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

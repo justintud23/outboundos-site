@@ -14,6 +14,7 @@ import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { LeadInTerminalStateError } from '../types'
+import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 
 interface SendDraftInput {
   organizationId: string
@@ -37,14 +38,17 @@ function startOfDay(d: Date): Date {
  *      stamps lastResetAt=startOfToday; every other concurrent send then sees a
  *      non-stale lastResetAt and its reset is a no-op. No read-modify-write, so
  *      no lost reset and no double-reset.
- *   2. Conditional increment — bump sentToday ONLY while it is below the limit.
- *      Because the guard lives in the WHERE clause, the database serializes the
- *      row updates: at most `dailyLimit` increments can ever succeed, no matter
- *      how many sends race. count === 0 means the mailbox just filled up.
+ *   2. Conditional increment — bump sentToday ONLY while it is below
+ *      `limitToday`. Because the guard lives in the WHERE clause, the database
+ *      serializes the row updates: at most `limitToday` increments can ever
+ *      succeed, no matter how many sends race. count === 0 means the mailbox hit
+ *      today's limit. `limitToday` is the EFFECTIVE limit (warmup ramp applied),
+ *      computed by the caller and passed as the literal bound — so warmup
+ *      throttling is enforced with the same atomic guarantee.
  */
 async function reserveMailboxSlot(
   mailboxId: string,
-  dailyLimit: number,
+  limitToday: number,
   startOfToday: Date,
 ): Promise<boolean> {
   await prisma.mailbox.updateMany({
@@ -53,7 +57,7 @@ async function reserveMailboxSlot(
   })
 
   const reservation = await prisma.mailbox.updateMany({
-    where: { id: mailboxId, sentToday: { lt: dailyLimit } },
+    where: { id: mailboxId, sentToday: { lt: limitToday } },
     data: { sentToday: { increment: 1 } },
   })
 
@@ -119,9 +123,12 @@ export async function sendDraft({
     return { mailbox: m, effectiveSentToday: isNewDay ? 0 : m.sentToday }
   })
 
-  // Only mailboxes that still have daily headroom are eligible.
+  // Only mailboxes that still have headroom under TODAY'S limit are eligible.
+  // effectiveDailyLimit applies the warmup ramp: a warming mailbox's limit today
+  // may be well below its configured dailyLimit, so cold mailboxes don't blast
+  // full volume. A mailbox with warmup off uses its dailyLimit directly.
   const candidates = withUsage.filter(
-    (c) => c.effectiveSentToday < c.mailbox.dailyLimit,
+    (c) => c.effectiveSentToday < effectiveDailyLimit(c.mailbox, now),
   )
 
   // Least-recently-used selection so volume spreads evenly instead of always
@@ -192,7 +199,12 @@ export async function sendDraft({
   //    reservation, roll to the next eligible mailbox in order.
   let reserved: (typeof candidates)[number]['mailbox'] | null = null
   for (const c of candidates) {
-    if (await reserveMailboxSlot(c.mailbox.id, c.mailbox.dailyLimit, startOfToday)) {
+    // Guard the atomic reservation on TODAY'S effective (ramped) limit, not the
+    // raw dailyLimit. The effective limit is computed in JS and passed as the
+    // literal bound in the conditional UPDATE's WHERE, so the reservation stays
+    // atomic: at most `effectiveLimitToday` increments can succeed today.
+    const effectiveLimitToday = effectiveDailyLimit(c.mailbox, now)
+    if (await reserveMailboxSlot(c.mailbox.id, effectiveLimitToday, startOfToday)) {
       reserved = c.mailbox
       break
     }

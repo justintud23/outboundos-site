@@ -78,6 +78,8 @@ interface MailboxRow {
   dailyLimit: number
   sentToday: number
   lastResetAt: Date
+  warmupEnabled: boolean
+  warmupStartedAt: Date
 }
 
 // ── Typed shapes for the Prisma mock callbacks (no `any`) ──
@@ -115,6 +117,10 @@ function mailbox(overrides: Partial<MailboxRow> & { id: string }): MailboxRow {
     dailyLimit: 50,
     sentToday: 0,
     lastResetAt: new Date(), // today
+    // Warmup OFF by default so existing cases exercise the raw dailyLimit;
+    // warmup-specific tests opt in explicitly.
+    warmupEnabled: false,
+    warmupStartedAt: new Date(),
     ...overrides,
   }
 }
@@ -387,6 +393,59 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DraftSendInProgressError)
     expect(mockSendEmail).not.toHaveBeenCalled()
     expect(store['mb-1'].sentToday).toBe(5)
+  })
+
+  // ─── Warmup ramp ──────────────────────────────────────────────────────────
+
+  it('a warming mailbox blocks at its ramped limit even though dailyLimit is higher', async () => {
+    // Day 1 of warmup → ramp floor is 10, far below dailyLimit 50.
+    setMailboxes([
+      mailbox({ id: 'mb-1', sentToday: 9, dailyLimit: 50, warmupEnabled: true, warmupStartedAt: new Date() }),
+    ])
+
+    // 9 -> 10 succeeds (10 is today's effective cap).
+    const ok = await sendDraft(INPUT)
+    expect(ok.status).toBe('SENT')
+    expect(store['mb-1'].sentToday).toBe(10)
+
+    // Now at the ramped cap (10) though dailyLimit is 50 → blocked.
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
+    expect(store['mb-1'].sentToday).toBe(10) // never exceeds the effective cap
+  })
+
+  it('atomic under warmup: N concurrent sends against effective cap K → exactly K succeed', async () => {
+    // dailyLimit 50 but day-1 warmup → effective cap 10.
+    const K = 10
+    const N = 14
+    setMailboxes([
+      mailbox({ id: 'mb-1', sentToday: 0, dailyLimit: 50, warmupEnabled: true, warmupStartedAt: new Date() }),
+    ])
+    mockPrisma.draft.findFirst.mockImplementation(async ({ where }: FindFirstArgs) => ({
+      ...fakeDraft, id: where.id, leadId: `lead-${where.id}`,
+    }))
+
+    const results = await Promise.allSettled(
+      Array.from({ length: N }, (_, i) =>
+        sendDraft({ organizationId: 'org-1', draftId: `draft-${i}`, clerkUserId: 'user-1' }),
+      ),
+    )
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(K)
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(N - K)
+    // Hard guarantee under the RAMPED limit, not the configured dailyLimit.
+    expect(store['mb-1'].sentToday).toBe(K)
+    expect(store['mb-1'].sentToday).toBeLessThan(store['mb-1'].dailyLimit)
+    expect(mockSendEmail).toHaveBeenCalledTimes(K)
+  })
+
+  it('warmup disabled uses the full dailyLimit (no surprise throttling of established inboxes)', async () => {
+    // Established mailbox: warmup off, high dailyLimit, already past the ramp age.
+    setMailboxes([
+      mailbox({ id: 'mb-1', sentToday: 40, dailyLimit: 50, warmupEnabled: false, warmupStartedAt: new Date() }),
+    ])
+    const result = await sendDraft(INPUT)
+    expect(result.status).toBe('SENT')
+    expect(store['mb-1'].sentToday).toBe(41) // ramp floor (10) does NOT apply
   })
 
   it('concurrent double-invocation of the SAME draft: one sends, the other gets a distinct error', async () => {

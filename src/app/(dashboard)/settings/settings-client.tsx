@@ -41,12 +41,29 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
     setDisplayName('')
   }
 
+  async function handleToggleWarmup(mb: MailboxDTO) {
+    // Optimistic flip is avoided; just patch and replace with the server's DTO
+    // (which recomputes the effective limit / ramp day).
+    const res = await fetch(`/api/mailboxes/${mb.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warmupEnabled: !mb.warmupEnabled }),
+    })
+    if (!res.ok) {
+      setError('Failed to update warmup.')
+      return
+    }
+    const updated = (await res.json()) as MailboxDTO
+    setMailboxes((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
+  }
+
   return (
     <div className="space-y-8 max-w-xl">
       <div>
         <h2 className="text-[var(--text-primary)] text-sm font-medium mb-1">Sending mailboxes</h2>
         <p className="text-[var(--text-muted)] text-xs">
           Outbound emails are sent from the active mailbox. Daily limit defaults to 50 emails/day.
+          New mailboxes warm up — daily volume ramps gradually to protect sender reputation.
         </p>
       </div>
 
@@ -65,7 +82,25 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
                 <span className={`text-xs px-2 py-0.5 rounded-[var(--radius-badge)] ${mb.isActive ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]' : 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]'}`}>
                   {mb.isActive ? 'Active' : 'Inactive'}
                 </span>
-                <span className="text-[var(--text-muted)] text-xs">{mb.sentToday}/{mb.dailyLimit} today</span>
+                <div className="text-right">
+                  {/* Show TODAY's effective (ramped) limit, not the raw dailyLimit. */}
+                  <span className="text-[var(--text-muted)] text-xs block">
+                    {mb.sentToday}/{mb.effectiveDailyLimit} today
+                  </span>
+                  {mb.isWarmingUp && (
+                    <span className="text-[var(--accent-indigo)] text-[11px] block">
+                      warming up · day {mb.warmupDay} (cap rises to {mb.dailyLimit})
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleWarmup(mb)}
+                  className="text-xs px-2 py-0.5 rounded-[var(--radius-badge)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-glow)] transition-colors"
+                  title={mb.warmupEnabled ? 'Warmup on — disable to send at full daily limit' : 'Warmup off — enable to ramp daily volume'}
+                >
+                  Warmup {mb.warmupEnabled ? 'on' : 'off'}
+                </button>
               </div>
             </div>
           ))}
