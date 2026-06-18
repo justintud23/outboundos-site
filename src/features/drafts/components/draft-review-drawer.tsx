@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { Dialog } from '@/components/ui/dialog'
 import type { DraftDTO, DraftWithLeadDTO } from '../types'
 
 interface DraftReviewDrawerProps {
@@ -30,16 +31,6 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
       setError(null)
     }
   }, [draft])
-
-  // Escape key closes the drawer
-  useEffect(() => {
-    if (!draft) return
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !submitting) onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [draft, submitting, onClose])
 
   // Cancel in-flight request on unmount
   useEffect(() => {
@@ -120,41 +111,53 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
   }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
-        onClick={submitting ? undefined : onClose}
-        aria-hidden="true"
-      />
-
-      {/* Drawer */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="draft-review-title"
-        className="fixed right-0 top-0 h-full w-full max-w-lg bg-[var(--bg-base)] border-l border-[var(--border-default)] z-50 flex flex-col shadow-2xl"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-default)]">
-          <h2 id="draft-review-title" className="text-[var(--text-primary)] font-semibold text-sm">
-            Review Draft
-          </h2>
-          <button
-            onClick={submitting ? undefined : onClose}
-            disabled={submitting}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors duration-[var(--transition-base)] text-lg leading-none disabled:opacity-50"
-            aria-label="Close"
-          >
-            {'\u2715'}
-          </button>
+    <Dialog
+      title="Review Draft"
+      size="lg"
+      busy={submitting}
+      onClose={onClose}
+      footer={
+        <div className="flex gap-2">
+          {!showRejectInput ? (
+            <>
+              <button
+                onClick={handleApprove}
+                disabled={submitting}
+                className="flex-1 bg-[var(--accent-indigo)] hover:bg-[var(--accent-indigo-hover)] disabled:opacity-50 text-white rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
+              >
+                {submitting ? 'Approving\u2026' : 'Approve'}
+              </button>
+              <button
+                onClick={() => setShowRejectInput(true)}
+                disabled={submitting}
+                className="px-4 py-2 text-sm text-[var(--status-danger)] border border-[var(--status-danger)]/40 rounded-[var(--radius-btn)] hover:bg-[var(--status-danger-bg)] disabled:opacity-50 transition-colors duration-[var(--transition-base)]"
+              >
+                Reject
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleReject}
+                disabled={submitting}
+                className="flex-1 bg-[var(--status-danger)] hover:brightness-110 disabled:opacity-50 text-white rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
+              >
+                {submitting ? 'Rejecting\u2026' : 'Confirm Reject'}
+              </button>
+              <button
+                onClick={() => setShowRejectInput(false)}
+                disabled={submitting}
+                className="px-4 py-2 text-sm text-[var(--text-muted)] border border-[var(--border-default)] rounded-[var(--radius-btn)] hover:bg-[var(--bg-surface-raised)] disabled:opacity-50 transition-colors duration-[var(--transition-base)]"
+              >
+                Back
+              </button>
+            </>
+          )}
         </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
-
-          {/* Lead context panel */}
-          <div className="px-5 py-4 bg-[var(--bg-surface)] border-b border-[var(--border-default)]">
+      }
+    >
+      {/* Lead context panel */}
+      <div className="px-5 py-4 bg-[var(--bg-surface)] border-b border-[var(--border-default)]">
             <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide font-medium mb-2">To</p>
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -240,47 +243,6 @@ export function DraftReviewDrawer({ draft, onClose, onReviewed }: DraftReviewDra
               </p>
             )}
           </div>
-        </div>
-
-        {/* Footer actions */}
-        <div className="px-5 py-4 border-t border-[var(--border-default)] flex gap-2">
-          {!showRejectInput ? (
-            <>
-              <button
-                onClick={handleApprove}
-                disabled={submitting}
-                className="flex-1 bg-[var(--accent-indigo)] hover:bg-[var(--accent-indigo-hover)] disabled:opacity-50 text-white rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
-              >
-                {submitting ? 'Approving…' : 'Approve'}
-              </button>
-              <button
-                onClick={() => setShowRejectInput(true)}
-                disabled={submitting}
-                className="px-4 py-2 text-sm text-[var(--status-danger)] border border-[var(--status-danger)]/40 rounded-[var(--radius-btn)] hover:bg-[var(--status-danger-bg)] disabled:opacity-50 transition-colors duration-[var(--transition-base)]"
-              >
-                Reject
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleReject}
-                disabled={submitting}
-                className="flex-1 bg-[var(--status-danger)] hover:brightness-110 disabled:opacity-50 text-white rounded-[var(--radius-btn)] px-4 py-2 text-sm font-medium transition-colors duration-[var(--transition-base)]"
-              >
-                {submitting ? 'Rejecting…' : 'Confirm Reject'}
-              </button>
-              <button
-                onClick={() => setShowRejectInput(false)}
-                disabled={submitting}
-                className="px-4 py-2 text-sm text-[var(--text-muted)] border border-[var(--border-default)] rounded-[var(--radius-btn)] hover:bg-[var(--bg-surface-raised)] disabled:opacity-50 transition-colors duration-[var(--transition-base)]"
-              >
-                Back
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </>
+    </Dialog>
   )
 }

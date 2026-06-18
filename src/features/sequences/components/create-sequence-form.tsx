@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 
 interface StepForm {
   subject: string
@@ -79,16 +80,15 @@ export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormP
           required
           className="flex-1"
         />
-        <select
+        <Select
           value={campaignId}
           onChange={(e) => setCampaignId(e.target.value)}
-          className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-sm rounded-[var(--radius-btn)] px-3 py-2 focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)]"
           required
         >
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-3">
