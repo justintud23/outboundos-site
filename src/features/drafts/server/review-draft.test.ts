@@ -107,6 +107,36 @@ describe('reviewDraft', () => {
     const data = (capturedData as { data: Record<string, unknown> }).data
     expect(data['subject']).toBe('Edited subject')
     expect(data['body']).toBe('Edited body')
+    // A CHANGED subject marks the draft manual → excluded from A/B variant stats.
+    expect(data['subjectEdited']).toBe(true)
+  })
+
+  it('does NOT set subjectEdited when the approved subject is unchanged', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(pendingDraft)
+    let capturedData: unknown
+
+    mockPrisma.$transaction.mockImplementationOnce(
+      async (fn: (tx: unknown) => Promise<unknown>) => {
+        const mockUpdateMany = vi.fn().mockImplementation((args: unknown) => {
+          capturedData = args
+          return Promise.resolve({ count: 1 })
+        })
+        const mockTx = {
+          draft: {
+            updateMany: mockUpdateMany,
+            findUnique: vi.fn().mockResolvedValue(makeApprovedDraft()),
+          },
+          auditLog: { create: vi.fn().mockResolvedValue({}) },
+        }
+        return fn(mockTx)
+      },
+    )
+
+    // Approving with the SAME subject the draft already has must not flag an edit.
+    await reviewDraft({ ...approveInput, subject: pendingDraft.subject })
+
+    const data = (capturedData as { data: Record<string, unknown> }).data
+    expect(data['subjectEdited']).toBeUndefined()
   })
 
   it('rejects a pending draft', async () => {

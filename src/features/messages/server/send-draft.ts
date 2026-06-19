@@ -193,6 +193,13 @@ export async function sendDraft({
   const threadRoot = priorMessages[0]
   const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
 
+  // A/B test attribution: carry the assigned variant onto the OutboundMessage
+  // (the row events join to) ONLY for a genuine first send with an UNEDITED
+  // subject. Threaded follow-ups (threadRoot set) and reviewer-edited subjects
+  // (draft.subjectEdited) are excluded so they never pollute a variant's stats.
+  const subjectVariantId =
+    !threadRoot && draft.subjectVariantId && !draft.subjectEdited ? draft.subjectVariantId : null
+
   // 4. CLAIM the draft BEFORE the network send. Creating the OutboundMessage in
   //    QUEUED state first means the unique draftId constraint reserves this
   //    draft atomically: two concurrent/retried sends race here, exactly one
@@ -212,6 +219,7 @@ export async function sendDraft({
         mailboxId: tentative.mailbox.id,
         draftId,
         ...(draft.campaignId && { campaignId: draft.campaignId }),
+        ...(subjectVariantId && { subjectVariantId }),
         subject: effectiveSubject,
         body: draft.body,
         status: 'QUEUED',

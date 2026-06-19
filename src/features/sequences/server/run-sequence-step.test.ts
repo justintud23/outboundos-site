@@ -81,6 +81,38 @@ describe('runSequenceStep', () => {
         draft: {
           findFirst: vi.fn().mockResolvedValue(null),
           create: vi.fn().mockResolvedValue({ id: 'draft-1' }),
+          groupBy: vi.fn().mockResolvedValue([]),
+        },
+        sequenceStep: { findUnique: vi.fn().mockResolvedValue({ winningVariantId: null, winningVariant: null, subjectVariants: [] }) },
+        sequenceEnrollment: { update: vi.fn().mockResolvedValue({}) },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      })
+    })
+
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('DRAFT_GENERATED')
+  })
+
+  it('assigns a subject variant on the FIRST step when a test exists', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+    const draftCreate = vi.fn().mockResolvedValue({ id: 'draft-1' })
+    mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      return fn({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: draftCreate,
+          groupBy: vi.fn().mockResolvedValue([]), // both arms at 0 → oldest wins
+        },
+        sequenceStep: {
+          findUnique: vi.fn().mockResolvedValue({
+            winningVariantId: null,
+            winningVariant: null,
+            subjectVariants: [
+              { id: 'v1', subject: 'Variant A subject' },
+              { id: 'v2', subject: 'Variant B subject' },
+            ],
+          }),
         },
         sequenceEnrollment: { update: vi.fn().mockResolvedValue({}) },
         auditLog: { create: vi.fn().mockResolvedValue({}) },
@@ -89,6 +121,37 @@ describe('runSequenceStep', () => {
 
     const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
     expect(result).toBe('DRAFT_GENERATED')
+    const data = draftCreate.mock.calls[0][0].data
+    expect(data.subject).toBe('Variant A subject') // the draft's subject reflects the assigned variant
+    expect(data.subjectVariantId).toBe('v1')
+  })
+
+  it('does NOT assign a variant on a follow-up step (step 2 threads, not tested)', async () => {
+    // currentStepNumber 1 → next step is step 2 (a follow-up).
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ currentStepNumber: 1 }))
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+    const draftCreate = vi.fn().mockResolvedValue({ id: 'draft-2' })
+    const stepFind = vi.fn()
+    mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      return fn({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: draftCreate,
+          groupBy: vi.fn().mockResolvedValue([]),
+        },
+        sequenceStep: { findUnique: stepFind },
+        sequenceEnrollment: { update: vi.fn().mockResolvedValue({}) },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      })
+    })
+
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('DRAFT_GENERATED')
+    // Variant selection is never consulted for a follow-up step.
+    expect(stepFind).not.toHaveBeenCalled()
+    const data = draftCreate.mock.calls[0][0].data
+    expect(data.subject).toBe('Follow up') // the step's own subject, unchanged
+    expect(data.subjectVariantId).toBeUndefined()
   })
 
   it('returns SKIPPED if draft already exists for step', async () => {
