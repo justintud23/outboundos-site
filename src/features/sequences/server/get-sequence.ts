@@ -15,7 +15,16 @@ export async function getSequence({
     where: { id: sequenceId, organizationId },
     include: {
       campaign: { select: { name: true } },
-      steps: { orderBy: { stepNumber: 'asc' } },
+      steps: {
+        orderBy: { stepNumber: 'asc' },
+        include: {
+          subjectVariants: {
+            where: { isArchived: false },
+            select: { id: true, subject: true, isArchived: true },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
       enrollments: { select: { status: true } },
     },
   })
@@ -44,6 +53,12 @@ export async function getSequence({
       subject: s.subject,
       body: s.body,
       delayDays: s.delayDays,
+      winningVariantId: s.winningVariantId,
+      variants: s.subjectVariants.map((v) => ({
+        id: v.id,
+        subject: v.subject,
+        isArchived: v.isArchived,
+      })),
     })),
     campaignName: sequence.campaign.name,
   }

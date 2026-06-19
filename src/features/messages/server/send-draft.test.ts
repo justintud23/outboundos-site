@@ -66,6 +66,8 @@ const fakeDraft = {
   status: 'APPROVED',
   campaignId: null,
   sequenceEnrollmentId: null, // not part of a sequence → no threading by default
+  subjectVariantId: null,
+  subjectEdited: false,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-02'),
   lead: { id: 'lead-1', email: 'jane@acme.com', status: 'NEW' },
@@ -480,6 +482,46 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     await sendDraft(INPUT)
     const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { messageId?: string }
     expect(createData.messageId).toMatch(/^<.+@.+>$/)
+  })
+
+  // ─── A/B subject-variant attribution ──────────────────────────────────────
+
+  it('first send, unedited: records the assigned subjectVariantId on the message', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      subjectVariantId: 'var-1',
+      subjectEdited: false,
+    })
+    await sendDraft(INPUT)
+    const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { subjectVariantId?: string }
+    expect(createData.subjectVariantId).toBe('var-1')
+  })
+
+  it('edited subject: drops the variant link so manual edits do not pollute stats', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      subjectVariantId: 'var-1',
+      subjectEdited: true, // reviewer changed the subject before approving
+    })
+    await sendDraft(INPUT)
+    const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { subjectVariantId?: string }
+    expect(createData.subjectVariantId).toBeUndefined()
+  })
+
+  it('threaded follow-up: excluded from the test even if the draft carries a variant', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      sequenceEnrollmentId: 'enr-1',
+      subjectVariantId: 'var-1',
+      subjectEdited: false,
+    })
+    // A prior message in the thread → this is a follow-up, not a first send.
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { messageId: '<m1@app.test>', subject: 'Intro to Acme' },
+    ])
+    await sendDraft(INPUT)
+    const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { subjectVariantId?: string }
+    expect(createData.subjectVariantId).toBeUndefined()
   })
 
   // ─── Claim-before-send / dedupe preserved ─────────────────────────────────

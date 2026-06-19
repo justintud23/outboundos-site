@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { checkEnrollmentStop } from './check-enrollment-stop'
+import { selectSubjectVariant } from './select-subject-variant'
 import type { StepResult } from '../types'
 
 interface RunStepInput {
@@ -93,6 +94,20 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
       return 'SKIPPED' as const
     }
 
+    // Subject-line A/B test: ONLY the first step is tested (follow-ups thread as
+    // "Re: <root>"). Assign a balanced variant; null falls back to the step's own
+    // subject (no test). The assigned variant is recorded on the draft so opens/
+    // replies can attribute back to it once the message is actually sent.
+    let subject = nextStep.subject
+    let subjectVariantId: string | null = null
+    if (nextStep.stepNumber === 1) {
+      const variant = await selectSubjectVariant(tx, nextStep.id)
+      if (variant) {
+        subject = variant.subject
+        subjectVariantId = variant.variantId
+      }
+    }
+
     // Create draft
     await tx.draft.create({
       data: {
@@ -102,9 +117,10 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
         sequenceId: enrollment.sequenceId,
         sequenceStepId: nextStep.id,
         sequenceEnrollmentId: enrollment.id,
-        subject: nextStep.subject,
+        subject,
         body: nextStep.body,
         status: 'PENDING_REVIEW',
+        ...(subjectVariantId && { subjectVariantId }),
       },
     })
 

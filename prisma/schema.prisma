@@ -291,6 +291,16 @@ model SequenceStep {
   body       String
   delayDays  Int @default(0)
 
+  // Subject-line A/B test (FIRST step only — follow-ups thread as "Re: <root>").
+  // Each SubjectVariant is one arm of the test for this step; the step's own
+  // `subject` above is the default used when there is no test (0–1 active variants).
+  // winningVariant is the arm a human manually picked as the winner: once set,
+  // only the winner is assigned to NEW first-step drafts (losers stop being used);
+  // already-queued/sent messages are untouched.
+  subjectVariants  SubjectVariant[] @relation("StepVariants")
+  winningVariantId String?
+  winningVariant   SubjectVariant?  @relation("StepWinner", fields: [winningVariantId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -299,6 +309,34 @@ model SequenceStep {
   @@unique([sequenceId, stepNumber])
   @@index([sequenceId])
   @@map("sequence_steps")
+}
+
+// ─── SUBJECT VARIANTS (A/B test arms) ─────────────────────────
+// One arm of a subject-line A/B test, attached to a sequence STEP (only the
+// first step is tested in practice). Per-variant open/reply rates are DERIVED
+// from MessageEvent / InboundReply via OutboundMessage.subjectVariantId — never
+// stored as denormalized counters. Variants are ARCHIVED (isArchived) rather
+// than hard-deleted so historical stats survive removal.
+
+model SubjectVariant {
+  id             String       @id @default(cuid())
+  organizationId String
+  sequenceStepId String
+  sequenceStep   SequenceStep @relation("StepVariants", fields: [sequenceStepId], references: [id], onDelete: Cascade)
+
+  subject    String
+  isArchived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wonByStep        SequenceStep[]    @relation("StepWinner")
+  drafts           Draft[]
+  outboundMessages OutboundMessage[]
+
+  @@index([sequenceStepId])
+  @@index([organizationId])
+  @@map("subject_variants")
 }
 
 // ─── SEQUENCE ENROLLMENTS ─────────────────────────────────────
@@ -399,6 +437,13 @@ model Draft {
   promptTemplateId String?
   promptTemplate   PromptTemplate? @relation(fields: [promptTemplateId], references: [id])
 
+  // A/B test: the variant ASSIGNED to this draft (first-step only; null = no test).
+  // subjectEdited is set when a reviewer changes the subject before sending — an
+  // edited subject is "manual" and excluded from the variant's stats.
+  subjectVariantId String?
+  subjectVariant   SubjectVariant? @relation(fields: [subjectVariantId], references: [id], onDelete: SetNull)
+  subjectEdited    Boolean         @default(false)
+
   subject String
   body    String
   status  DraftStatus @default(PENDING_REVIEW)
@@ -435,6 +480,12 @@ model OutboundMessage {
   draftId        String?   @unique
   draft          Draft?        @relation(fields: [draftId], references: [id])
 
+  // A/B test attribution key: the variant ACTUALLY sent (first send, unedited
+  // subject). Null for follow-ups, edited subjects, and non-test sends. Per-variant
+  // stats join opens/replies here. SetNull on variant removal preserves the message.
+  subjectVariantId String?
+  subjectVariant   SubjectVariant? @relation(fields: [subjectVariantId], references: [id], onDelete: SetNull)
+
   sgMessageId String?       @unique
   // Our OWN RFC 5322 Message-ID (angle-bracketed), generated and set as the
   // Message-ID header on send. SendGrid's sgMessageId (x-message-id) is an
@@ -458,6 +509,7 @@ model OutboundMessage {
   @@index([mailboxId])
   @@index([organizationId, sentAt])
   @@index([leadId, sentAt])
+  @@index([subjectVariantId])
   @@map("outbound_messages")
 }
 

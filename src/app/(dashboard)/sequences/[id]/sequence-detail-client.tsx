@@ -5,16 +5,18 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { EnrollmentTable } from '@/features/sequences/components/enrollment-table'
 import { EnrollModal } from '@/features/sequences/components/enroll-modal'
-import type { SequenceDetailDTO, EnrollmentDTO } from '@/features/sequences/types'
+import { SubjectAbTest } from '@/features/sequences/components/subject-ab-test'
+import type { SequenceDetailDTO, EnrollmentDTO, SubjectVariantTestDTO } from '@/features/sequences/types'
 import type { LeadStatus } from '@prisma/client'
 
 interface SequenceDetailClientProps {
   sequence: SequenceDetailDTO
+  firstStepStats: SubjectVariantTestDTO | null
   initialEnrollments: EnrollmentDTO[]
   leads: { id: string; email: string; firstName: string | null; lastName: string | null; status: LeadStatus }[]
 }
 
-export function SequenceDetailClient({ sequence, initialEnrollments, leads }: SequenceDetailClientProps) {
+export function SequenceDetailClient({ sequence, firstStepStats, initialEnrollments, leads }: SequenceDetailClientProps) {
   const [enrollments] = useState(initialEnrollments)
   const [showEnroll, setShowEnroll] = useState(false)
 
@@ -56,14 +58,28 @@ export function SequenceDetailClient({ sequence, initialEnrollments, leads }: Se
                   <div className="w-px h-8 bg-[var(--border-default)]" />
                 )}
               </div>
-              <div className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-btn)] p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-[var(--text-primary)] text-sm font-medium">{step.subject}</p>
-                  {step.delayDays > 0 && (
-                    <Badge variant="muted">+{step.delayDays}d</Badge>
-                  )}
+              <div className="flex-1">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-btn)] p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-[var(--text-primary)] text-sm font-medium">{step.subject}</p>
+                    {step.delayDays > 0 && (
+                      <Badge variant="muted">+{step.delayDays}d</Badge>
+                    )}
+                    {step.stepNumber === 1 && step.variants.length >= 2 && (
+                      <Badge variant="default">A/B · {step.variants.length}</Badge>
+                    )}
+                  </div>
+                  <p className="text-[var(--text-muted)] text-xs line-clamp-2">{step.body}</p>
                 </div>
-                <p className="text-[var(--text-muted)] text-xs line-clamp-2">{step.body}</p>
+                {/* A/B subject test — first step only (follow-ups thread as "Re: …"). */}
+                {step.stepNumber === 1 && (
+                  <SubjectAbTest
+                    stepId={step.id}
+                    variants={step.variants}
+                    winningVariantId={step.winningVariantId}
+                    stats={firstStepStats}
+                  />
+                )}
               </div>
             </div>
           ))}

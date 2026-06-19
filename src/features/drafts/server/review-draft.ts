@@ -30,6 +30,11 @@ export async function reviewDraft({
     throw new DraftNotFoundError()
   }
 
+  // A subject the reviewer actually CHANGED makes this send "manual" — it no
+  // longer represents the assigned A/B variant, so it must be excluded from that
+  // variant's stats. send-draft reads subjectEdited to drop the variant link.
+  const subjectChanged = subject !== undefined && subject !== existing.subject
+
   const updated = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
@@ -44,6 +49,7 @@ export async function reviewDraft({
           status: 'APPROVED',
           ...(subject !== undefined && { subject }),
           ...(body !== undefined && { body }),
+          ...(subjectChanged && { subjectEdited: true }),
           approvedByClerkId: clerkUserId,
           approvedAt: now,
         },

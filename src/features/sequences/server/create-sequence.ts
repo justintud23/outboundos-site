@@ -70,6 +70,9 @@ export async function createSequence(input: CreateSequenceInput): Promise<Sequen
       subject: s.subject,
       body: s.body,
       delayDays: s.delayDays,
+      // A freshly created sequence has no A/B variants and no winner yet.
+      variants: [],
+      winningVariantId: null,
     })),
     campaignName: campaign.name,
   }
