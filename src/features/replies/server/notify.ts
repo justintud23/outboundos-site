@@ -69,60 +69,75 @@ function leadUrl(leadId: string): string | null {
 }
 
 export async function notifyReply(replyId: string): Promise<boolean> {
-  const reply = await prisma.inboundReply.findUnique({
-    where: { id: replyId },
-    include: {
-      lead: { select: { firstName: true, lastName: true, email: true, company: true, title: true } },
-      mailbox: { select: { email: true } },
-      outboundMessage: { select: { campaign: { select: { name: true } } } },
-    },
-  })
-  if (!reply || reply.notifiedAt) return false
+  try {
+    const reply = await prisma.inboundReply.findUnique({
+      where: { id: replyId },
+      include: {
+        lead: { select: { firstName: true, lastName: true, email: true, company: true, title: true } },
+        mailbox: { select: { email: true } },
+        outboundMessage: { select: { campaign: { select: { name: true } } } },
+      },
+    })
+    if (!reply || reply.notifiedAt) return false
 
-  const leadName = [reply.lead.firstName, reply.lead.lastName].filter(Boolean).join(' ') || reply.lead.email
-  const { subject, text } = buildReplyNotification({
-    classification: reply.classification,
-    confidence: reply.classificationConfidence,
-    leadName,
-    leadEmail: reply.lead.email,
-    company: reply.lead.company,
-    title: reply.lead.title,
-    campaignName: reply.outboundMessage?.campaign?.name ?? null,
-    mailboxEmail: reply.mailbox?.email ?? null,
-    replyText: reply.rawBody,
-    leadUrl: leadUrl(reply.leadId),
-  })
+    const leadName = [reply.lead.firstName, reply.lead.lastName].filter(Boolean).join(' ') || reply.lead.email
+    const { subject, text } = buildReplyNotification({
+      classification: reply.classification,
+      confidence: reply.classificationConfidence,
+      leadName,
+      leadEmail: reply.lead.email,
+      company: reply.lead.company,
+      title: reply.lead.title,
+      campaignName: reply.outboundMessage?.campaign?.name ?? null,
+      mailboxEmail: reply.mailbox?.email ?? null,
+      replyText: reply.rawBody,
+      leadUrl: leadUrl(reply.leadId),
+    })
 
-  const ok = await deliver(reply.organizationId, subject, text)
-  if (ok) await prisma.inboundReply.update({ where: { id: replyId }, data: { notifiedAt: new Date() } })
-  return ok
+    const ok = await deliver(reply.organizationId, subject, text)
+    if (ok) await prisma.inboundReply.update({ where: { id: replyId }, data: { notifiedAt: new Date() } })
+    return ok
+  } catch (err) {
+    console.error(`[notify] reply ${replyId}: failed`, err)
+    return false
+  }
 }
 
 export async function notifyUnmatchedReply(unmatchedId: string): Promise<boolean> {
-  const reply = await prisma.unmatchedReply.findUnique({
-    where: { id: unmatchedId },
-    include: { mailbox: { select: { email: true } } },
-  })
-  if (!reply || reply.notifiedAt) return false
+  try {
+    const reply = await prisma.unmatchedReply.findUnique({
+      where: { id: unmatchedId },
+      include: { mailbox: { select: { email: true } } },
+    })
+    if (!reply || reply.notifiedAt) return false
 
-  const { subject, text } = buildReplyNotification({
-    classification: 'UNMATCHED',
-    confidence: null,
-    leadName: reply.fromEmail,
-    leadEmail: reply.fromEmail,
-    company: null,
-    title: null,
-    campaignName: null,
-    mailboxEmail: reply.mailbox.email,
-    replyText: `Subject: ${reply.subject}\n\n${reply.bodyPreview}`,
-    leadUrl: null,
-  })
+    const { subject, text } = buildReplyNotification({
+      classification: 'UNMATCHED',
+      confidence: null,
+      leadName: reply.fromEmail,
+      leadEmail: reply.fromEmail,
+      company: null,
+      title: null,
+      campaignName: null,
+      mailboxEmail: reply.mailbox.email,
+      replyText: `Subject: ${reply.subject}\n\n${reply.bodyPreview}`,
+      leadUrl: null,
+    })
 
-  const ok = await deliver(reply.organizationId, subject, text)
-  if (ok) await prisma.unmatchedReply.update({ where: { id: unmatchedId }, data: { notifiedAt: new Date() } })
-  return ok
+    const ok = await deliver(reply.organizationId, subject, text)
+    if (ok) await prisma.unmatchedReply.update({ where: { id: unmatchedId }, data: { notifiedAt: new Date() } })
+    return ok
+  } catch (err) {
+    console.error(`[notify] unmatched ${unmatchedId}: failed`, err)
+    return false
+  }
 }
 
 export async function sendOrgAlert(organizationId: string, subject: string, text: string): Promise<boolean> {
-  return deliver(organizationId, `[OutboundOS] ${subject}`, text)
+  try {
+    return await deliver(organizationId, `[OutboundOS] ${subject}`, text)
+  } catch (err) {
+    console.error(`[notify] org ${organizationId}: alert failed`, err)
+    return false
+  }
 }

@@ -95,6 +95,17 @@ describe('notifyReply', () => {
     expect(await notifyReply('r1')).toBe(false)
     expect(p.inboundReply.update).not.toHaveBeenCalled()
   })
+  it('returns false when prisma.inboundReply.findUnique rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    p.inboundReply.findUnique.mockRejectedValueOnce(new Error('db error'))
+    expect(await notifyReply('r1')).toBe(false)
+  })
+  it('returns false when prisma.inboundReply.update rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    p.inboundReply.findUnique.mockResolvedValue(reply)
+    p.inboundReply.update.mockRejectedValueOnce(new Error('update failed'))
+    expect(await notifyReply('r1')).toBe(false)
+  })
 })
 
 describe('notifyUnmatchedReply', () => {
@@ -112,5 +123,10 @@ describe('sendOrgAlert', () => {
   it('prefixes the subject', async () => {
     expect(await sendOrgAlert('org-1', 'Sending paused', 'why')).toBe(true)
     expect(send.mock.calls[0][3]).toBe('[OutboundOS] Sending paused')
+  })
+  it('returns false when prisma.organization.findUnique rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    p.organization.findUnique.mockRejectedValueOnce(new Error('org lookup failed'))
+    expect(await sendOrgAlert('org-1', 'Alert', 'text')).toBe(false)
   })
 })
