@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { normalizeCountry } from '../canada'
 import { prisma } from '@/lib/db/prisma'
 import { CsvRowSchema } from '../schemas'
 import type { ImportBatchResult, LeadDTO } from '../types'
@@ -8,6 +9,8 @@ interface ImportCsvInput {
   csvContent: string
   fileName: string
 }
+
+const STANDARD_COLUMNS = new Set(['email', 'first_name', 'last_name', 'company', 'title', 'linkedin_url', 'phone'])
 
 export async function importCsv({
   organizationId,
@@ -73,6 +76,20 @@ export async function importCsv({
 
     const data = validation.data
 
+    // Every non-standard column (city, state, country, lot count, …) is kept on
+    // the lead: it feeds {merge_fields} in templates and the CASL Canada check.
+    const extras: Record<string, string> = {}
+    for (const [key, value] of Object.entries(row)) {
+      if (STANDARD_COLUMNS.has(key) || typeof value !== 'string' || !value.trim()) continue
+      extras[key] = value.trim()
+    }
+    const hasExtras = Object.keys(extras).length > 0
+    const country = normalizeCountry(extras.country ?? extras.country_code)
+    const locationData = {
+      ...(hasExtras && { customFields: extras }),
+      ...(country && { country }),
+    }
+
     try {
       const lead = await prisma.lead.upsert({
         where: {
@@ -89,6 +106,7 @@ export async function importCsv({
           linkedinUrl: data.linkedin_url || undefined,
           phone: data.phone ?? undefined,
           importBatchId: batch.id,
+          ...locationData,
         },
         create: {
           organizationId,
@@ -101,6 +119,7 @@ export async function importCsv({
           linkedinUrl: data.linkedin_url || undefined,
           phone: data.phone,
           source: 'CSV',
+          ...locationData,
         },
       })
 

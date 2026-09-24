@@ -208,6 +208,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           sampleApprovedAt={campaign.sampleApprovedAt}
           sampleCount={campaign.sampleCount}
           msConnected={!!org.msTenantId}
+          hasPostalAddress={!!org.postalAddress?.trim()}
         />
 
         <DraftsSection drafts={campaign.drafts} draftTotal={campaign.draftTotal} />

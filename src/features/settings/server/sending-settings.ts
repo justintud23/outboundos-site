@@ -19,6 +19,9 @@ export interface SendingSettingsDTO {
   pausedReason: string | null
   guardrailBlockedPhrases: string[]
   guardrailAllowedWords: string[]
+  businessName: string | null
+  postalAddress: string | null
+  allowCanadianRecipients: boolean
   msConnected: boolean
 }
 
@@ -27,6 +30,7 @@ export type SendingSettingsPatch = Partial<Omit<SendingSettingsDTO, 'pausedReaso
 const SELECT = {
   timezone: true, businessHoursStart: true, businessHoursEnd: true, sendDays: true, escalationEmail: true,
   sendingPaused: true, pausedReason: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true, msTenantId: true,
+  businessName: true, postalAddress: true, allowCanadianRecipients: true,
 } as const
 
 function toDTO(o: { msTenantId: string | null } & Omit<SendingSettingsDTO, 'msConnected'>): SendingSettingsDTO {
@@ -78,6 +82,19 @@ export async function updateSendingSettings(organizationId: string, patch: Sendi
     data.sendingPaused = patch.sendingPaused
     data.pausedReason = patch.sendingPaused ? 'Paused manually from Settings.' : null
   }
+  if (patch.businessName !== undefined) {
+    data.businessName = patch.businessName?.trim() || null
+  }
+  if (patch.postalAddress !== undefined) {
+    const address = patch.postalAddress?.trim() || null
+    // CAN-SPAM needs a real street address or registered PO box; reject
+    // obvious junk but don't try to validate addresses beyond that.
+    if (address && address.replace(/\s+/g, ' ').length < 10) {
+      throw new SettingsValidationError('Enter a full mailing address (street or PO box, city, state, ZIP)')
+    }
+    data.postalAddress = address
+  }
+  if (patch.allowCanadianRecipients !== undefined) data.allowCanadianRecipients = patch.allowCanadianRecipients
   if (patch.guardrailBlockedPhrases !== undefined) data.guardrailBlockedPhrases = cleanList(patch.guardrailBlockedPhrases)
   if (patch.guardrailAllowedWords !== undefined) data.guardrailAllowedWords = cleanList(patch.guardrailAllowedWords)
 

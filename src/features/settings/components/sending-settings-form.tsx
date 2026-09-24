@@ -56,6 +56,9 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
   const [sendDays, setSendDays] = useState<Set<number>>(new Set(initial.sendDays))
   const [blockedPhrases, setBlockedPhrases] = useState(listToText(initial.guardrailBlockedPhrases))
   const [allowedWords, setAllowedWords] = useState(listToText(initial.guardrailAllowedWords))
+  const [businessName, setBusinessName] = useState(initial.businessName ?? '')
+  const [postalAddress, setPostalAddress] = useState(initial.postalAddress ?? '')
+  const [allowCanadian, setAllowCanadian] = useState(initial.allowCanadianRecipients)
 
   const [saving, setSaving] = useState(false)
   const [pausing, setPausing] = useState(false)
@@ -90,6 +93,9 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
       sendDays: Array.from(sendDays),
       guardrailBlockedPhrases: textToList(blockedPhrases),
       guardrailAllowedWords: textToList(allowedWords),
+      businessName: businessName.trim() || null,
+      postalAddress: postalAddress.trim() || null,
+      allowCanadianRecipients: allowCanadian,
     })
 
     setSaving(false)
@@ -137,7 +143,42 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
         <p className="text-[var(--status-danger)] text-xs">{settings.pausedReason}</p>
       )}
 
+      {!settings.postalAddress && (
+        <p role="alert" className="text-[var(--status-danger)] text-xs">
+          Sending is blocked until you add your business mailing address below. US law (CAN-SPAM) requires it in every email.
+        </p>
+      )}
+
       <form onSubmit={handleSave} className="space-y-4">
+        <div>
+          <label className="text-[var(--text-secondary)] text-xs font-medium block mb-1" htmlFor="businessName">
+            Business name
+          </label>
+          <Input
+            id="businessName"
+            placeholder="Acme Snow & Paving LLC"
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="text-[var(--text-secondary)] text-xs font-medium block mb-1" htmlFor="postalAddress">
+            Mailing address
+          </label>
+          <textarea
+            id="postalAddress"
+            rows={2}
+            placeholder={'123 Main St\nBuffalo, NY 14201'}
+            value={postalAddress}
+            onChange={(e) => setPostalAddress(e.target.value)}
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] rounded-[var(--radius-btn)] px-3 py-2 text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] resize-none"
+          />
+          <p className="text-[var(--text-muted)] text-xs mt-1">
+            Shown at the bottom of every email (required by CAN-SPAM). A PO box registered with USPS is fine.
+          </p>
+        </div>
+
         <div>
           <label className="text-[var(--text-secondary)] text-xs font-medium block mb-1" htmlFor="escalationEmail">
             Escalation email
@@ -244,6 +285,19 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
         </div>
 
         {error && <p className="text-[var(--status-danger)] text-xs">{error}</p>}
+
+        <label className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+          <input
+            type="checkbox"
+            checked={allowCanadian}
+            onChange={(e) => setAllowCanadian(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Allow Canadian recipients. Leave off for cold outreach: Canada&apos;s anti-spam law (CASL) requires consent, so
+            Canadian leads are never emailed unless you have documented consent and turn this on.
+          </span>
+        </label>
 
         <Button type="submit" variant="primary" size="sm" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}

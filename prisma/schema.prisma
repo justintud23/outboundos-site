@@ -130,6 +130,13 @@ model Organization {
   guardrailAllowedWords   String[] @default([])
   // Microsoft 365 sending tenant (app-only Graph auth; secret lives in env).
   msTenantId         String?
+  // CAN-SPAM: every commercial email must identify the sender and carry a
+  // valid physical postal address. Sending is blocked until it's set.
+  businessName       String?
+  postalAddress      String?
+  // CASL: Canadian recipients need consent, so cold email to them is blocked
+  // unless the org explicitly allows it (only with documented consent).
+  allowCanadianRecipients Boolean @default(false)
 
   members          OrgMember[]
   leads            Lead[]
@@ -189,6 +196,8 @@ model Lead {
   scoredAt    DateTime?
 
   customFields Json?
+  // Normalized from the import's country column ('CA', 'US', or raw).
+  country      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

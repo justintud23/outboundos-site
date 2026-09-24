@@ -128,4 +128,39 @@ valid@example.com,Bob`
     expect(result.errors[0]?.message).toContain('no data rows')
     expect(result.leads).toHaveLength(0)
   })
+
+  it('keeps extra CSV columns as custom fields and records a normalized country', async () => {
+    const csvContent = `email,first_name,company,City,State,Country,Lots
+jane@acmepm.com,Jane,Acme PM,Buffalo,NY,USA,4`
+    vi.mocked(prisma.importBatch.create).mockResolvedValueOnce(mockBatch)
+    vi.mocked(prisma.importBatch.update).mockResolvedValue({ ...mockBatch, successCount: 1, status: ImportStatus.COMPLETED })
+    vi.mocked(prisma.lead.upsert).mockResolvedValue({
+      id: 'lead-1', organizationId: 'org-1', importBatchId: 'batch-1', email: 'jane@acmepm.com',
+      firstName: 'Jane', lastName: null, company: 'Acme PM', title: null, linkedinUrl: null, phone: null,
+      source: LeadSource.CSV, status: 'NEW' as const, score: null, scoreReason: null, scoredAt: null,
+      customFields: null, country: 'US', createdAt: new Date(), updatedAt: new Date(),
+    })
+
+    await importCsv({ organizationId: 'org-1', csvContent, fileName: 'leads.csv' })
+
+    const args = vi.mocked(prisma.lead.upsert).mock.calls[0]![0]
+    const expected = { customFields: { city: 'Buffalo', state: 'NY', country: 'USA', lots: '4' }, country: 'US' }
+    expect(args.create).toMatchObject(expected)
+    expect(args.update).toMatchObject(expected)
+  })
+
+  it('leaves customFields and country unset when the CSV has only standard columns', async () => {
+    vi.mocked(prisma.importBatch.create).mockResolvedValueOnce(mockBatch)
+    vi.mocked(prisma.importBatch.update).mockResolvedValue({ ...mockBatch, successCount: 1, status: ImportStatus.COMPLETED })
+    vi.mocked(prisma.lead.upsert).mockResolvedValue({
+      id: 'lead-1', organizationId: 'org-1', importBatchId: 'batch-1', email: 'a@b.com',
+      firstName: null, lastName: null, company: null, title: null, linkedinUrl: null, phone: null,
+      source: LeadSource.CSV, status: 'NEW' as const, score: null, scoreReason: null, scoredAt: null,
+      customFields: null, country: null, createdAt: new Date(), updatedAt: new Date(),
+    })
+    await importCsv({ organizationId: 'org-1', csvContent: 'email\na@b.com', fileName: 'x.csv' })
+    const args = vi.mocked(prisma.lead.upsert).mock.calls[0]![0]
+    expect(args.create).not.toHaveProperty('customFields')
+    expect(args.update).not.toHaveProperty('customFields')
+  })
 })

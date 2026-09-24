@@ -28,6 +28,9 @@ export interface SendEmailInput {
   // is sent. The caller persists the id so a crash between send and DB write
   // can be reconciled without a duplicate send. SendGrid never calls it.
   onPrepared?: (providerMessageId: string) => Promise<void>
+  // CAN-SPAM sender identification + postal address, rendered into the body
+  // footer (with the unsubscribe link) by every provider.
+  sender?: { businessName: string | null; postalAddress: string }
 }
 
 export interface SendEmailOutput {

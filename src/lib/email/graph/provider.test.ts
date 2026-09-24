@@ -7,7 +7,8 @@ vi.mock('./mail', () => ({
 }))
 
 import { createDraftMessage, createReplyDraft, sendDraftMessage } from './mail'
-import { GraphEmailProvider, appendUnsubscribeFooter } from './provider'
+import { GraphEmailProvider } from './provider'
+import { buildComplianceFooter } from '../compliance'
 
 const create = createDraftMessage as ReturnType<typeof vi.fn>
 const reply = createReplyDraft as ReturnType<typeof vi.fn>
@@ -42,8 +43,19 @@ describe('GraphEmailProvider', () => {
 
   it('appends the unsubscribe link to the body', async () => {
     await new GraphEmailProvider('t').sendEmail({ ...input, listUnsubscribe: { url: 'https://app/u?token=abc' } })
-    expect(create.mock.calls[0][2].text).toBe(appendUnsubscribeFooter('Hello', { url: 'https://app/u?token=abc' }))
+    expect(create.mock.calls[0][2].text).toBe(buildComplianceFooter('Hello', undefined, { url: 'https://app/u?token=abc' }))
     expect(create.mock.calls[0][2].text).toContain('https://app/u?token=abc')
+  })
+
+  it('renders the CAN-SPAM sender block and unsubscribe link in the body', async () => {
+    await new GraphEmailProvider('t').sendEmail({
+      ...input,
+      sender: { businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY' },
+      listUnsubscribe: { url: 'https://app/u?token=abc' },
+    })
+    const text = create.mock.calls[0][2].text as string
+    expect(text).toContain('Acme Snow\n1 Main St, Buffalo, NY')
+    expect(text).toContain('https://app/u?token=abc')
   })
 
   it('does not send when onPrepared throws (id could not be persisted)', async () => {

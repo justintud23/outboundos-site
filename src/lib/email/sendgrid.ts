@@ -1,4 +1,5 @@
 import sgMail from '@sendgrid/mail'
+import { buildComplianceFooter } from './compliance'
 import type { EmailProvider, SendEmailInput, SendEmailOutput } from './provider'
 
 // Map the provider-agnostic listUnsubscribe intent to RFC 8058 mail headers.
@@ -42,7 +43,9 @@ export class SendGridProvider implements EmailProvider {
       to: input.to,
       from: { email: input.fromEmail, name: input.fromName },
       subject: input.subject,
-      text: input.body,
+      // Body footer as well as the List-Unsubscribe header: CAN-SPAM needs the
+      // postal address in the message itself.
+      text: buildComplianceFooter(input.body, input.sender, input.listUnsubscribe),
       // customArgs are echoed back in every SendGrid webhook event —
       // enables webhook-to-message correlation without a database lookup.
       ...(input.customArgs && { customArgs: input.customArgs }),

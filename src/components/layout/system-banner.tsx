@@ -13,12 +13,13 @@ export async function SystemBanner() {
 
     const org = await prisma.organization.findUnique({
       where: { clerkId: orgId },
-      select: { sendingPaused: true, pausedReason: true, msTenantId: true },
+      select: { sendingPaused: true, pausedReason: true, msTenantId: true, postalAddress: true },
     })
     if (!org?.msTenantId) return null
 
     const stale = await getStaleJobs()
     const messages: string[] = []
+    if (!org.postalAddress?.trim()) messages.push('Sending is blocked: add your business mailing address in Settings (required by CAN-SPAM).')
     if (org.sendingPaused) messages.push(`Sending is paused${org.pausedReason ? `: ${org.pausedReason}` : '.'}`)
     if (stale.length > 0) messages.push(`Background jobs haven't run in 30+ minutes (${stale.join(', ')}).`)
     if (messages.length === 0) return null

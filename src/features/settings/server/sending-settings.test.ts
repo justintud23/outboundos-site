@@ -8,6 +8,7 @@ import { updateSendingSettings, SettingsValidationError } from './sending-settin
 const row = {
   timezone: 'America/New_York', businessHoursStart: 8, businessHoursEnd: 17, sendDays: [1, 2, 3, 4, 5],
   escalationEmail: null, sendingPaused: false, pausedReason: null, guardrailBlockedPhrases: [], guardrailAllowedWords: [], msTenantId: null,
+  businessName: null, postalAddress: null, allowCanadianRecipients: false,
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -23,6 +24,7 @@ describe('updateSendingSettings', () => {
     [{ sendDays: [] }, /day/],
     [{ sendDays: [7] }, /day/],
     [{ escalationEmail: 'nope' }, /email/],
+    [{ postalAddress: 'Buffalo' }, /mailing address/],
   ])('rejects %o', async (patch, msg) => {
     await expect(updateSendingSettings('org-1', patch)).rejects.toThrow(msg)
     await expect(updateSendingSettings('org-1', patch)).rejects.toBeInstanceOf(SettingsValidationError)
@@ -41,5 +43,14 @@ describe('updateSendingSettings', () => {
       sendingPaused: true,
       pausedReason: 'Paused manually from Settings.',
     })
+  })
+
+  it('trims the business name and address, blanks become null, and sets the Canada switch', async () => {
+    await updateSendingSettings('org-1', { businessName: '  Acme Snow ', postalAddress: ' 1 Main St, Buffalo, NY 14201 ', allowCanadianRecipients: true })
+    expect((prisma.organization.update as ReturnType<typeof vi.fn>).mock.calls[0][0].data).toEqual({
+      businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: true,
+    })
+    await updateSendingSettings('org-1', { businessName: '', postalAddress: '   ' })
+    expect((prisma.organization.update as ReturnType<typeof vi.fn>).mock.calls[1][0].data).toEqual({ businessName: null, postalAddress: null })
   })
 })
