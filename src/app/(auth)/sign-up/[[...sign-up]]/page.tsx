@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSignUp, useAuth } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -17,13 +17,26 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
+  const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Redirect if already signed in
+  // Already signed in: go to the app. Navigating during render is unreliable
+  // under React 19 and left a blank page, so do it in an effect.
+  useEffect(() => {
+    if (isSignedIn) router.replace('/dashboard')
+  }, [isSignedIn, router])
+
+
   if (isSignedIn) {
-    router.replace('/dashboard')
-    return null
+    return (
+      <div className="w-full max-w-sm text-center">
+        <div className="flex items-center justify-center mb-4">
+          <div className="w-8 h-8 border-2 border-[var(--accent-indigo)] border-t-transparent rounded-full animate-spin" />
+        </div>
+        <p className="text-[var(--text-muted)] text-sm">Redirecting to your dashboard...</p>
+      </div>
+    )
   }
 
   if (!signUp) {
@@ -56,23 +69,17 @@ export default function SignUpPage() {
 
   async function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!signUp || !email.trim() || !password) return
+    if (!signUp || !email.trim() || !password || !username.trim()) return
     setError(null)
     setLoading(true)
-    const { error: pwError } = await signUp.password({ password, emailAddress: email })
+    const { error: pwError } = await signUp.password({ password, emailAddress: email, username: username.trim() })
     if (pwError) {
       setLoading(false)
       setError(pwError.message ?? 'Sign-up failed')
       return
     }
-    // Send verification code
-    const { error: codeError } = await signUp.verifications.sendEmailCode()
+    await continueSignUp()
     setLoading(false)
-    if (codeError) {
-      setError(codeError.message ?? 'Could not send verification code')
-      return
-    }
-    setStep('verify')
   }
 
   async function handleVerify(e: React.FormEvent) {
@@ -86,11 +93,43 @@ export default function SignUpPage() {
       setError(error.message ?? 'Invalid verification code')
       return
     }
-    if (signUp.status === 'complete') {
-      await signUp.finalize({ navigate: () => router.push('/dashboard') })
-    }
+    await continueSignUp()
     setLoading(false)
   }
+
+  // Decide the next step from Clerk's sign-up state. Every outcome must lead
+  // somewhere visible — an unhandled one used to reset the button silently.
+  async function continueSignUp() {
+    if (!signUp) return
+    if (signUp.status === 'complete') {
+      await signUp.finalize({ navigate: () => router.push('/dashboard') })
+      return
+    }
+    if (signUp.status !== 'missing_requirements') {
+      setError('This sign-up has expired. Please start again.')
+      setStep('form')
+      return
+    }
+    if (signUp.unverifiedFields.includes('email_address')) {
+      const { error } = await signUp.verifications.sendEmailCode()
+      if (error) {
+        setError(error.message ?? 'Could not send verification code')
+        return
+      }
+      setCode('')
+      setStep('verify')
+      return
+    }
+    setError(`Sign-up needs information this form doesn't collect yet (${signUp.missingFields.join(', ') || 'unknown'}). Please contact support.`)
+  }
+
+  // An OAuth sign-up can return via /sso-callback still missing the required
+  // username (the SSO flow can't send one); say so instead of a silent form.
+  const oauthNeedsUsername =
+    step === 'form' &&
+    signUp.status === 'missing_requirements' &&
+    signUp.missingFields.includes('username') &&
+    !signUp.unverifiedFields.includes('email_address')
 
   if (step === 'redirecting') {
     return (
@@ -118,8 +157,13 @@ export default function SignUpPage() {
       </div>
 
       {/* Error */}
+      {!error && oauthNeedsUsername && (
+        <div role="alert" className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          This account needs a username, which Google, LinkedIn and Microsoft sign-up can&apos;t set yet. Please sign up with email and password below.
+        </div>
+      )}
       {error && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div role="alert" className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           {error}
         </div>
       )}
@@ -142,6 +186,21 @@ export default function SignUpPage() {
 
           {/* Form */}
           <form onSubmit={handleFormSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                Username
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. mike_smith"
+                autoComplete="username"
+                required
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-base sm:text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:border-[var(--accent-indigo)] transition-colors"
+              />
+            </div>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                 Email address
@@ -183,7 +242,7 @@ export default function SignUpPage() {
             </div>
             <button
               type="submit"
-              disabled={loading || !email.trim() || !password}
+              disabled={loading || !email.trim() || !password || !username.trim()}
               className="w-full px-4 py-2.5 rounded-lg bg-[var(--accent-indigo)] text-[var(--text-inverse)] text-sm font-medium hover:bg-[var(--accent-indigo-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? 'Creating account...' : 'Create account'}
