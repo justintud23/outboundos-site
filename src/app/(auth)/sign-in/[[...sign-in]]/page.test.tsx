@@ -16,9 +16,10 @@ const signIn = {
   sso: vi.fn(),
   mfa: { sendEmailCode: vi.fn(), verifyEmailCode: vi.fn() },
 }
+const auth = { isSignedIn: false }
 vi.mock('@clerk/nextjs', () => ({
   useSignIn: () => ({ signIn }),
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => auth,
 }))
 
 import SignInPage from './page'
@@ -37,6 +38,7 @@ async function submitPassword() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.isSignedIn = false
   signIn.status = 'needs_identifier'
   signIn.create.mockImplementation(async () => { signIn.status = 'needs_first_factor'; return { error: null } })
   signIn.finalize.mockImplementation(async ({ navigate }: { navigate: () => void }) => { navigate(); return { error: null } })
@@ -79,6 +81,13 @@ describe('SignInPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /verify/i }))
     expect(await screen.findByText('Incorrect code')).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('already signed in: redirects to the dashboard and shows a message instead of a blank page', async () => {
+    auth.isSignedIn = true
+    render(<SignInPage />)
+    expect(screen.getByText(/redirecting/i)).toBeInTheDocument()
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'))
   })
 
   it('never silently resets: an unsupported status shows an error', async () => {

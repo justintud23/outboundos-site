@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSignIn, useAuth } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -20,10 +20,21 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Redirect if already signed in
+  // Already signed in: go to the app. Navigating during render is unreliable
+  // under React 19 and left a blank page, so do it in an effect.
+  useEffect(() => {
+    if (isSignedIn) router.replace('/dashboard')
+  }, [isSignedIn, router])
+
   if (isSignedIn) {
-    router.replace('/dashboard')
-    return null
+    return (
+      <div className="w-full max-w-sm text-center">
+        <div className="flex items-center justify-center mb-4">
+          <div className="w-8 h-8 border-2 border-[var(--accent-indigo)] border-t-transparent rounded-full animate-spin" />
+        </div>
+        <p className="text-[var(--text-muted)] text-sm">Redirecting to your dashboard...</p>
+      </div>
+    )
   }
 
   if (!signIn) {
