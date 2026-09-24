@@ -52,6 +52,13 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// registeredAt is a date-only value stored at UTC midnight (e.g. the user
+// entered 2026-09-01). Rendering it in the browser's local time zone can
+// roll it back a day (Aug 31) west of UTC, so pin the formatter to UTC.
+function formatRegisteredAt(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+}
+
 interface Props {
   overview: DeliverabilityOverview
 }
@@ -238,7 +245,7 @@ export function DeliverabilityClient({ overview }: Props) {
                           </td>
                           <td className="py-3 px-4 text-xs">
                             {domain.registeredAt ? (
-                              <span className="text-[var(--text-secondary)]">{formatDate(domain.registeredAt)}</span>
+                              <span className="text-[var(--text-secondary)]">{formatRegisteredAt(domain.registeredAt)}</span>
                             ) : domain.young ? (
                               <Badge variant="warning">Young</Badge>
                             ) : (

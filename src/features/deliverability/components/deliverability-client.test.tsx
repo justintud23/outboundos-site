@@ -70,6 +70,19 @@ describe('DeliverabilityClient', () => {
     expect(screen.getByLabelText('MX: fail')).toBeInTheDocument()
   })
 
+  it('renders registeredAt in UTC so a date entered as 2026-09-01 does not display as Aug 31', () => {
+    const withRegisteredAt: DeliverabilityOverview = {
+      ...overview,
+      domains: [
+        { ...overview.domains[0]!, registeredAt: '2026-09-01T00:00:00.000Z', registeredAtSource: 'rdap' },
+        overview.domains[1]!,
+      ],
+    }
+    render(<DeliverabilityClient overview={withRegisteredAt} />)
+    expect(screen.getByText('Sep 1, 2026')).toBeInTheDocument()
+    expect(screen.queryByText('Aug 31, 2026')).not.toBeInTheDocument()
+  })
+
   it('saving a registration date PATCHes the domain', async () => {
     render(<DeliverabilityClient overview={overview} />)
     fireEvent.change(screen.getByLabelText(/registration date for new\.com/i), { target: { value: '2026-08-01' } })

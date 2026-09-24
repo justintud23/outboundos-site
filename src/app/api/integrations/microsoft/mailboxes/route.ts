@@ -5,6 +5,11 @@ import { importGraphMailboxes } from '@/features/integrations/server/microsoft'
 
 const MAX_USERS = 50
 
+// The import runs a best-effort domain check after committing mailboxes,
+// which can add up to ~25s. Keep the request alive past Vercel's short
+// default timeout so a successful import doesn't surface as a client error.
+export const maxDuration = 60
+
 interface GraphUserInput {
   id: string
   email: string

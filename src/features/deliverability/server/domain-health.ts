@@ -97,16 +97,22 @@ export async function checkDomain(id: string, deps: CheckDeps = {}): Promise<Dom
   await prisma.domainHealth.update({ where: { id }, data: { lastAttemptAt: now } })
 
   // Registration date: look it up only while unknown; a manual date always wins.
-  const registration: Prisma.DomainHealthUpdateInput = {}
-  if (!row.registeredAt && row.registeredAtSource !== 'manual') {
-    const registeredAt = await rdap(row.domain)
-    if (registeredAt) Object.assign(registration, { registeredAt, registeredAtSource: 'rdap' })
-  }
+  // RDAP and the DNS lookup are independent I/O, so run them concurrently — a
+  // slow or failing RDAP call must never delay or fail the DNS check.
+  const shouldFetchRdap = !row.registeredAt && row.registeredAtSource !== 'manual'
+  const [registeredAt, lookupResult] = await Promise.all([
+    shouldFetchRdap ? rdap(row.domain).catch(() => null) : Promise.resolve(null),
+    lookup(row.domain).then(
+      (records) => ({ ok: true as const, records }),
+      (err: unknown) => ({ ok: false as const, err }),
+    ),
+  ])
 
-  let records
-  try {
-    records = await lookup(row.domain)
-  } catch (err) {
+  const registration: Prisma.DomainHealthUpdateInput = {}
+  if (registeredAt) Object.assign(registration, { registeredAt, registeredAtSource: 'rdap' })
+
+  if (!lookupResult.ok) {
+    const err = lookupResult.err
     if (!(err instanceof DnsLookupError)) throw err
     // Couldn't check: keep status/checks (UNVERIFIED stays blocking), no alert.
     return prisma.domainHealth.update({
@@ -114,6 +120,7 @@ export async function checkDomain(id: string, deps: CheckDeps = {}): Promise<Dom
       data: { ...registration, lastAttemptAt: now, lastError: `Couldn't check DNS (${err.code}). Will retry.` },
     })
   }
+  const records = lookupResult.records
 
   const { status, checks } = evaluateDomain(row.domain, records)
   const updated = await prisma.domainHealth.update({
@@ -128,7 +135,11 @@ export async function checkDomain(id: string, deps: CheckDeps = {}): Promise<Dom
       ...(status !== row.status && { lastStatusChangeAt: now }),
     },
   })
-  await maybeAlert(updated)
+  try {
+    await maybeAlert(updated)
+  } catch (err) {
+    console.error(`[domain-health] maybeAlert failed for ${updated.domain} (${id})`, err)
+  }
   return updated
 }
 
@@ -136,7 +147,13 @@ export async function checkDomain(id: string, deps: CheckDeps = {}): Promise<Dom
 export async function refreshAllDomains(budgetMs = 25_000, deps: CheckDeps = {}): Promise<{ checked: number; failed: number }> {
   const startedAt = Date.now()
   const orgs = await prisma.organization.findMany({ where: { msTenantId: { not: null } }, select: { id: true } })
-  for (const org of orgs) await ensureDomainRows(org.id)
+  for (const org of orgs) {
+    try {
+      await ensureDomainRows(org.id)
+    } catch (err) {
+      console.error(`[domain-health] ensureDomainRows failed for org ${org.id}`, err)
+    }
+  }
 
   const rows = await prisma.domainHealth.findMany({
     where: { organization: { msTenantId: { not: null } } },

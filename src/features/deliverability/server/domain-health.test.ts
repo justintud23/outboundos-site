@@ -195,6 +195,16 @@ describe('checkDomain', () => {
     expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/getacmesnow\.com is failing/)
   })
 
+  it('maybeAlert throwing (e.g. the send or its claim) still lets checkDomain resolve with the persisted row', async () => {
+    current = row({ status: 'HEALTHY', alertedStatus: null })
+    ;(sendOrgAlert as Fn).mockRejectedValue(new Error('smtp down'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failing = { ...GOOD, mx: [] }
+    const result = await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue(failing) }))
+    expect(result.status).toBe('FAILING')
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('maybeAlert failed'), expect.any(Error))
+  })
+
   it('two concurrent checkDomain calls on the same newly-failing domain alert only once', async () => {
     current = row({ status: 'HEALTHY', alertedStatus: null })
     const failing = { ...GOOD, mx: [] }
@@ -232,6 +242,27 @@ describe('refreshAllDomains', () => {
     p.domainHealth.findUnique.mockRejectedValueOnce(new Error('db blip'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await refreshAllDomains(25_000, deps())).toEqual({ checked: 1, failed: 1 })
+  })
+
+  it('one org’s ensureDomainRows throwing does not stop the other org’s domains from being checked', async () => {
+    p.organization.findMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }])
+    p.mailbox.findMany
+      .mockRejectedValueOnce(new Error('db blip')) // ensureDomainRows('org-1')
+      .mockResolvedValueOnce([{ email: 'b@y.com' }]) // ensureDomainRows('org-2')
+      .mockResolvedValueOnce([{ organizationId: 'org-2', email: 'b@y.com' }]) // refreshAllDomains' activeDomains query
+    p.domainHealth.findMany
+      .mockResolvedValueOnce([]) // ensureDomainRows('org-2')'s never-attempted query
+      .mockResolvedValueOnce([{ id: 'dh-2', organizationId: 'org-2', domain: 'y.com' }]) // main rows query
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const out = await refreshAllDomains(25_000, deps())
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('org-1'), expect.any(Error))
+    expect(p.domainHealth.createMany).toHaveBeenCalledWith({
+      data: [{ organizationId: 'org-2', domain: 'y.com' }],
+      skipDuplicates: true,
+    })
+    expect(out).toEqual({ checked: 1, failed: 0 })
   })
 
   it('skips a row whose domain no longer has a Graph mailbox (orphaned, left alone)', async () => {
