@@ -70,113 +70,81 @@ export function DeliverabilityClient({ overview }: Props) {
     setBusy((prev) => ({ ...prev, [key]: value }))
   }
 
-  async function recheckDomain(domain: DomainRowDTO) {
+  async function runAction(key: string, request: () => Promise<Response>, fallbackMessage: string) {
     setError(null)
-    setRowBusy(domain.id, true)
+    setRowBusy(key, true)
     try {
-      const res = await fetch(`/api/deliverability/domains/${domain.id}/recheck`, { method: 'POST' })
+      const res = await request()
       const data = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) {
-        setError(data?.error ?? 'Could not check this domain.')
+        setError(data?.error ?? fallbackMessage)
         return
       }
       router.refresh()
     } catch {
-      setError('Could not check this domain.')
+      setError(fallbackMessage)
     } finally {
-      setRowBusy(domain.id, false)
+      setRowBusy(key, false)
     }
+  }
+
+  async function recheckDomain(domain: DomainRowDTO) {
+    await runAction(
+      domain.id,
+      () => fetch(`/api/deliverability/domains/${domain.id}/recheck`, { method: 'POST' }),
+      'Could not check this domain.',
+    )
   }
 
   async function saveRegisteredAt(domain: DomainRowDTO) {
     const value = regDrafts[domain.id]
     if (!value) return
-    setError(null)
-    setRowBusy(`${domain.id}-date`, true)
-    try {
-      const res = await fetch(`/api/deliverability/domains/${domain.id}`, {
+    await runAction(
+      `${domain.id}-date`,
+      () => fetch(`/api/deliverability/domains/${domain.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ registeredAt: value }),
-      })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) {
-        setError(data?.error ?? 'Could not save the registration date.')
-        return
-      }
-      router.refresh()
-    } catch {
-      setError('Could not save the registration date.')
-    } finally {
-      setRowBusy(`${domain.id}-date`, false)
-    }
+      }),
+      'Could not save the registration date.',
+    )
   }
 
   async function changeRampPreset(mailbox: MailboxRowDTO, rampPreset: RampPresetName) {
-    setError(null)
-    setRowBusy(mailbox.id, true)
-    try {
-      const res = await fetch(`/api/mailboxes/${mailbox.id}`, {
+    await runAction(
+      mailbox.id,
+      () => fetch(`/api/mailboxes/${mailbox.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rampPreset }),
-      })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) {
-        setError(data?.error ?? 'Could not update the ramp preset.')
-        return
-      }
-      router.refresh()
-    } catch {
-      setError('Could not update the ramp preset.')
-    } finally {
-      setRowBusy(mailbox.id, false)
-    }
+      }),
+      'Could not update the ramp preset.',
+    )
   }
 
   async function restartRamp(mailbox: MailboxRowDTO) {
     if (!window.confirm(`Restart the ramp for ${mailbox.email} from day 1?`)) return
-    setError(null)
-    setRowBusy(`${mailbox.id}-restart`, true)
-    try {
-      const res = await fetch(`/api/mailboxes/${mailbox.id}`, {
+    await runAction(
+      `${mailbox.id}-restart`,
+      () => fetch(`/api/mailboxes/${mailbox.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ restartRamp: true }),
-      })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) {
-        setError(data?.error ?? 'Could not restart the ramp.')
-        return
-      }
-      router.refresh()
-    } catch {
-      setError('Could not restart the ramp.')
-    } finally {
-      setRowBusy(`${mailbox.id}-restart`, false)
-    }
+      }),
+      'Could not restart the ramp.',
+    )
   }
 
   async function resumeMailbox(mailbox: MailboxRowDTO) {
-    setError(null)
-    setRowBusy(`${mailbox.id}-resume`, true)
-    try {
-      const res = await fetch(`/api/mailboxes/${mailbox.id}`, {
+    await runAction(
+      `${mailbox.id}-resume`,
+      () => fetch(`/api/mailboxes/${mailbox.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resume: true }),
-      })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) {
-        setError(data?.error ?? 'Could not resume this mailbox.')
-        return
-      }
-      router.refresh()
-    } catch {
-      setError('Could not resume this mailbox.')
-    } finally {
-      setRowBusy(`${mailbox.id}-resume`, false)
-    }
+      }),
+      'Could not resume this mailbox.',
+    )
   }
 
   const domainsHealthy = summary.domains.HEALTHY + summary.domains.WARNING
@@ -254,7 +222,16 @@ export function DeliverabilityClient({ overview }: Props) {
                                 {(['SPF', 'DKIM', 'MX', 'DMARC'] as const).map((record) => {
                                   const check = domain.checks.find((c) => c.record === record)
                                   if (!check) return null
-                                  return <Badge key={record} variant={CHECK_VARIANT[check.result]}>{record}</Badge>
+                                  return (
+                                    <Badge
+                                      key={record}
+                                      variant={CHECK_VARIANT[check.result]}
+                                      showIcon
+                                      aria-label={`${record}: ${check.result}`}
+                                    >
+                                      {record}
+                                    </Badge>
+                                  )
                                 })}
                               </div>
                             )}

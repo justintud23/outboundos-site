@@ -65,6 +65,11 @@ describe('DeliverabilityClient', () => {
     )
   })
 
+  it('exposes each check chip state as text for screen readers, not color alone', () => {
+    render(<DeliverabilityClient overview={overview} />)
+    expect(screen.getByLabelText('MX: fail')).toBeInTheDocument()
+  })
+
   it('saving a registration date PATCHes the domain', async () => {
     render(<DeliverabilityClient overview={overview} />)
     fireEvent.change(screen.getByLabelText(/registration date for new\.com/i), { target: { value: '2026-08-01' } })
