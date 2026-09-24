@@ -10,7 +10,7 @@ import {
 
 const STRING_FIELDS = new Set(['timezone', 'escalationEmail', 'businessName', 'postalAddress'])
 const NUMBER_FIELDS = new Set(['businessHoursStart', 'businessHoursEnd'])
-const BOOLEAN_FIELDS = new Set(['sendingPaused', 'allowCanadianRecipients'])
+const BOOLEAN_FIELDS = new Set(['sendingPaused', 'allowCanadianRecipients', 'blockRiskyEmails'])
 const STRING_ARRAY_FIELDS = new Set(['sendDays', 'guardrailBlockedPhrases', 'guardrailAllowedWords'])
 
 function isValidValue(key: string, value: unknown): boolean {

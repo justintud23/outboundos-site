@@ -22,6 +22,7 @@ export interface SendingSettingsDTO {
   businessName: string | null
   postalAddress: string | null
   allowCanadianRecipients: boolean
+  blockRiskyEmails: boolean
   msConnected: boolean
 }
 
@@ -30,7 +31,7 @@ export type SendingSettingsPatch = Partial<Omit<SendingSettingsDTO, 'pausedReaso
 const SELECT = {
   timezone: true, businessHoursStart: true, businessHoursEnd: true, sendDays: true, escalationEmail: true,
   sendingPaused: true, pausedReason: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true, msTenantId: true,
-  businessName: true, postalAddress: true, allowCanadianRecipients: true,
+  businessName: true, postalAddress: true, allowCanadianRecipients: true, blockRiskyEmails: true,
 } as const
 
 function toDTO(o: { msTenantId: string | null } & Omit<SendingSettingsDTO, 'msConnected'>): SendingSettingsDTO {
@@ -95,6 +96,7 @@ export async function updateSendingSettings(organizationId: string, patch: Sendi
     data.postalAddress = address
   }
   if (patch.allowCanadianRecipients !== undefined) data.allowCanadianRecipients = patch.allowCanadianRecipients
+  if (patch.blockRiskyEmails !== undefined) data.blockRiskyEmails = patch.blockRiskyEmails
   if (patch.guardrailBlockedPhrases !== undefined) data.guardrailBlockedPhrases = cleanList(patch.guardrailBlockedPhrases)
   if (patch.guardrailAllowedWords !== undefined) data.guardrailAllowedWords = cleanList(patch.guardrailAllowedWords)
 
