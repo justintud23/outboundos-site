@@ -20,10 +20,21 @@ export interface SendEmailInput {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  // Provider-native threading (Microsoft Graph): reply to this previously sent
+  // message via createReply, so Exchange sets In-Reply-To/References itself.
+  // SendGrid ignores it and uses messageId/inReplyTo/references instead.
+  replyToProviderMessageId?: string
+  // Called after the provider has created the outgoing message but BEFORE it
+  // is sent. The caller persists the id so a crash between send and DB write
+  // can be reconciled without a duplicate send. SendGrid never calls it.
+  onPrepared?: (providerMessageId: string) => Promise<void>
 }
 
 export interface SendEmailOutput {
   sgMessageId: string | null
+  // Graph: immutable message id + conversation id (null/undefined for SendGrid).
+  providerMessageId?: string | null
+  conversationId?: string | null
 }
 
 export interface EmailProvider {
