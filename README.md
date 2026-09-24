@@ -180,3 +180,81 @@ npm test -- --watch   # Watch mode
 ```
 
 Tests cover server functions (business logic, edge cases, org isolation) and UI components (rendering, interactions, state management).
+
+---
+
+## Microsoft 365 Sending Setup
+
+Automated outbound email requires a dedicated Microsoft 365 tenant with sending mailboxes, application permissions, and an external scheduler.
+
+### Operational Setup
+
+1. **Buy domains:** 3 lookalike sending domains, e.g. `get<company>.com` and `<company>snow.com`. Point each domain's website at the main company site.
+2. **Create the tenant:** a new Microsoft 365 tenant, with the domains added and verified.
+3. **DNS:** SPF, DKIM (enabled in Defender), and DMARC (`p=none` to start) on every domain.
+4. **Mailboxes:** 2–3 licensed mailboxes per domain, 7 total to start, with realistic names and signatures.
+5. **Grant access:** give the user Full Access and Send As on every sending mailbox so they auto-map in Outlook.
+6. **Notifications mailbox:** create the shared mailbox for notifications.
+7. **App registration:** 
+   - Register an app in **Entra ID > App registrations**.
+   - Redirect URI: `https://<app>/api/integrations/microsoft/callback` (Web).
+   - Grant application permissions: `Mail.Send`, `Mail.ReadWrite`, `User.Read.All`.
+   - Click **Grant admin consent** to approve these permissions for the entire tenant.
+   - Create a mail-enabled security group "Sending Mailboxes" containing all sending mailboxes and the alerts shared mailbox.
+   - In **Exchange Online PowerShell**, run:
+     ```powershell
+     New-ApplicationAccessPolicy -AppId <MS_GRAPH_CLIENT_ID> -PolicyScopeGroupId sending-mailboxes@<domain> -AccessRight RestrictAccess -Description "OutboundOS"
+     ```
+   - Verify it with:
+     ```powershell
+     Test-ApplicationAccessPolicy -Identity mike@<domain> -AppId <MS_GRAPH_CLIENT_ID>
+     ```
+8. **Scheduler:** Set up three **cron-job.org** jobs, each running every 5 minutes with method `GET` and header `Authorization: Bearer <CRON_SECRET>`:
+   - `https://<app>/api/cron/sequence-runner`
+   - `https://<app>/api/cron/send-queue`
+   - `https://<app>/api/cron/inbox-monitor`
+   
+   Enable "notify on failure" for each job.
+9. **Warmup:** Plan 2–4 weeks before full volume. The app's warmup ramp starts low automatically. A peer-warmup service is recommended during this period.
+
+### In-App Setup
+
+Once infrastructure is in place:
+
+1. **Settings → Connect Microsoft 365** — click the admin consent link to authorize the app for your tenant.
+2. **Load mailboxes** — the app lists available mailboxes; import the sending ones.
+3. **Configure defaults:**
+   - Set escalation email (where replies are forwarded).
+   - Set timezone and business hours (default 08:00–17:00, Mon–Fri).
+4. **Create a campaign** and add a multi-step sequence.
+5. **Enroll leads** from your CSV.
+6. **Turn on auto-send** for the campaign. The app generates a sample batch of 10 drafts.
+7. **Approve the sample** — review personalization and guardrail flags. Once approved, the sequence runs automatically.
+
+### Writing Templates
+
+**Merge fields:**
+Use `{fieldName}` for lead attributes. If a field is missing, provide a fallback:
+```
+{companyName|their company}
+```
+
+**Personalization marker:**
+Include `{personalization}` where the AI will insert 1–2 sentences tailored to the lead:
+```
+Hi {firstName|friend},
+
+{personalization}
+
+Would you be interested in learning more?
+```
+
+**Guardrails:**
+The system blocks sends containing:
+- Currency amounts (`$` followed by digits)
+- The words "guarantee", "guaranteed", or "free"
+- Any org-configured blocked phrase
+
+**Exemptions:**
+- Words on your allowlist (Settings → Guardrail allowedWords) bypass the rule.
+- Any phrase that appears verbatim in your approved template is exempt.
