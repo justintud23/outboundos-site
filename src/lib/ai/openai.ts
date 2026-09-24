@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
+import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, PersonalizeInput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
 import { DraftGenerationError } from './provider'
 import { UNTRUSTED_DATA_PREAMBLE, fenceUntrusted } from './prompt-safety'
 
@@ -207,5 +207,53 @@ Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-
       console.warn('[OpenAIProvider.classifyReply] classification failed — defaulting to UNKNOWN', err)
       return { classification: 'UNKNOWN', confidence: 0 }
     }
+  }
+
+  async personalize(input: PersonalizeInput, instructions: string): Promise<string> {
+    const leadData = JSON.stringify({
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      company: input.company ?? null,
+      title: input.title ?? null,
+      details: input.customFields && typeof input.customFields === 'object' ? input.customFields : null,
+    })
+
+    const systemPrompt = `You write ONE personalized opening line for a short B2B cold email.
+Guidance from the sender: ${instructions}
+
+Rules: 1–2 sentences, under 40 words, plain text, no greeting, no sign-off.
+Use ONLY facts present in the lead data; if nothing relevant is there, write a
+brief, generic but natural line. Never mention prices, discounts, guarantees,
+or anything free.
+
+${UNTRUSTED_DATA_PREAMBLE}
+
+Return a JSON object: { "line": "<the sentence(s)>" }`
+
+    let content: string
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: fenceUntrusted('lead', leadData) },
+        ],
+        temperature: 0.7,
+        response_format: JSON_RESPONSE_FORMAT,
+      })
+      content = response.choices[0]?.message.content ?? ''
+    } catch (err) {
+      throw new DraftGenerationError('AI personalization failed.', err)
+    }
+
+    let line = ''
+    try {
+      const parsed = JSON.parse(content) as { line?: unknown }
+      line = typeof parsed.line === 'string' ? parsed.line.trim() : ''
+    } catch (err) {
+      throw new DraftGenerationError('AI personalization returned invalid JSON.', err)
+    }
+    if (!line) throw new DraftGenerationError('AI personalization returned an empty line.')
+    return line
   }
 }

@@ -7,6 +7,7 @@ vi.mock('@/lib/db/prisma', () => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    cronHeartbeat: { upsert: vi.fn() },
   },
 }))
 
@@ -16,12 +17,13 @@ vi.mock('@/features/sequences/server/run-sequence-step', () => ({
 
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
-import { GET } from './route'
+import { GET, maxDuration } from './route'
 
 const mockUpdateMany = prisma.sequenceEnrollment.updateMany as ReturnType<typeof vi.fn>
 const mockFindMany = prisma.sequenceEnrollment.findMany as ReturnType<typeof vi.fn>
 const mockUpdate = prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>
 const mockRunSequenceStep = runSequenceStep as ReturnType<typeof vi.fn>
+const mockHeartbeat = prisma.cronHeartbeat.upsert as ReturnType<typeof vi.fn>
 
 const CRON_SECRET = 'test-cron-secret'
 
@@ -39,6 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.CRON_SECRET
+  vi.restoreAllMocks()
 })
 
 describe('GET /api/cron/sequence-runner', () => {
@@ -120,5 +123,40 @@ describe('GET /api/cron/sequence-runner', () => {
     expect(json.processed).toBe(0)
     expect(mockRunSequenceStep).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('allows 60s of function time (I7)', () => {
+    expect(maxDuration).toBe(60)
+  })
+
+  it('stops starting new enrollments once the time budget is spent (I7)', async () => {
+    const t0 = 1_000_000
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(t0) // startedAt
+      .mockReturnValueOnce(t0 + 1_000) // before enroll-1: within budget
+      .mockReturnValue(t0 + 26_000) // before enroll-2: over the 25s budget
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockFindMany.mockResolvedValue([{ id: 'enroll-1' }, { id: 'enroll-2' }])
+    mockUpdate.mockResolvedValue({})
+    mockRunSequenceStep.mockResolvedValue('DRAFT_GENERATED')
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+    const json = await res.json()
+
+    expect(mockRunSequenceStep).toHaveBeenCalledTimes(1)
+    expect(mockRunSequenceStep).toHaveBeenCalledWith({ enrollmentId: 'enroll-1' })
+    expect(json).toMatchObject({ processed: 1, outOfBudget: true })
+    expect(mockHeartbeat).toHaveBeenCalledWith(expect.objectContaining({
+      where: { job: 'sequence-runner' },
+      update: expect.objectContaining({ lastResult: { processed: 1, outOfBudget: true } }),
+    }))
+  })
+
+  it('records the heartbeat even when the tick throws (I7)', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockRejectedValue(new Error('db down'))
+
+    await expect(GET(makeRequest(`Bearer ${CRON_SECRET}`))).rejects.toThrow('db down')
+    expect(mockHeartbeat).toHaveBeenCalledWith(expect.objectContaining({ where: { job: 'sequence-runner' } }))
   })
 })

@@ -34,8 +34,8 @@ export class NoActiveMailboxError extends Error {
 }
 
 export class MailboxLimitExceededError extends Error {
-  constructor() {
-    super('Daily send limit reached for this mailbox.')
+  constructor(message = 'Daily send limit reached for this mailbox.') {
+    super(message)
     this.name = 'MailboxLimitExceededError'
     Object.setPrototypeOf(this, MailboxLimitExceededError.prototype)
   }
@@ -58,6 +58,40 @@ export class DraftSendInProgressError extends Error {
     super('A send for this draft is already in progress.')
     this.name = 'DraftSendInProgressError'
     Object.setPrototypeOf(this, DraftSendInProgressError.prototype)
+  }
+}
+
+// Raised when a manual send targets a draft that belongs to the automatic send
+// queue (its OutboundMessage has a scheduledFor). The queue owns that message:
+// a manual send must never touch it — a QUEUED one will go out on its own, a
+// FAILED one is retried via POST /api/messages/[id]/retry.
+export class DraftOnSendQueueError extends Error {
+  constructor(public readonly messageStatus: string, public readonly messageId: string) {
+    super(
+      messageStatus === 'QUEUED'
+        ? 'This draft is queued for automatic sending.'
+        : messageStatus === 'FAILED'
+          ? 'Automatic sending failed for this draft — use Retry.'
+          : `This draft was handled by automatic sending (status: ${messageStatus}).`,
+    )
+    this.name = 'DraftOnSendQueueError'
+    Object.setPrototypeOf(this, DraftOnSendQueueError.prototype)
+  }
+}
+
+export class MessageNotFoundError extends Error {
+  constructor() {
+    super('Message not found.')
+    this.name = 'MessageNotFoundError'
+    Object.setPrototypeOf(this, MessageNotFoundError.prototype)
+  }
+}
+
+export class MessageNotFailedError extends Error {
+  constructor(public readonly currentStatus: string) {
+    super(`Only failed messages can be retried (status: ${currentStatus}).`)
+    this.name = 'MessageNotFailedError'
+    Object.setPrototypeOf(this, MessageNotFailedError.prototype)
   }
 }
 

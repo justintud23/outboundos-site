@@ -234,4 +234,55 @@ describe('reviewDraft', () => {
 
     await expect(reviewDraft(approveInput)).rejects.toBeInstanceOf(DraftNotPendingError)
   })
+
+  function autoSendTx(campaign: { autoSend: boolean; sampleApprovedAt: Date | null }) {
+    const blocked = {
+      ...pendingDraft,
+      status: 'BLOCKED',
+      campaignId: 'c1',
+      sequenceEnrollmentId: 'e1',
+      subjectVariantId: null,
+      subjectEdited: false,
+    }
+    const approvedRow = { ...blocked, status: 'APPROVED', approvedByClerkId: 'user-1', approvedAt: new Date() }
+    const messageCreate = vi.fn().mockResolvedValue({ id: 'msg-1' })
+    const draftUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+    mockPrisma.draft.findFirst.mockResolvedValue(blocked)
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        draft: {
+          updateMany: draftUpdateMany,
+          findUnique: vi.fn().mockResolvedValue(approvedRow),
+          findUniqueOrThrow: vi.fn().mockResolvedValue(approvedRow),
+        },
+        campaign: { findUnique: vi.fn().mockResolvedValue(campaign) },
+        sequenceEnrollment: { findUnique: vi.fn().mockResolvedValue({ mailboxId: 'mb-1' }) },
+        outboundMessage: { create: messageCreate },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      }),
+    )
+    return { messageCreate, draftUpdateMany }
+  }
+
+  it('approving a BLOCKED draft on an auto-send campaign with approved sample queues it', async () => {
+    const { messageCreate, draftUpdateMany } = autoSendTx({ autoSend: true, sampleApprovedAt: new Date() })
+    const result = await reviewDraft(approveInput)
+    expect(result.status).toBe('APPROVED')
+    expect(draftUpdateMany.mock.calls[0][0].where.status).toEqual({ in: ['PENDING_REVIEW', 'BLOCKED'] })
+    expect(messageCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ draftId: 'draft-1', mailboxId: 'mb-1', status: 'QUEUED', leadId: 'lead-1' }),
+    })
+  })
+
+  it('approving a draft on a manual campaign does not queue it', async () => {
+    const { messageCreate } = autoSendTx({ autoSend: false, sampleApprovedAt: null })
+    await reviewDraft(approveInput)
+    expect(messageCreate).not.toHaveBeenCalled()
+  })
+
+  it('approving on an auto-send campaign whose sample is not yet approved does not queue it', async () => {
+    const { messageCreate } = autoSendTx({ autoSend: true, sampleApprovedAt: null })
+    await reviewDraft(approveInput)
+    expect(messageCreate).not.toHaveBeenCalled()
+  })
 })

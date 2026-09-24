@@ -194,6 +194,44 @@ describe('OpenAIProvider.draftEmail', () => {
   })
 })
 
+describe('OpenAIProvider.personalize', () => {
+  let provider: OpenAIProvider
+  let mockCreate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    provider = new OpenAIProvider('test-key', 'gpt-4o')
+    const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
+      chat: { completions: { create: ReturnType<typeof vi.fn> } }
+    }
+    mockCreate = client.chat.completions.create
+  })
+
+  it('returns the trimmed line from a JSON object and fences lead data as untrusted', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":"  Saw you manage 4 plazas in Amherst. "}' } }] })
+    const line = await provider.personalize(
+      { firstName: 'Jane', company: 'Acme PM', customFields: { city: 'Amherst' } },
+      'Mention their city.',
+    )
+    expect(line).toBe('Saw you manage 4 plazas in Amherst.')
+    const args = mockCreate.mock.calls.at(-1)![0]
+    expect(args.response_format).toEqual({ type: 'json_object' })
+    expect(args.messages[0].content).toContain('Mention their city.')
+    expect(args.messages[0].content).toContain('SECURITY:')
+    expect(args.messages[1].content).toMatch(/<<lead:/)
+  })
+
+  it('throws DraftGenerationError on an empty line', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":""}' } }] })
+    await expect(provider.personalize({}, 'x')).rejects.toBeInstanceOf(DraftGenerationError)
+  })
+
+  it('throws DraftGenerationError on transport failure', async () => {
+    mockCreate.mockRejectedValueOnce(new Error('timeout'))
+    await expect(provider.personalize({}, 'x')).rejects.toBeInstanceOf(DraftGenerationError)
+  })
+})
+
 describe('getAIProvider', () => {
   it('throws if OPENAI_API_KEY is not set', async () => {
     vi.resetModules()

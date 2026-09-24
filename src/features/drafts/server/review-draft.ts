@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import type { DraftDTO } from '../types'
 import { DraftNotFoundError, DraftNotPendingError } from '../types'
+import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
 
 interface ReviewDraftInput {
   organizationId: string
@@ -43,7 +44,7 @@ export async function reviewDraft({
         where: {
           id: draftId,
           organizationId,
-          status: 'PENDING_REVIEW',
+          status: { in: ['PENDING_REVIEW', 'BLOCKED'] },
         },
         data: {
           status: 'APPROVED',
@@ -58,12 +59,25 @@ export async function reviewDraft({
       if (result.count === 0) {
         throw new DraftNotPendingError(existing.status)
       }
+
+      // Auto-send campaigns: once the sample is approved, any human-approved
+      // draft (e.g. a fixed BLOCKED one) goes straight onto the send queue.
+      if (existing.campaignId && existing.sequenceEnrollmentId) {
+        const [campaign, enrollment] = await Promise.all([
+          tx.campaign.findUnique({ where: { id: existing.campaignId }, select: { autoSend: true, sampleApprovedAt: true } }),
+          tx.sequenceEnrollment.findUnique({ where: { id: existing.sequenceEnrollmentId }, select: { mailboxId: true } }),
+        ])
+        if (campaign?.autoSend && campaign.sampleApprovedAt && enrollment?.mailboxId) {
+          const approved = await tx.draft.findUniqueOrThrow({ where: { id: draftId } })
+          await queueApprovedDraft(tx, approved, enrollment.mailboxId)
+        }
+      }
     } else {
       const result = await tx.draft.updateMany({
         where: {
           id: draftId,
           organizationId,
-          status: 'PENDING_REVIEW',
+          status: { in: ['PENDING_REVIEW', 'BLOCKED'] },
         },
         data: {
           status: 'REJECTED',

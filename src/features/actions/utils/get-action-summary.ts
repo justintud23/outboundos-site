@@ -3,7 +3,9 @@ import type { NextAction, ActionType } from '../types'
 /** Ordered by display priority — highest-priority types first */
 const SUMMARY_ORDER: ActionType[] = [
   'REVIEW_REPLY',
+  'FIX_BLOCKED_DRAFT',
   'APPROVE_DRAFT',
+  'RETRY_FAILED_SEND',
   'SEND_DRAFT',
   'FOLLOW_UP',
   'ENROLL_SEQUENCE',
@@ -19,6 +21,8 @@ const SUMMARY_PHRASES: Record<ActionType, (n: number) => string> = {
   ENROLL_SEQUENCE: (n) => `${n} ${n === 1 ? 'lead' : 'leads'} to enroll`,
   REVIEW_INTERESTED_LEAD: (n) => `${n} interested ${n === 1 ? 'lead' : 'leads'} to review`,
   MARK_CONVERTED: (n) => `${n} ${n === 1 ? 'lead' : 'leads'} ready to convert`,
+  FIX_BLOCKED_DRAFT: (n) => `${n} ${n === 1 ? 'draft' : 'drafts'} blocked`,
+  RETRY_FAILED_SEND: (n) => `${n} ${n === 1 ? 'send' : 'sends'} failed`,
   NO_ACTION: () => '',
 }
 

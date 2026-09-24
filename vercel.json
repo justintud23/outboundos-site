@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sequence-runner",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/heartbeat-check",
+      "schedule": "0 16 * * 1-5"
     }
   ]
 }

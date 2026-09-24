@@ -9,6 +9,7 @@ import {
   MailboxLimitExceededError,
   DraftAlreadySentError,
   DraftSendInProgressError,
+  DraftOnSendQueueError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
@@ -16,69 +17,13 @@ import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
+import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
+import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
 
 interface SendDraftInput {
   organizationId: string
   draftId: string
   clerkUserId: string
-}
-
-function startOfDay(d: Date): Date {
-  const s = new Date(d)
-  s.setHours(0, 0, 0, 0)
-  return s
-}
-
-/**
- * Atomically reserve one daily-send slot on a mailbox. Returns true iff a slot
- * was claimed. Two conditional updates, each atomic at the row level (so they
- * are race-free under concurrency, exactly like the sequence-runner's claim):
- *
- *   1. Lazy reset — zero sentToday at most ONCE per day. The `lastResetAt < startOfToday`
- *      guard means the first concurrent send of a new day resets the counter and
- *      stamps lastResetAt=startOfToday; every other concurrent send then sees a
- *      non-stale lastResetAt and its reset is a no-op. No read-modify-write, so
- *      no lost reset and no double-reset.
- *   2. Conditional increment — bump sentToday ONLY while it is below
- *      `limitToday`. Because the guard lives in the WHERE clause, the database
- *      serializes the row updates: at most `limitToday` increments can ever
- *      succeed, no matter how many sends race. count === 0 means the mailbox hit
- *      today's limit. `limitToday` is the EFFECTIVE limit (warmup ramp applied),
- *      computed by the caller and passed as the literal bound — so warmup
- *      throttling is enforced with the same atomic guarantee.
- */
-async function reserveMailboxSlot(
-  mailboxId: string,
-  limitToday: number,
-  startOfToday: Date,
-): Promise<boolean> {
-  await prisma.mailbox.updateMany({
-    where: { id: mailboxId, lastResetAt: { lt: startOfToday } },
-    data: { sentToday: 0, lastResetAt: startOfToday },
-  })
-
-  // The isActive/autoPaused guards are defense-in-depth: candidates are already
-  // filtered, but if a mailbox is disabled or breaker-paused in the window
-  // between selection and reservation, this conditional UPDATE matches 0 rows
-  // and the caller rolls to the next mailbox — a paused mailbox can NEVER be
-  // reserved, atomically.
-  const reservation = await prisma.mailbox.updateMany({
-    where: { id: mailboxId, isActive: true, autoPaused: false, sentToday: { lt: limitToday } },
-    data: { sentToday: { increment: 1 } },
-  })
-
-  return reservation.count === 1
-}
-
-/**
- * Release a previously reserved slot (atomic decrement, guarded so it can never
- * underflow below 0). Used to roll back a reservation when the send fails.
- */
-async function releaseMailboxSlot(mailboxId: string): Promise<void> {
-  await prisma.mailbox.updateMany({
-    where: { id: mailboxId, sentToday: { gt: 0 } },
-    data: { sentToday: { decrement: 1 } },
-  })
 }
 
 export async function sendDraft({
@@ -106,17 +51,81 @@ export async function sendDraft({
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
-  // 3. Select a sending mailbox by rotating across the org's active mailboxes.
-  //    Spreading sends across every connected inbox is the whole point of
-  //    supporting multiple mailboxes: volume scaling and reputation spreading.
-  // Exclude both user-disabled (isActive: false) and breaker-paused
-  // (autoPaused: true) mailboxes — neither can be selected or reserved.
-  const mailboxes = await prisma.mailbox.findMany({
-    where: { organizationId, isActive: true, autoPaused: false },
+  // 2c. A draft already on the automatic send queue is owned by the queue —
+  //     refuse up front (before any mailbox work) and leave its message alone.
+  const queued = await prisma.outboundMessage.findUnique({
+    where: { draftId },
+    select: { id: true, status: true, scheduledFor: true },
+  })
+  if (queued?.scheduledFor) {
+    throw new DraftOnSendQueueError(queued.status, queued.id)
+  }
+
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { msTenantId: true },
   })
 
-  if (mailboxes.length === 0) {
-    throw new NoActiveMailboxError()
+  // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
+  // the same sequence enrollment (the thread), we set In-Reply-To = the prior
+  // message and References = the full prior chain (oldest→newest), and reuse the
+  // original thread subject as "Re: <subject>". The first email in a sequence (no
+  // prior sent messages) gets only its own Message-ID. Drafts not tied to a
+  // sequence enrollment never thread.
+  const messageId = generateMessageId()
+  const priorMessages = draft.sequenceEnrollmentId
+    ? await prisma.outboundMessage.findMany({
+        where: {
+          organizationId,
+          status: 'SENT',
+          messageId: { not: null },
+          draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
+        },
+        orderBy: { sentAt: 'asc' },
+        select: { messageId: true, subject: true, graphMessageId: true, mailboxId: true },
+      })
+    : []
+  const priorMessageIds = priorMessages
+    .map((m) => m.messageId)
+    .filter((id): id is string => id !== null)
+  const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
+  // Graph threads by replying to the most recent prior message it sent.
+  const replyToProviderMessageId =
+    [...priorMessages].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
+  // Reuse the thread's original subject (oldest message) as "Re: ..."; never
+  // double-prefix. First send keeps the draft's own subject.
+  const threadRoot = priorMessages[0]
+  const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
+
+  // 3. Select the sending mailbox.
+  //    - Sequence drafts are PINNED to the enrollment's mailbox (the one that
+  //      sent earlier steps): a follow-up must come from the same inbox so
+  //      Graph can reply in-thread and replies land where we monitor. No
+  //      fallback to another mailbox — if it can't send, report capacity.
+  //    - Other drafts rotate across the org's active mailboxes (volume
+  //      scaling and reputation spreading).
+  // Exclude both user-disabled (isActive: false) and breaker-paused
+  // (autoPaused: true) mailboxes — neither can be selected or reserved. A
+  // Microsoft 365 org only sends from Graph mailboxes.
+  const graphOnly = !!org?.msTenantId
+  let mailboxes: Awaited<ReturnType<typeof prisma.mailbox.findMany>>
+  if (draft.sequenceEnrollmentId) {
+    const pinnedId = await resolveEnrollmentMailboxId(organizationId, draft.sequenceEnrollmentId, priorMessages)
+    if (!pinnedId) throw new NoActiveMailboxError()
+    const pinned = await prisma.mailbox.findFirst({ where: { id: pinnedId, organizationId } })
+    if (!pinned || !pinned.isActive || pinned.autoPaused || (graphOnly && pinned.provider !== 'MICROSOFT_GRAPH')) {
+      throw new MailboxLimitExceededError(
+        `The mailbox this sequence sends from (${pinned?.email ?? 'unknown'}) is paused or inactive, so this follow-up can't be sent right now.`,
+      )
+    }
+    mailboxes = [pinned]
+  } else {
+    mailboxes = await prisma.mailbox.findMany({
+      where: { organizationId, isActive: true, autoPaused: false, ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }) },
+    })
+    if (mailboxes.length === 0) {
+      throw new NoActiveMailboxError()
+    }
   }
 
   const now = new Date()
@@ -164,34 +173,6 @@ export async function sendDraft({
   // /api/unsubscribe endpoint will decrypt back to { leadId, organizationId }.
   const unsubscribeToken = signUnsubscribeToken({ leadId: draft.leadId, organizationId })
   const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${unsubscribeToken}`
-
-  // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
-  // the same sequence enrollment (the thread), we set In-Reply-To = the prior
-  // message and References = the full prior chain (oldest→newest), and reuse the
-  // original thread subject as "Re: <subject>". The first email in a sequence (no
-  // prior sent messages) gets only its own Message-ID. Drafts not tied to a
-  // sequence enrollment never thread.
-  const messageId = generateMessageId()
-  const priorMessages = draft.sequenceEnrollmentId
-    ? await prisma.outboundMessage.findMany({
-        where: {
-          organizationId,
-          status: 'SENT',
-          messageId: { not: null },
-          draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
-        },
-        orderBy: { sentAt: 'asc' },
-        select: { messageId: true, subject: true },
-      })
-    : []
-  const priorMessageIds = priorMessages
-    .map((m) => m.messageId)
-    .filter((id): id is string => id !== null)
-  const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
-  // Reuse the thread's original subject (oldest message) as "Re: ..."; never
-  // double-prefix. First send keeps the draft's own subject.
-  const threadRoot = priorMessages[0]
-  const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
 
   // A/B test attribution: carry the assigned variant onto the OutboundMessage
   // (the row events join to) ONLY for a genuine first send with an UNEDITED
@@ -263,9 +244,9 @@ export async function sendDraft({
   const sendingMailbox = reserved
 
   // 6. Send via provider. We own both the draft claim and a mailbox slot.
-  let sgMessageId: string | null
+  let sent: Awaited<ReturnType<ReturnType<typeof getEmailProvider>['sendEmail']>>
   try {
-    ;({ sgMessageId } = await getEmailProvider().sendEmail({
+    sent = await getEmailProvider({ msTenantId: org?.msTenantId }).sendEmail({
       to: draft.lead.email,
       fromEmail: sendingMailbox.email,
       fromName: sendingMailbox.displayName,
@@ -276,7 +257,11 @@ export async function sendDraft({
       messageId,
       ...(inReplyTo && { inReplyTo }),
       ...(references && references.length > 0 && { references }),
-    }))
+      ...(replyToProviderMessageId && { replyToProviderMessageId }),
+      onPrepared: async (providerMessageId) => {
+        await prisma.outboundMessage.update({ where: { id: claim.id }, data: { graphMessageId: providerMessageId } })
+      },
+    })
   } catch (sendErr) {
     // DEFINITE failure: the provider threw, so no email went out. Roll BOTH
     // pre-send reservations back: release the mailbox slot (atomic decrement) so
@@ -299,7 +284,14 @@ export async function sendDraft({
   const finalized = await prisma.$transaction(async (tx) => {
     const message = await tx.outboundMessage.update({
       where: { id: claim.id },
-      data: { status: 'SENT', sgMessageId, sentAt, mailboxId: sendingMailbox.id },
+      data: {
+        status: 'SENT',
+        sgMessageId: sent.sgMessageId,
+        sentAt,
+        mailboxId: sendingMailbox.id,
+        ...(sent.providerMessageId && { graphMessageId: sent.providerMessageId }),
+        ...(sent.conversationId && { conversationId: sent.conversationId }),
+      },
     })
 
     await tx.auditLog.create({
@@ -328,6 +320,27 @@ export async function sendDraft({
   return toDTO(finalized)
 }
 
+/**
+ * The mailbox a sequence enrollment sends from: the one that sent its most
+ * recent message, else the enrollment's assigned mailbox, else a fresh sticky
+ * assignment (persisted on the enrollment).
+ */
+async function resolveEnrollmentMailboxId(
+  organizationId: string,
+  enrollmentId: string,
+  priorMessages: { mailboxId: string }[],
+): Promise<string | null> {
+  const lastSent = priorMessages[priorMessages.length - 1]
+  if (lastSent) return lastSent.mailboxId
+  const enrollment = await prisma.sequenceEnrollment.findFirst({
+    where: { id: enrollmentId, organizationId },
+    select: { mailboxId: true },
+  })
+  if (enrollment?.mailboxId) return enrollment.mailboxId
+  if (!enrollment) return null
+  return assignEnrollmentMailbox(organizationId, enrollmentId)
+}
+
 // How long a QUEUED claim is treated as an in-flight send. A claim older than
 // this is considered abandoned (the sending process crashed, or its finalize
 // UPDATE never landed) and is reconciled rather than treated as concurrent.
@@ -337,7 +350,9 @@ const CLAIM_STALE_MS = 2 * 60 * 1000
 /**
  * A claim row already exists for this draft (the claiming insert hit the unique
  * draftId constraint). Resolve it WITHOUT ever re-sending:
- *  - SENT                  → the send already completed → DraftAlreadySentError.
+ *  - scheduledFor set       → a send-queue message, never a manual claim →
+ *                             DraftOnSendQueueError (untouched).
+ *  - past QUEUED (SENT, …)  → the send already completed → DraftAlreadySentError.
  *  - QUEUED, claim fresh    → another invocation is mid-send → DraftSendInProgressError.
  *  - QUEUED, claim stale    → the prior attempt's process died (or its finalize
  *                             UPDATE failed) after the provider call. We cannot
@@ -364,7 +379,17 @@ async function resolveExistingClaim({
     throw new DraftSendInProgressError()
   }
 
-  if (existing.status === 'SENT') {
+  // A row with scheduledFor belongs to the automatic send queue, not to a
+  // manual claim. Never reconcile it: a QUEUED one is still going to send (or
+  // is mid-send), and a FAILED one never went out and must be retried through
+  // the queue. Marking either SENT here would silently drop the email.
+  if (existing.scheduledFor) {
+    throw new DraftOnSendQueueError(existing.status, existing.id)
+  }
+
+  // Any manual row past QUEUED (SENT, or advanced by delivery events) has
+  // already gone out.
+  if (existing.status !== 'QUEUED') {
     throw new DraftAlreadySentError(existing.id)
   }
 

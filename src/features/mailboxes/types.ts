@@ -51,6 +51,19 @@ export class MailboxAlreadyExistsError extends Error {
   }
 }
 
+// Orgs connected to Microsoft 365 send and monitor only Graph mailboxes, so a
+// manually-typed (SendGrid) mailbox would send over Graph without its replies
+// ever being monitored. Those orgs import mailboxes from Microsoft 365 instead.
+export const IMPORT_FROM_MICROSOFT_MESSAGE = 'Import mailboxes from Microsoft 365 instead.'
+
+export class ManualMailboxNotAllowedError extends Error {
+  constructor() {
+    super(`This organization sends through Microsoft 365. ${IMPORT_FROM_MICROSOFT_MESSAGE}`)
+    this.name = 'ManualMailboxNotAllowedError'
+    Object.setPrototypeOf(this, ManualMailboxNotAllowedError.prototype)
+  }
+}
+
 export class MailboxNotFoundError extends Error {
   constructor() {
     super('Mailbox not found.')

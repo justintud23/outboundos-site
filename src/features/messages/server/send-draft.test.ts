@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     draft: { findFirst: vi.fn() },
-    mailbox: { findMany: vi.fn(), updateMany: vi.fn() },
+    organization: { findUnique: vi.fn() },
+    mailbox: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    sequenceEnrollment: { findFirst: vi.fn() },
     outboundMessage: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -14,6 +16,8 @@ vi.mock('@/lib/db/prisma', () => ({
     $transaction: vi.fn(),
   },
 }))
+
+vi.mock('@/features/sequences/server/assign-mailbox', () => ({ assignEnrollmentMailbox: vi.fn() }))
 
 vi.mock('@/lib/email', () => ({
   getEmailProvider: vi.fn(),
@@ -35,6 +39,7 @@ vi.mock('@/features/leads/types', async (importOriginal) => {
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
+import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
 import { sendDraft } from './send-draft'
 import {
   DraftNotApprovedError,
@@ -42,13 +47,16 @@ import {
   MailboxLimitExceededError,
   DraftAlreadySentError,
   DraftSendInProgressError,
+  DraftOnSendQueueError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 
 type Fn = ReturnType<typeof vi.fn>
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: Fn }
-  mailbox: { findMany: Fn; updateMany: Fn }
+  organization: { findUnique: Fn }
+  mailbox: { findMany: Fn; findFirst: Fn; updateMany: Fn }
+  sequenceEnrollment: { findFirst: Fn }
   outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; update: Fn; delete: Fn }
   $transaction: Fn
 }
@@ -163,6 +171,7 @@ beforeEach(() => {
   setMailboxes([mailbox({ id: 'mb-1', sentToday: 5 })])
 
   mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+  mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null })
 
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
@@ -175,6 +184,13 @@ beforeEach(() => {
       )
       .map((m) => ({ ...m })),
   )
+
+  // Pinned (sequence) mailbox lookup reads the same store.
+  mockPrisma.mailbox.findFirst.mockImplementation(async ({ where }: { where: { id: string; organizationId: string } }) => {
+    const m = store[where.id]
+    return m && m.organizationId === where.organizationId ? { ...m } : null
+  })
+  mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-1' })
 
   // Atomic conditional updateMany simulator: reset / reserve / release.
   mockPrisma.mailbox.updateMany.mockImplementation(async ({ where, data }: UpdateManyArgs) => {
@@ -443,7 +459,7 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     })
     // Prior thread (oldest → newest). Root subject is the original step-1 subject.
     mockPrisma.outboundMessage.findMany.mockResolvedValue([
-      { messageId: '<m1@app.test>', subject: 'Intro to Acme' },
+      { mailboxId: 'mb-1', messageId: '<m1@app.test>', subject: 'Intro to Acme' },
     ])
 
     await sendDraft(INPUT)
@@ -465,8 +481,8 @@ describe('sendDraft — atomic daily-limit reservation', () => {
       sequenceEnrollmentId: 'enr-1',
     })
     mockPrisma.outboundMessage.findMany.mockResolvedValue([
-      { messageId: '<m1@app.test>', subject: 'Intro' },
-      { messageId: '<m2@app.test>', subject: 'Re: Intro' },
+      { mailboxId: 'mb-1', messageId: '<m1@app.test>', subject: 'Intro' },
+      { mailboxId: 'mb-1', messageId: '<m2@app.test>', subject: 'Re: Intro' },
     ])
 
     await sendDraft(INPUT)
@@ -517,7 +533,7 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     })
     // A prior message in the thread → this is a follow-up, not a first send.
     mockPrisma.outboundMessage.findMany.mockResolvedValue([
-      { messageId: '<m1@app.test>', subject: 'Intro to Acme' },
+      { mailboxId: 'mb-1', messageId: '<m1@app.test>', subject: 'Intro to Acme' },
     ])
     await sendDraft(INPUT)
     const createData = mockPrisma.outboundMessage.create.mock.calls[0]?.[0]?.data as { subjectVariantId?: string }
@@ -542,6 +558,54 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DraftSendInProgressError)
     expect(mockSendEmail).not.toHaveBeenCalled()
     expect(store['mb-1'].sentToday).toBe(5)
+  })
+
+  // ─── Drafts owned by the automatic send queue (C1) ─────────────────────────
+
+  it('QUEUED queue message: refuses with DraftOnSendQueueError, message untouched, nothing sent', async () => {
+    mockPrisma.outboundMessage.findUnique.mockResolvedValue({
+      id: 'msg-q', status: 'QUEUED', scheduledFor: new Date('2026-01-01'),
+    })
+
+    const err = await sendDraft(INPUT).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(DraftOnSendQueueError)
+    expect((err as DraftOnSendQueueError).messageStatus).toBe('QUEUED')
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(store['mb-1'].sentToday).toBe(5)
+  })
+
+  it('FAILED queue message: refuses (use Retry) instead of reconciling it to SENT', async () => {
+    mockPrisma.outboundMessage.findUnique.mockResolvedValue({
+      ...baseRow, id: 'msg-f', status: 'FAILED', scheduledFor: new Date('2026-01-01'), createdAt: new Date('2026-01-01'),
+    })
+
+    await expect(sendDraft(INPUT)).rejects.toThrow(/use Retry/)
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('queue row that appears between the check and the claim (P2002): still never reconciled to SENT', async () => {
+    mockPrisma.outboundMessage.findUnique
+      .mockResolvedValueOnce(null) // up-front check: nothing yet
+      .mockResolvedValue({ ...baseRow, status: 'QUEUED', scheduledFor: new Date(), createdAt: new Date('2026-01-01') })
+    mockPrisma.outboundMessage.create.mockReset().mockRejectedValue(P2002)
+
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DraftOnSendQueueError)
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('stale MANUAL claim (no scheduledFor) is still reconciled to SENT without re-sending', async () => {
+    mockPrisma.outboundMessage.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ ...baseRow, status: 'QUEUED', scheduledFor: null, createdAt: new Date(Date.now() - 10 * 60_000) })
+    mockPrisma.outboundMessage.create.mockReset().mockRejectedValue(P2002)
+
+    const out = await sendDraft(INPUT)
+    expect(out.status).toBe('SENT')
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
   // ─── Warmup ramp ──────────────────────────────────────────────────────────
@@ -611,5 +675,119 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     expect(rejected.reason).toBeInstanceOf(DraftSendInProgressError)
     expect(mockSendEmail).toHaveBeenCalledTimes(1) // exactly one send
     expect(store['mb-1'].sentToday).toBe(6) // exactly one slot consumed
+  })
+
+  // ─── Microsoft Graph: tenant selection, threading, id persistence ─────────
+
+  it('uses the org tenant when selecting the provider', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    await sendDraft(INPUT)
+    expect(mockGetEmailProvider).toHaveBeenCalledWith({ msTenantId: 'tenant-1' })
+  })
+
+  it('Graph follow-up: replies to the most recent prior graph message', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, sequenceEnrollmentId: 'enr-1' })
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { mailboxId: 'mb-1', messageId: '<m1@app.test>', subject: 'Intro', graphMessageId: 'g1' },
+      { mailboxId: 'mb-1', messageId: '<m2@app.test>', subject: 'Re: Intro', graphMessageId: 'g2' },
+    ])
+    await sendDraft(INPUT)
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { replyToProviderMessageId?: string }
+    expect(sent.replyToProviderMessageId).toBe('g2')
+  })
+
+  it('persists the Graph id via onPrepared and stores ids on finalize', async () => {
+    mockSendEmail.mockImplementation(async (input: { onPrepared?: (id: string) => Promise<void> }) => {
+      await input.onPrepared?.('g-new')
+      return { sgMessageId: null, providerMessageId: 'g-new', conversationId: 'conv-1' }
+    })
+    const result = await sendDraft(INPUT)
+    expect(mockPrisma.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { graphMessageId: 'g-new' },
+    })
+    expect(result.status).toBe('SENT')
+  })
+})
+
+describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)', () => {
+  const seqDraft = { ...fakeDraft, sequenceEnrollmentId: 'enr-1' }
+  const sentFrom = () => (mockSendEmail.mock.calls[0]?.[0] as { fromEmail: string }).fromEmail
+
+  beforeEach(() => {
+    // mb-1 is the least-used mailbox: rotation would pick it.
+    setMailboxes([mailbox({ id: 'mb-1', sentToday: 0 }), mailbox({ id: 'mb-2', sentToday: 10 })])
+    mockPrisma.draft.findFirst.mockResolvedValue(seqDraft)
+  })
+
+  it('follow-up sends from the mailbox that sent the prior step, not the least-used one', async () => {
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { mailboxId: 'mb-2', messageId: '<m1@app.test>', subject: 'Intro', graphMessageId: 'g1' },
+    ])
+    await sendDraft(INPUT)
+    expect(sentFrom()).toBe('mb-2@company.com')
+    expect(mockPrisma.mailbox.findMany).not.toHaveBeenCalled()
+    expect(store['mb-2'].sentToday).toBe(11)
+    expect(store['mb-1'].sentToday).toBe(0)
+  })
+
+  it('first step of an enrollment uses the enrollment\'s assigned mailbox', async () => {
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-2' })
+    await sendDraft(INPUT)
+    expect(mockPrisma.sequenceEnrollment.findFirst).toHaveBeenCalledWith({
+      where: { id: 'enr-1', organizationId: 'org-1' },
+      select: { mailboxId: true },
+    })
+    expect(sentFrom()).toBe('mb-2@company.com')
+  })
+
+  it('enrollment without a mailbox gets one assigned (and persisted) via assignEnrollmentMailbox', async () => {
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: null })
+    ;(assignEnrollmentMailbox as Fn).mockResolvedValue('mb-2')
+    await sendDraft(INPUT)
+    expect(assignEnrollmentMailbox).toHaveBeenCalledWith('org-1', 'enr-1')
+    expect(sentFrom()).toBe('mb-2@company.com')
+  })
+
+  it('pinned mailbox at capacity → MailboxLimitExceededError, no fallback to another mailbox', async () => {
+    setMailboxes([mailbox({ id: 'mb-1', sentToday: 0 }), mailbox({ id: 'mb-2', sentToday: 50, dailyLimit: 50 })])
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { mailboxId: 'mb-2', messageId: '<m1@app.test>', subject: 'Intro', graphMessageId: 'g1' },
+    ])
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(store['mb-1'].sentToday).toBe(0)
+  })
+
+  it('pinned mailbox paused → MailboxLimitExceededError, no fallback', async () => {
+    setMailboxes([mailbox({ id: 'mb-1', sentToday: 0 }), mailbox({ id: 'mb-2', autoPaused: true })])
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-2' })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('Microsoft 365 org: rotation only considers Graph mailboxes', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH',
+    })
+  })
+
+  it('org without a tenant: rotation is not provider-filtered', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false,
+    })
+  })
+
+  it('Microsoft 365 org: a pinned non-Graph mailbox is refused', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    setMailboxes([{ ...mailbox({ id: 'mb-2' }), provider: 'SENDGRID' } as MailboxRow])
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-2' })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 })

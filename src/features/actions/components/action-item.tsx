@@ -7,10 +7,13 @@ import {
   GitBranch,
   UserCheck,
   Star,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react'
 import type { NextAction, ActionType } from '../types'
 import { ACTION_CTA, ACTION_HREF, getUrgencyTier } from '../types'
 import { relativeTime } from '@/lib/format'
+import { RetrySendButton } from '@/features/messages/components/retry-send-button'
 import type { LucideIcon } from 'lucide-react'
 
 // Each action type gets a Prism spectrum tone. Tints are derived from the
@@ -44,6 +47,8 @@ const TYPE_CONFIG: Record<ActionType, {
   ENROLL_SEQUENCE: { ...tone('--accent-indigo', '--accent-indigo-hover'), icon: GitBranch },
   REVIEW_INTERESTED_LEAD: { ...tone('--status-success'), icon: Star }, // positive
   MARK_CONVERTED: { ...tone('--status-success'), icon: UserCheck }, // won
+  FIX_BLOCKED_DRAFT: { ...tone('--status-danger'), icon: ShieldAlert },
+  RETRY_FAILED_SEND: { ...tone('--status-danger'), icon: RotateCcw },
   NO_ACTION: { ...tone('--text-muted'), icon: FileCheck },
 }
 
@@ -109,7 +114,12 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
           )}
         </div>
 
-        {cta && (
+        {action.type === 'RETRY_FAILED_SEND' && action.messageId ? (
+          <RetrySendButton
+            messageId={action.messageId}
+            className={`text-[11px] px-2 py-1 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97] disabled:opacity-50`}
+          />
+        ) : cta && (
           <Link
             href={href}
             className={`text-[11px] px-2 py-1 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97]`}
@@ -167,7 +177,12 @@ export function ActionItem({ action, compact = false }: ActionItemProps) {
       </span>
 
       {/* CTA */}
-      {cta && (
+      {action.type === 'RETRY_FAILED_SEND' && action.messageId ? (
+        <RetrySendButton
+          messageId={action.messageId}
+          className={`text-xs px-3 py-1.5 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97] disabled:opacity-50`}
+        />
+      ) : cta && (
         <Link
           href={href}
           className={`text-xs px-3 py-1.5 rounded-[var(--radius-btn)] ${config.ctaBg} ${config.ctaHoverBg} ${config.text} transition-all duration-[var(--transition-base)] flex-shrink-0 font-medium cursor-pointer active:scale-[0.97]`}

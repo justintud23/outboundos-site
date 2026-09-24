@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     campaign:       { findFirst: vi.fn() },
-    draft:          { findMany: vi.fn(), groupBy: vi.fn() },
+    draft:          { findMany: vi.fn(), groupBy: vi.fn(), count: vi.fn() },
     inboundReply:   { findMany: vi.fn(), count: vi.fn() },
     outboundMessage: { count: vi.fn() },
   },
@@ -12,21 +12,25 @@ vi.mock('@/lib/db/prisma', () => ({
 import { prisma } from '@/lib/db/prisma'
 import { getCampaignDetail } from './get-campaign-detail'
 
-const mockCampaign   = prisma.campaign.findFirst     as ReturnType<typeof vi.fn>
-const mockDraftMany  = prisma.draft.findMany         as ReturnType<typeof vi.fn>
-const mockDraftGroup = prisma.draft.groupBy          as ReturnType<typeof vi.fn>
-const mockReplyMany  = prisma.inboundReply.findMany  as ReturnType<typeof vi.fn>
-const mockReplyCount = prisma.inboundReply.count     as ReturnType<typeof vi.fn>
-const mockMsgCount   = prisma.outboundMessage.count  as ReturnType<typeof vi.fn>
+const mockCampaign    = prisma.campaign.findFirst     as ReturnType<typeof vi.fn>
+const mockDraftMany   = prisma.draft.findMany         as ReturnType<typeof vi.fn>
+const mockDraftGroup  = prisma.draft.groupBy          as ReturnType<typeof vi.fn>
+const mockDraftCount  = prisma.draft.count            as ReturnType<typeof vi.fn>
+const mockReplyMany   = prisma.inboundReply.findMany  as ReturnType<typeof vi.fn>
+const mockReplyCount  = prisma.inboundReply.count     as ReturnType<typeof vi.fn>
+const mockMsgCount    = prisma.outboundMessage.count  as ReturnType<typeof vi.fn>
 
 const fakeCampaign = {
-  id:             'camp-1',
-  organizationId: 'org-1',
-  name:           'Q2 Outreach',
-  description:    'Cold outreach to SaaS founders',
-  status:         'ACTIVE',
-  createdAt:      new Date('2026-01-15'),
-  updatedAt:      new Date('2026-01-15'),
+  id:               'camp-1',
+  organizationId:   'org-1',
+  name:             'Q2 Outreach',
+  description:      'Cold outreach to SaaS founders',
+  status:           'ACTIVE',
+  createdAt:        new Date('2026-01-15'),
+  updatedAt:        new Date('2026-01-15'),
+  autoSend:         false,
+  sampleSize:       10,
+  sampleApprovedAt: null,
 }
 
 const fakeDraft = {
@@ -65,6 +69,7 @@ function setupHappyPath() {
   mockDraftGroup.mockResolvedValue([
     { status: 'PENDING_REVIEW', _count: { _all: 1 } },
   ])
+  mockDraftCount.mockResolvedValue(0)
 }
 
 describe('getCampaignDetail', () => {
@@ -80,6 +85,10 @@ describe('getCampaignDetail', () => {
     expect(result!.drafts[0]?.subject).toBe('Hello Jane')
     expect(result!.replies).toHaveLength(1)
     expect(result!.replies[0]?.classification).toBe('POSITIVE')
+    expect(result!.autoSend).toBe(false)
+    expect(result!.sampleSize).toBe(10)
+    expect(result!.sampleApprovedAt).toBeNull()
+    expect(result!.sampleCount).toBe(0)
   })
 
   it('returns null when campaign is not found', async () => {
@@ -136,6 +145,7 @@ describe('getCampaignDetail', () => {
       { status: 'APPROVED',       _count: { _all: 2 } },
       { status: 'REJECTED',       _count: { _all: 1 } },
     ])
+    mockDraftCount.mockResolvedValue(0)
 
     const result = await getCampaignDetail({ organizationId: 'org-1', campaignId: 'camp-1' })
 
@@ -151,6 +161,7 @@ describe('getCampaignDetail', () => {
     mockReplyCount.mockResolvedValue(0)
     mockMsgCount.mockResolvedValue(0)
     mockDraftGroup.mockResolvedValue([])
+    mockDraftCount.mockResolvedValue(0)
 
     const result = await getCampaignDetail({ organizationId: 'org-1', campaignId: 'camp-1' })
 
@@ -159,6 +170,7 @@ describe('getCampaignDetail', () => {
     expect(result!.draftPendingCount).toBe(0)
     expect(result!.replyCount).toBe(0)
     expect(result!.positiveReplyCount).toBe(0)
+    expect(result!.sampleCount).toBe(0)
     expect(result!.drafts).toEqual([])
     expect(result!.replies).toEqual([])
   })

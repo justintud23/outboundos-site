@@ -16,6 +16,9 @@ const isPublicRoute = createRouteMatcher([
   // One-click unsubscribe (RFC 8058). Hit by mail clients and recipients, not
   // logged-in users — the signed ?token= is the authorization.
   '/api/unsubscribe(.*)',
+  // Scheduled jobs (cron-job.org / Vercel cron) — no Clerk session; every
+  // /api/cron route authorizes itself with the CRON_SECRET bearer token.
+  '/api/cron(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {

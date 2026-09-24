@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header'
 import { StatCard } from '@/components/ui/stat-card'
 import { getCampaigns } from '@/features/campaigns/server/get-campaigns'
 import { CampaignCard } from '@/features/campaigns/components/campaign-card'
+import { NewCampaignForm } from '@/features/campaigns/components/new-campaign-form'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 
 function EmptyState() {
@@ -36,6 +37,8 @@ export default async function CampaignsPage() {
     <>
       <Header title="Campaigns" />
       <div className="flex-1 p-6 lg:p-8 space-y-6">
+
+        <NewCampaignForm />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Campaigns"      value={total} accent="cyan" />

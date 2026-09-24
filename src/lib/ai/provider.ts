@@ -27,6 +27,14 @@ export interface EmailDraftOutput {
   body: string
 }
 
+export interface PersonalizeInput {
+  firstName?: string | null
+  lastName?: string | null
+  company?: string | null
+  title?: string | null
+  customFields?: unknown
+}
+
 export interface ReplyClassifyInput {
   rawBody: string
 }
@@ -76,4 +84,7 @@ export interface AIProvider {
     input: ReplyClassifyInput,
     promptTemplate: string,
   ): Promise<ReplyClassifyOutput>
+
+  /** One or two sentences, per `instructions`, grounded ONLY in the lead's data. */
+  personalize(input: PersonalizeInput, instructions: string): Promise<string>
 }

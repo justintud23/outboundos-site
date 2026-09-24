@@ -14,6 +14,8 @@ export interface SequenceStepDTO {
   subject: string
   body: string
   delayDays: number
+  // AI-line guidance for the {personalization} token in this step's body.
+  personalizationPrompt: string | null
   // A/B subject test (first step only). Empty when there is no test.
   variants: SubjectVariantDTO[]
   winningVariantId: string | null
@@ -74,7 +76,7 @@ export interface EnrollmentDTO {
 
 // ─── Step execution result ──────────────────────────────────
 
-export type StepResult = 'DRAFT_GENERATED' | 'COMPLETED' | 'STOPPED' | 'SKIPPED' | 'ERROR'
+export type StepResult = 'DRAFT_GENERATED' | 'QUEUED' | 'DEFERRED' | 'COMPLETED' | 'STOPPED' | 'SKIPPED' | 'ERROR'
 
 // ─── Errors ─────────────────────────────────────────────────
 
@@ -148,7 +150,7 @@ export interface CreateSequenceInput {
   organizationId: string
   campaignId: string
   name: string
-  steps: { stepNumber: number; subject: string; body: string; delayDays: number }[]
+  steps: { stepNumber: number; subject: string; body: string; delayDays: number; personalizationPrompt?: string | null }[]
 }
 
 export interface EnrollLeadInput {

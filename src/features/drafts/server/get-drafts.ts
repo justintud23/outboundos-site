@@ -3,14 +3,14 @@ import type { DraftWithLeadDTO } from '../types'
 
 interface GetDraftsInput {
   organizationId: string
-  statuses?: ('PENDING_REVIEW' | 'APPROVED' | 'REJECTED')[]
+  statuses?: ('PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'BLOCKED')[]
   limit?: number
   offset?: number
 }
 
 export async function getDrafts({
   organizationId,
-  statuses = ['PENDING_REVIEW', 'APPROVED'],
+  statuses = ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'],
   limit = 50,
   offset = 0,
 }: GetDraftsInput): Promise<{ drafts: DraftWithLeadDTO[]; total: number }> {
@@ -29,6 +29,7 @@ export async function getDrafts({
             company: true,
           },
         },
+        outboundMessages: { select: { id: true, status: true }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },
       take: cappedLimit,
@@ -54,6 +55,8 @@ export async function getDrafts({
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
       lead: d.lead,
+      outboundMessage: d.outboundMessages[0] ?? null,
+      guardrailFlags: Array.isArray(d.guardrailFlags) ? (d.guardrailFlags as unknown as { rule: string; match: string }[]) : null,
     })),
     total,
   }

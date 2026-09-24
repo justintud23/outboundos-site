@@ -9,6 +9,8 @@ import {
   UserCheck,
   Star,
   CheckCircle2,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react'
 import type { NextAction, ActionType } from '@/features/actions/types'
 import { ACTION_CTA, getUrgencyTier } from '@/features/actions/types'
@@ -19,6 +21,7 @@ const INLINE_TYPES = new Set<ActionType>([
   'APPROVE_DRAFT',
   'SEND_DRAFT',
   'MARK_CONVERTED',
+  'RETRY_FAILED_SEND',
 ])
 
 export function isInlineAction(type: ActionType): boolean {
@@ -89,6 +92,22 @@ const TYPE_CONFIG: Record<ActionType, {
     ctaBg: 'bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)]',
     ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-success)_22%,transparent)]',
   },
+  FIX_BLOCKED_DRAFT: {
+    accent: 'var(--status-danger)',
+    bg: 'color-mix(in srgb, var(--status-danger) 10%, transparent)',
+    text: 'text-[var(--status-danger)]',
+    icon: ShieldAlert,
+    ctaBg: 'bg-[var(--status-danger-bg)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-danger)_22%,transparent)]',
+  },
+  RETRY_FAILED_SEND: {
+    accent: 'var(--status-danger)',
+    bg: 'color-mix(in srgb, var(--status-danger) 10%, transparent)',
+    text: 'text-[var(--status-danger)]',
+    icon: RotateCcw,
+    ctaBg: 'bg-[var(--status-danger-bg)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-danger)_22%,transparent)]',
+  },
   NO_ACTION: {
     accent: 'var(--text-muted)',
     bg: 'color-mix(in srgb, var(--text-muted) 10%, transparent)',
@@ -109,6 +128,7 @@ const SUCCESS_LABELS: Partial<Record<ActionType, string>> = {
   APPROVE_DRAFT: 'Approved',
   SEND_DRAFT: 'Sent',
   MARK_CONVERTED: 'Converted',
+  RETRY_FAILED_SEND: 'Queued',
 }
 
 function UrgencyDot({ priority }: { priority: number }) {
@@ -163,6 +183,15 @@ export async function executeAction(action: NextAction): Promise<void> {
       if (!res.ok) {
         const data = await res.json().catch(() => null)
         throw new Error(data?.error ?? 'Failed to convert lead')
+      }
+      return
+    }
+    case 'RETRY_FAILED_SEND': {
+      if (!action.messageId) throw new Error('Missing message ID')
+      const res = await fetch(`/api/messages/${action.messageId}/retry`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error ?? 'Failed to retry send')
       }
       return
     }

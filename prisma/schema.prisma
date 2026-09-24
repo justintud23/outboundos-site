@@ -53,6 +53,7 @@ enum DraftStatus {
   PENDING_REVIEW
   APPROVED
   REJECTED
+  BLOCKED
 }
 
 enum MessageStatus {
@@ -64,6 +65,12 @@ enum MessageStatus {
   REPLIED
   BOUNCED
   FAILED
+  CANCELLED
+}
+
+enum MailboxProvider {
+  SENDGRID
+  MICROSOFT_GRAPH
 }
 
 enum MessageEventType {
@@ -110,6 +117,20 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Sending schedule (org timezone). sendDays uses 0=Sun … 6=Sat.
+  timezone           String   @default("America/New_York")
+  businessHoursStart Int      @default(8)
+  businessHoursEnd   Int      @default(17)
+  sendDays           Int[]    @default([1, 2, 3, 4, 5])
+  escalationEmail    String?
+  // Org-wide kill switch. Set by a human, or automatically on Graph 401/403.
+  sendingPaused      Boolean  @default(false)
+  pausedReason       String?
+  guardrailBlockedPhrases String[] @default([])
+  guardrailAllowedWords   String[] @default([])
+  // Microsoft 365 sending tenant (app-only Graph auth; secret lives in env).
+  msTenantId         String?
+
   members          OrgMember[]
   leads            Lead[]
   importBatches    ImportBatch[]
@@ -119,6 +140,7 @@ model Organization {
   drafts           Draft[]
   outboundMessages OutboundMessage[]
   inboundReplies   InboundReply[]
+  unmatchedReplies UnmatchedReply[]
   auditLogs        AuditLog[]
   promptTemplates  PromptTemplate[]
   leadStatusChanges   LeadStatusChange[]
@@ -246,6 +268,10 @@ model Campaign {
   description String?
   status      CampaignStatus @default(DRAFT)
 
+  autoSend         Boolean   @default(false)
+  sampleSize       Int       @default(10)
+  sampleApprovedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -290,6 +316,9 @@ model SequenceStep {
   subject    String
   body       String
   delayDays  Int @default(0)
+
+  // Guidance for the AI-written line inserted at {personalization}.
+  personalizationPrompt String?
 
   // Subject-line A/B test (FIRST step only — follow-ups thread as "Re: <root>").
   // Each SubjectVariant is one arm of the test for this step; the step's own
@@ -360,6 +389,10 @@ model SequenceEnrollment {
   stoppedAt           DateTime?
   stoppedReason       String?
 
+  mailboxId      String?
+  mailbox        Mailbox? @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  failedAttempts Int      @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -369,6 +402,7 @@ model SequenceEnrollment {
   @@index([organizationId])
   @@index([status, nextDueAt])
   @@index([leadId])
+  @@index([mailboxId])
   @@map("sequence_enrollments")
 }
 
@@ -405,11 +439,23 @@ model Mailbox {
   pauseReason    String?
   breakerResetAt DateTime  @default(now())
 
+  provider        MailboxProvider @default(SENDGRID)
+  graphUserId     String?
+  // Resumable Graph delta URLs (a deltaLink, or a nextLink mid-sync).
+  inboxDeltaLink  String?
+  sentDeltaLink   String?
+  lastPolledAt    DateTime?
+  // Send-time pacing: earliest moment this mailbox may send again.
+  nextSendAt      DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   campaigns        Campaign[]
   outboundMessages OutboundMessage[]
+  enrollments      SequenceEnrollment[]
+  inboundReplies   InboundReply[]
+  unmatchedReplies UnmatchedReply[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -448,6 +494,9 @@ model Draft {
   body    String
   status  DraftStatus @default(PENDING_REVIEW)
 
+  guardrailFlags Json?
+  isSample       Boolean @default(false)
+
   createdByClerkId  String?
   approvedByClerkId String?
   approvedAt        DateTime?
@@ -462,6 +511,7 @@ model Draft {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([leadId])
+  @@index([campaignId, isSample])
   @@map("drafts")
 }
 
@@ -497,6 +547,14 @@ model OutboundMessage {
   status      MessageStatus @default(QUEUED)
   sentAt      DateTime?
 
+  scheduledFor        DateTime?
+  graphMessageId      String?   @unique
+  conversationId      String?
+  processing          Boolean   @default(false)
+  processingStartedAt DateTime?
+  sendAttempts        Int       @default(0)
+  lastError           String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -510,6 +568,8 @@ model OutboundMessage {
   @@index([organizationId, sentAt])
   @@index([leadId, sentAt])
   @@index([subjectVariantId])
+  @@index([status, scheduledFor])
+  @@index([conversationId])
   @@map("outbound_messages")
 }
 
@@ -551,6 +611,16 @@ model InboundReply {
   rawBody                  String
   classification           ReplyClassification @default(UNKNOWN)
   classificationConfidence Float?
+
+  mailboxId      String?
+  mailbox        Mailbox?  @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  graphMessageId String?   @unique
+  conversationId String?
+  fromEmail      String?
+  subject        String?
+  notifiedAt     DateTime?
+  handledAt      DateTime?
+
   isRead Boolean @default(false)
 
   receivedAt DateTime @default(now())
@@ -562,6 +632,7 @@ model InboundReply {
   @@index([organizationId, isRead])
   @@index([organizationId, receivedAt])
   @@index([leadId, receivedAt])
+  @@index([conversationId])
   @@map("inbound_replies")
 }
 
@@ -612,4 +683,35 @@ model PromptTemplate {
   @@index([organizationId])
   @@index([organizationId, promptType, isActive])
   @@map("prompt_templates")
+}
+
+// A human reply that couldn't be matched to a lead (e.g. a colleague answering
+// for them). Kept separate so InboundReply.leadId stays non-null.
+model UnmatchedReply {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mailboxId      String
+  mailbox        Mailbox      @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  graphMessageId String       @unique
+  conversationId String?
+  fromEmail      String
+  subject        String
+  bodyPreview    String
+  receivedAt     DateTime
+  notifiedAt     DateTime?
+  handledAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([conversationId])
+  @@map("unmatched_replies")
+}
+
+model CronHeartbeat {
+  job        String   @id
+  lastRunAt  DateTime
+  lastResult Json?
+
+  @@map("cron_heartbeats")
 }

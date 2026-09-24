@@ -43,6 +43,7 @@ const fakeDraftWithLead = {
     lastName: 'Doe',
     company: 'Acme',
   },
+  outboundMessages: [] as { id: string; status: string }[],
 }
 
 describe('getDrafts', () => {
@@ -58,7 +59,7 @@ describe('getDrafts', () => {
     expect(result.drafts[0]?.subject).toBe('Hello Jane')
   })
 
-  it('defaults to PENDING_REVIEW and APPROVED statuses', async () => {
+  it('defaults to PENDING_REVIEW, APPROVED, and BLOCKED statuses', async () => {
     mockPrisma.draft.findMany.mockResolvedValue([])
     mockPrisma.draft.count.mockResolvedValue(0)
 
@@ -67,7 +68,7 @@ describe('getDrafts', () => {
     expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          status: { in: ['PENDING_REVIEW', 'APPROVED'] },
+          status: { in: ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'] },
         }),
       }),
     )
@@ -99,6 +100,23 @@ describe('getDrafts', () => {
     )
   })
 
+  it('exposes the draft\'s outbound message (so the UI hides Send for queued/failed drafts)', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([
+      { ...fakeDraftWithLead, status: 'APPROVED', outboundMessages: [{ id: 'msg-1', status: 'QUEUED' }] },
+      fakeDraftWithLead,
+    ])
+    mockPrisma.draft.count.mockResolvedValue(2)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(mockPrisma.draft.findMany.mock.calls[0]?.[0]?.include?.outboundMessages).toEqual({
+      select: { id: true, status: true },
+      take: 1,
+    })
+    expect(result.drafts[0]?.outboundMessage).toEqual({ id: 'msg-1', status: 'QUEUED' })
+    expect(result.drafts[1]?.outboundMessage).toBeNull()
+  })
+
   it('returns empty list when no drafts exist', async () => {
     mockPrisma.draft.findMany.mockResolvedValue([])
     mockPrisma.draft.count.mockResolvedValue(0)
@@ -107,5 +125,27 @@ describe('getDrafts', () => {
 
     expect(result.drafts).toEqual([])
     expect(result.total).toBe(0)
+  })
+
+  it('maps guardrailFlags for BLOCKED drafts', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([{
+      ...fakeDraftWithLead,
+      status: 'BLOCKED',
+      guardrailFlags: [{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }],
+    }])
+    mockPrisma.draft.count.mockResolvedValue(1)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(result.drafts[0]?.guardrailFlags).toEqual([{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }])
+  })
+
+  it('returns null guardrailFlags when absent', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([fakeDraftWithLead])
+    mockPrisma.draft.count.mockResolvedValue(1)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(result.drafts[0]?.guardrailFlags).toBeNull()
   })
 })
