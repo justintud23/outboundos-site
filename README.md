@@ -265,3 +265,46 @@ The system blocks sends containing:
 **Exemptions:**
 - Words listed under **Always-allowed words** (Settings) bypass the rule.
 - Any phrase that appears verbatim in your approved template is exempt.
+
+---
+
+## Deliverability
+
+The **Deliverability** page (available only when Microsoft 365 is connected) monitors domain health, enforces sending ramps, and protects your reputation through automated checks and alerts.
+
+### Ramp Presets
+
+Email warming is built in. Every mailbox starts with a conservative ramp that gradually increases daily send volume over 29 days. Choose a preset during setup; adjust per-mailbox on the Deliverability page:
+
+| Ramp Day | Conservative | Standard | Aggressive |
+|----------|--------------|----------|-----------|
+| 1–3 | 3/day | 5/day | 10/day |
+| 4–7 | 5/day | 10/day | 18/day |
+| 8–14 | 10/day | 18/day | 25/day |
+| 15–21 | 18/day | 25/day | full |
+| 22–28 | 25/day | full | full |
+| 29+ | full | full | full |
+
+"Full" means the mailbox's daily limit (set in Settings). Turning off the ramp gives you the full limit immediately, but young domains (registered < 30 days ago) are still capped at 10/day until they age.
+
+### Domain Health Checks
+
+Outbound mail is queued until your domains pass verification. Checks run on import, daily (at 16:00 UTC), and on demand via **Recheck now** (limited to once per 60 seconds per domain). A domain fails if **any** check fails; queued mail waits and is never lost.
+
+**SPF:** Must include `spf.protection.outlook.com` and end with `-all` (reject) or `~all` (softfail).
+
+**DKIM:** Both Microsoft 365 CNAME records must exist in DNS, and DKIM must be enabled in **Microsoft Defender → Email authentication → DKIM**.
+
+**MX:** Must resolve to `*.mail.protection.outlook.com`.
+
+**DMARC:** Recommended but only warns; a missing or failing DMARC record does not block sending.
+
+**Young domain rule:** Domains registered less than 30 days ago (or with unknown registration dates from the registry) are capped at 10 sends per day regardless of the mailbox ramp. Update the registration date on the page if RDAP doesn't find it.
+
+### Alerts
+
+You receive one email when a domain **starts failing** checks and one email when it **recovers**. Alerts go to the notifications mailbox.
+
+### What We Don't Do
+
+OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means real sending: careful volume, clean content, and genuine engagement tracking. No bots, no farms, no shortcuts.
