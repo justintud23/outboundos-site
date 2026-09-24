@@ -108,6 +108,19 @@ enum PromptType {
   SUBJECT_LINE
 }
 
+enum RampPreset {
+  CONSERVATIVE
+  STANDARD
+  AGGRESSIVE
+}
+
+enum DomainStatus {
+  UNVERIFIED
+  HEALTHY
+  WARNING
+  FAILING
+}
+
 // ─── ORGANIZATION ──────────────────────────────────────────────
 
 model Organization {
@@ -152,6 +165,7 @@ model Organization {
   promptTemplates  PromptTemplate[]
   leadStatusChanges   LeadStatusChange[]
   sequenceEnrollments SequenceEnrollment[]
+  domainHealth     DomainHealth[]
 
   @@map("organizations")
 }
@@ -435,6 +449,9 @@ model Mailbox {
   // false so already-established inboxes are not suddenly throttled.
   warmupEnabled   Boolean  @default(true)
   warmupStartedAt DateTime @default(now())
+
+  // Ramp schedule (see features/mailboxes/warmup.ts). Day 1 = warmupStartedAt.
+  rampPreset      RampPreset @default(CONSERVATIVE)
 
   // Circuit breaker: when recent bounce / spam-complaint rates breach safe
   // thresholds (see features/mailboxes/breaker.ts) the mailbox is AUTO-paused to
@@ -723,4 +740,29 @@ model CronHeartbeat {
   lastResult Json?
 
   @@map("cron_heartbeats")
+}
+
+// ─── DOMAIN HEALTH ─────────────────────────────────────────────
+
+// Latest DNS/registration check for one sending domain (Graph mailboxes).
+model DomainHealth {
+  id                 String        @id @default(cuid())
+  organizationId     String
+  organization       Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  domain             String        // lower-case
+  status             DomainStatus  @default(UNVERIFIED)
+  checks             Json?         // DomainCheck[] — see features/deliverability/evaluate-domain.ts
+  registeredAt       DateTime?
+  registeredAtSource String?       // 'rdap' | 'manual'
+  lastCheckedAt      DateTime?     // last check that produced a result
+  lastAttemptAt      DateTime?     // last attempt, including "couldn't check"
+  lastStatusChangeAt DateTime?
+  lastError          String?
+  alertedStatus      DomainStatus?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([organizationId, domain])
+  @@index([organizationId])
+  @@map("domain_health")
 }
