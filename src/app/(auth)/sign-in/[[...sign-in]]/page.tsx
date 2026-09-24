@@ -5,7 +5,7 @@ import { useSignIn, useAuth } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-type Step = 'identifier' | 'password' | 'redirecting'
+type Step = 'identifier' | 'password' | 'code' | 'redirecting'
 
 export default function SignInPage() {
   const { signIn } = useSignIn()
@@ -15,6 +15,7 @@ export default function SignInPage() {
   const [step, setStep] = useState<Step>('identifier')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -59,16 +60,13 @@ export default function SignInPage() {
     setError(null)
     setLoading(true)
     const { error } = await signIn.create({ identifier: email })
-    setLoading(false)
     if (error) {
+      setLoading(false)
       setError(error.message ?? 'Invalid email address')
       return
     }
-    if (signIn.status === 'needs_first_factor') {
-      setStep('password')
-    } else if (signIn.status === 'complete') {
-      await signIn.finalize({ navigate: () => router.push('/dashboard') })
-    }
+    await continueSignIn()
+    setLoading(false)
   }
 
   async function handlePasswordSubmit(e: React.FormEvent) {
@@ -77,13 +75,65 @@ export default function SignInPage() {
     setError(null)
     setLoading(true)
     const { error } = await signIn.password({ password, identifier: email })
-    setLoading(false)
     if (error) {
+      setLoading(false)
       setError(error.message ?? 'Incorrect password')
       return
     }
-    if (signIn.status === 'complete') {
-      await signIn.finalize({ navigate: () => router.push('/dashboard') })
+    await continueSignIn()
+    setLoading(false)
+  }
+
+  async function handleCodeSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!signIn || !code.trim()) return
+    setError(null)
+    setLoading(true)
+    const { error } = await signIn.mfa.verifyEmailCode({ code: code.trim() })
+    if (error) {
+      setLoading(false)
+      setError(error.message ?? 'Incorrect code')
+      return
+    }
+    await continueSignIn()
+    setLoading(false)
+  }
+
+  async function resendCode() {
+    if (!signIn) return
+    setError(null)
+    const { error } = await signIn.mfa.sendEmailCode()
+    if (error) setError(error.message ?? 'Could not resend the code')
+  }
+
+  // Decide the next step from Clerk's sign-in status. Every status must lead
+  // somewhere visible — an unhandled one used to reset the button silently.
+  async function continueSignIn() {
+    if (!signIn) return
+    switch (signIn.status) {
+      case 'complete':
+        await signIn.finalize({ navigate: () => router.push('/dashboard') })
+        return
+      case 'needs_first_factor':
+        setStep('password')
+        return
+      case 'needs_client_trust':
+      case 'needs_second_factor': {
+        // Clerk wants an emailed code: a new device (client trust) or email MFA.
+        const { error } = await signIn.mfa.sendEmailCode()
+        if (error) {
+          setError(error.message ?? 'Could not send a verification code')
+          return
+        }
+        setCode('')
+        setStep('code')
+        return
+      }
+      case 'needs_new_password':
+        setError('Your password needs to be reset before you can sign in. Contact your administrator or sign in with Google or Microsoft.')
+        return
+      default:
+        setError(`Sign-in couldn't be completed (${signIn.status}). Please try again.`)
     }
   }
 
@@ -103,11 +153,13 @@ export default function SignInPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {step === 'identifier' ? 'Sign in' : 'Enter your password'}
+          {step === 'identifier' ? 'Sign in' : step === 'code' ? 'Check your email' : 'Enter your password'}
         </h1>
         <p className="text-[var(--text-muted)] text-sm mt-1.5">
           {step === 'identifier'
             ? 'Welcome back. Sign in to your account.'
+            : step === 'code'
+            ? <>We sent a verification code to <span className="font-medium text-[var(--text-secondary)]">{email}</span>.</>
             : (
               <>
                 Signing in as{' '}
@@ -124,7 +176,7 @@ export default function SignInPage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div role="alert" className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           {error}
         </div>
       )}
@@ -169,6 +221,40 @@ export default function SignInPage() {
             </button>
           </form>
         </>
+      )}
+
+      {step === 'code' && (
+        <form onSubmit={handleCodeSubmit}>
+          <label htmlFor="code" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+            Verification code
+          </label>
+          <input
+            id="code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="123456"
+            autoFocus
+            required
+            className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-base sm:text-sm tracking-widest placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:border-[var(--accent-indigo)] transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={loading || !code.trim()}
+            className="w-full mt-4 px-4 py-2.5 rounded-lg bg-[var(--accent-indigo)] text-[var(--text-inverse)] text-sm font-medium hover:bg-[var(--accent-indigo-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-indigo-glow)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {loading ? 'Verifying...' : 'Verify'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void resendCode()}
+            className="w-full mt-3 text-sm text-[var(--accent-indigo)] hover:text-[var(--accent-indigo-hover)] font-medium cursor-pointer"
+          >
+            Resend code
+          </button>
+        </form>
       )}
 
       {step === 'password' && (
