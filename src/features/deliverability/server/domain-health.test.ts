@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     mailbox: { findMany: vi.fn() },
     organization: { findMany: vi.fn() },
-    domainHealth: { createMany: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    domainHealth: { createMany: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
 }))
 vi.mock('@/features/replies/server/notify', () => ({ sendOrgAlert: vi.fn() }))
@@ -30,13 +30,49 @@ const deps = (o: Record<string, unknown> = {}) => ({ lookup: vi.fn().mockResolve
 
 // Stateful fake row: findUnique returns it, update merges into it — so status
 // and alertedStatus carry over between checks like the real table.
+// updateMany performs the same compare-and-set semantics `maybeAlert` relies
+// on: it only mutates (and reports count: 1) when the row still matches the
+// where clause, which is how the concurrency tests below prove mutual
+// exclusion without any real parallelism — the mock body never yields
+// mid-check, so whichever call runs it first wins atomically.
 let current: ReturnType<typeof row>
+
+function matchesStatus(where: Record<string, unknown>): boolean {
+  const status = where.status as string | { in?: string[] } | undefined
+  if (status === undefined) return true
+  if (typeof status === 'string') return current.status === status
+  return (status.in ?? []).includes(current.status)
+}
+
+function matchesAlerted(where: Record<string, unknown>): boolean {
+  const or = where.OR as { alertedStatus?: unknown }[] | undefined
+  if (or) {
+    return or.some((clause) => {
+      if (clause.alertedStatus === null) return current.alertedStatus === null
+      const notClause = clause.alertedStatus as { not?: unknown } | undefined
+      return current.alertedStatus !== notClause?.not
+    })
+  }
+  const alertedStatus = where.alertedStatus
+  if (alertedStatus === undefined) return true
+  return current.alertedStatus === alertedStatus
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   current = row()
   p.domainHealth.findUnique.mockImplementation(async () => current)
   p.domainHealth.update.mockImplementation(async ({ data }: { data: object }) => (current = { ...current, ...data }))
+  p.domainHealth.updateMany.mockImplementation(async ({ where, data }: { where: Record<string, unknown>; data: object }) => {
+    if (where.id !== current.id || !matchesStatus(where) || !matchesAlerted(where)) return { count: 0 }
+    current = { ...current, ...data }
+    return { count: 1 }
+  })
   ;(sendOrgAlert as Fn).mockResolvedValue(true)
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('domainOf', () => {
@@ -60,7 +96,9 @@ describe('ensureDomainRows', () => {
 describe('checkDomain', () => {
   it('stores the evaluation, status change time, and clears lastError', async () => {
     await checkDomain('dh-1', deps())
-    expect(p.domainHealth.update.mock.calls[0][0].data).toMatchObject({
+    // calls[0] is the immediate lastAttemptAt stamp; calls[1] is the main update.
+    expect(p.domainHealth.update.mock.calls[0][0].data).toEqual({ lastAttemptAt: NOW })
+    expect(p.domainHealth.update.mock.calls[1][0].data).toMatchObject({
       status: 'HEALTHY', lastCheckedAt: NOW, lastAttemptAt: NOW, lastStatusChangeAt: NOW, lastError: null,
     })
   })
@@ -69,7 +107,7 @@ describe('checkDomain', () => {
     current = row({ registeredAt: null, registeredAtSource: null })
     const d = deps({ rdap: vi.fn().mockResolvedValue(new Date('2026-09-01')) })
     await checkDomain('dh-1', d)
-    expect(p.domainHealth.update.mock.calls[0][0].data).toMatchObject({ registeredAt: new Date('2026-09-01'), registeredAtSource: 'rdap' })
+    expect(p.domainHealth.update.mock.calls[1][0].data).toMatchObject({ registeredAt: new Date('2026-09-01'), registeredAtSource: 'rdap' })
 
     current = row({ registeredAt: new Date('2026-02-01'), registeredAtSource: 'manual' })
     const d2 = deps()
@@ -80,7 +118,7 @@ describe('checkDomain', () => {
   it('Review Focus #2: DNS timeout on a HEALTHY domain keeps HEALTHY, records lastError, no alert', async () => {
     current = row({ status: 'HEALTHY', alertedStatus: null })
     await checkDomain('dh-1', deps({ lookup: vi.fn().mockRejectedValue(new DnsLookupError('ETIMEOUT', 'x')) }))
-    const data = p.domainHealth.update.mock.calls[0][0].data
+    const data = p.domainHealth.update.mock.calls[1][0].data
     expect(data).toMatchObject({ lastAttemptAt: NOW, lastError: expect.stringMatching(/couldn.t check/i) })
     expect(data).not.toHaveProperty('status')
     expect(sendOrgAlert).not.toHaveBeenCalled()
@@ -88,53 +126,126 @@ describe('checkDomain', () => {
 
   it('Review Focus #2: a timeout on a never-checked domain leaves it UNVERIFIED', async () => {
     await checkDomain('dh-1', deps({ lookup: vi.fn().mockRejectedValue(new DnsLookupError('ESERVFAIL', 'x')) }))
-    expect(p.domainHealth.update.mock.calls[0][0].data).not.toHaveProperty('status')
+    expect(p.domainHealth.update.mock.calls[1][0].data).not.toHaveProperty('status')
   })
 
   it('Review Focus #3: one alert on turning FAILING; none on an unchanged recheck; one on recovery', async () => {
     const failing = { ...GOOD, mx: [] }
-    current = row({ status: 'HEALTHY' })
+    current = row({ status: 'HEALTHY', alertedStatus: null })
     await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue(failing) }))
     expect(sendOrgAlert).toHaveBeenCalledTimes(1)
     expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/getacmesnow\.com is failing/)
     expect((sendOrgAlert as Fn).mock.calls[0][2]).toMatch(/MX/)
-    expect(p.domainHealth.update).toHaveBeenLastCalledWith({ where: { id: 'dh-1' }, data: { alertedStatus: 'FAILING' } })
+    expect(current.alertedStatus).toBe('FAILING')
 
     ;(sendOrgAlert as Fn).mockClear()
-    current = row({ status: 'FAILING', alertedStatus: 'FAILING' })
     await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue(failing) }))
     expect(sendOrgAlert).not.toHaveBeenCalled()
 
-    current = row({ status: 'FAILING', alertedStatus: 'FAILING' })
+    ;(sendOrgAlert as Fn).mockClear()
     await checkDomain('dh-1', deps())
     expect(sendOrgAlert).toHaveBeenCalledTimes(1)
     expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/recovered/)
+    expect(current.alertedStatus).toBe('HEALTHY')
   })
 
   it('a failed alert leaves alertedStatus unchanged so it retries next check', async () => {
     ;(sendOrgAlert as Fn).mockResolvedValue(false)
-    current = row({ status: 'HEALTHY' })
+    current = row({ status: 'HEALTHY', alertedStatus: null })
     await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue({ ...GOOD, mx: [] }) }))
-    expect(p.domainHealth.update).toHaveBeenCalledTimes(1)
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect(current.status).toBe('FAILING')
+    expect(current.alertedStatus).toBeNull()
+  })
+
+  it('a failed recovery send leaves alertedStatus at FAILING so it retries next check', async () => {
+    ;(sendOrgAlert as Fn).mockResolvedValue(false)
+    current = row({ status: 'FAILING', alertedStatus: 'FAILING' })
+    await checkDomain('dh-1', deps())
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/recovered/)
+    expect(current.status).toBe('HEALTHY')
+    expect(current.alertedStatus).toBe('FAILING')
+  })
+
+  it('a successful recovery send persists alertedStatus as the new status', async () => {
+    current = row({ status: 'FAILING', alertedStatus: 'FAILING' })
+    await checkDomain('dh-1', deps())
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect(current.status).toBe('HEALTHY')
+    expect(current.alertedStatus).toBe('HEALTHY')
+  })
+
+  it('alerts again after FAILING → recovered → FAILING', async () => {
+    const failing = { ...GOOD, mx: [] }
+    const warningOnly = { ...GOOD, dmarc: [] } // DMARC-only warn → status WARNING, not FAILING
+    current = row({ status: 'FAILING', alertedStatus: 'FAILING' })
+
+    await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue(warningOnly) }))
+    expect(current.status).toBe('WARNING')
+    expect(current.alertedStatus).toBe('WARNING')
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/recovered/)
+
+    ;(sendOrgAlert as Fn).mockClear()
+    await checkDomain('dh-1', deps({ lookup: vi.fn().mockResolvedValue(failing) }))
+    expect(current.status).toBe('FAILING')
+    expect(current.alertedStatus).toBe('FAILING')
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect((sendOrgAlert as Fn).mock.calls[0][1]).toMatch(/getacmesnow\.com is failing/)
+  })
+
+  it('two concurrent checkDomain calls on the same newly-failing domain alert only once', async () => {
+    current = row({ status: 'HEALTHY', alertedStatus: null })
+    const failing = { ...GOOD, mx: [] }
+    const d1 = deps({ lookup: vi.fn().mockResolvedValue(failing) })
+    const d2 = deps({ lookup: vi.fn().mockResolvedValue(failing) })
+    await Promise.all([checkDomain('dh-1', d1), checkDomain('dh-1', d2)])
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect(current.status).toBe('FAILING')
+    expect(current.alertedStatus).toBe('FAILING')
   })
 })
 
 describe('refreshAllDomains', () => {
   it('ensures rows for connected orgs, then checks oldest attempt first', async () => {
     p.organization.findMany.mockResolvedValue([{ id: 'org-1' }])
-    p.mailbox.findMany.mockResolvedValue([])
-    p.domainHealth.findMany.mockResolvedValueOnce([]) // ensureDomainRows' never-attempted query
-      .mockResolvedValueOnce([{ id: 'dh-1' }, { id: 'dh-2' }])
+    p.mailbox.findMany.mockResolvedValue([{ organizationId: 'org-1', email: 'a@x.com' }, { organizationId: 'org-1', email: 'b@y.com' }])
+    p.domainHealth.findMany
+      .mockResolvedValueOnce([]) // ensureDomainRows' never-attempted query
+      .mockResolvedValueOnce([
+        { id: 'dh-1', organizationId: 'org-1', domain: 'x.com' },
+        { id: 'dh-2', organizationId: 'org-1', domain: 'y.com' },
+      ])
     const out = await refreshAllDomains(25_000, deps())
     expect(p.domainHealth.findMany.mock.calls[1][0]).toMatchObject({ orderBy: { lastAttemptAt: { sort: 'asc', nulls: 'first' } } })
     expect(out).toEqual({ checked: 2, failed: 0 })
   })
+
   it('one domain throwing does not stop the rest', async () => {
     p.organization.findMany.mockResolvedValue([])
-    p.domainHealth.findMany.mockResolvedValue([{ id: 'dh-1' }, { id: 'dh-2' }])
+    p.mailbox.findMany.mockResolvedValue([{ organizationId: 'org-1', email: 'a@x.com' }, { organizationId: 'org-1', email: 'b@y.com' }])
+    p.domainHealth.findMany.mockResolvedValue([
+      { id: 'dh-1', organizationId: 'org-1', domain: 'x.com' },
+      { id: 'dh-2', organizationId: 'org-1', domain: 'y.com' },
+    ])
     p.domainHealth.findUnique.mockRejectedValueOnce(new Error('db blip'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await refreshAllDomains(25_000, deps())).toEqual({ checked: 1, failed: 1 })
+  })
+
+  it('skips a row whose domain no longer has a Graph mailbox (orphaned, left alone)', async () => {
+    p.organization.findMany.mockResolvedValue([{ id: 'org-1' }])
+    p.mailbox.findMany.mockResolvedValue([{ organizationId: 'org-1', email: 'a@x.com' }]) // only x.com still connected
+    p.domainHealth.findMany
+      .mockResolvedValueOnce([]) // ensureDomainRows' never-attempted query
+      .mockResolvedValueOnce([
+        { id: 'dh-1', organizationId: 'org-1', domain: 'x.com' },
+        { id: 'dh-2', organizationId: 'org-1', domain: 'orphaned.com' },
+      ])
+    const out = await refreshAllDomains(25_000, deps())
+    expect(out).toEqual({ checked: 1, failed: 0 })
+    expect(p.domainHealth.findUnique).toHaveBeenCalledTimes(1)
   })
 })
 

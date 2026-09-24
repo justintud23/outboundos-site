@@ -43,23 +43,44 @@ function fixesText(checks: DomainCheck[]): string {
     .join('\n')
 }
 
+// Two checkDomain runs on the same domain can overlap (double-clicked "Recheck
+// now", a manual recheck racing the daily refresh, an import's immediate
+// check). Both would otherwise read the same alertedStatus and both send.
+// Guard each send with an atomic claim: flip alertedStatus first, and only
+// send if this call was the one that actually flipped it. A failed send
+// restores the prior value so the next check retries the alert.
 async function maybeAlert(row: DomainHealth): Promise<void> {
   const checks = (row.checks as unknown as DomainCheck[] | null) ?? []
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+
   if (row.status === 'FAILING' && row.alertedStatus !== 'FAILING') {
+    const claim = await prisma.domainHealth.updateMany({
+      where: { id: row.id, status: 'FAILING', OR: [{ alertedStatus: null }, { alertedStatus: { not: 'FAILING' } }] },
+      data: { alertedStatus: 'FAILING' },
+    })
+    if (claim.count !== 1) return
     const ok = await sendOrgAlert(
       row.organizationId,
       `Domain ${row.domain} is failing — sending from it is paused`,
       `Mail from ${row.domain} is on hold until these DNS problems are fixed:\n\n${fixesText(checks)}\n\nAfter fixing, click "Recheck now" on ${appUrl}/deliverability. Queued emails will go out once it passes.`,
     )
-    if (ok) await prisma.domainHealth.update({ where: { id: row.id }, data: { alertedStatus: 'FAILING' } })
+    if (!ok) {
+      await prisma.domainHealth.update({ where: { id: row.id }, data: { alertedStatus: row.alertedStatus } })
+    }
   } else if ((row.status === 'HEALTHY' || row.status === 'WARNING') && row.alertedStatus === 'FAILING') {
+    const claim = await prisma.domainHealth.updateMany({
+      where: { id: row.id, status: { in: ['HEALTHY', 'WARNING'] }, alertedStatus: 'FAILING' },
+      data: { alertedStatus: row.status },
+    })
+    if (claim.count !== 1) return
     const ok = await sendOrgAlert(
       row.organizationId,
       `Domain ${row.domain} has recovered`,
       `${row.domain} passes its DNS checks again. Sending from its mailboxes has resumed.`,
     )
-    if (ok) await prisma.domainHealth.update({ where: { id: row.id }, data: { alertedStatus: row.status } })
+    if (!ok) {
+      await prisma.domainHealth.update({ where: { id: row.id }, data: { alertedStatus: 'FAILING' } })
+    }
   }
 }
 
@@ -70,6 +91,10 @@ export async function checkDomain(id: string, deps: CheckDeps = {}): Promise<Dom
 
   const row = await prisma.domainHealth.findUnique({ where: { id } })
   if (!row) throw new Error(`DomainHealth ${id} not found`)
+
+  // Stamp immediately, before any network I/O, so the recheck route's rate
+  // limit covers checks that are still in flight (not just completed ones).
+  await prisma.domainHealth.update({ where: { id }, data: { lastAttemptAt: now } })
 
   // Registration date: look it up only while unknown; a manual date always wins.
   const registration: Prisma.DomainHealthUpdateInput = {}
@@ -114,19 +139,34 @@ export async function refreshAllDomains(budgetMs = 25_000, deps: CheckDeps = {})
   for (const org of orgs) await ensureDomainRows(org.id)
 
   const rows = await prisma.domainHealth.findMany({
+    where: { organization: { msTenantId: { not: null } } },
     orderBy: { lastAttemptAt: { sort: 'asc', nulls: 'first' } },
-    select: { id: true },
+    select: { id: true, organizationId: true, domain: true },
   })
+
+  // Skip rows whose domain no longer has a connected Graph mailbox — an org
+  // can remove its last mailbox on a domain without the DomainHealth row
+  // going away. Leave those rows alone (not deleted); just don't recheck them.
+  const orgIds = [...new Set(rows.map((r) => r.organizationId))]
+  const mailboxes = orgIds.length
+    ? await prisma.mailbox.findMany({
+        where: { organizationId: { in: orgIds }, provider: 'MICROSOFT_GRAPH' },
+        select: { organizationId: true, email: true },
+      })
+    : []
+  const activeDomains = new Set(mailboxes.map((m) => `${m.organizationId}:${domainOf(m.email)}`))
+
   let checked = 0
   let failed = 0
-  for (const { id } of rows) {
+  for (const r of rows) {
     if (Date.now() - startedAt > budgetMs) break
+    if (!activeDomains.has(`${r.organizationId}:${r.domain}`)) continue
     try {
-      await checkDomain(id, deps)
+      await checkDomain(r.id, deps)
       checked++
     } catch (err) {
       failed++
-      console.error(`[domain-health] check ${id} failed`, err)
+      console.error(`[domain-health] check ${r.id} failed`, err)
     }
   }
   return { checked, failed }
