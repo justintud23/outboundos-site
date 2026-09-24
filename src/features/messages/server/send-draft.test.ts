@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     draft: { findFirst: vi.fn() },
+    organization: { findUnique: vi.fn() },
     mailbox: { findMany: vi.fn(), updateMany: vi.fn() },
     outboundMessage: {
       create: vi.fn(),
@@ -48,6 +49,7 @@ import { DraftNotFoundError } from '@/features/drafts/types'
 type Fn = ReturnType<typeof vi.fn>
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: Fn }
+  organization: { findUnique: Fn }
   mailbox: { findMany: Fn; updateMany: Fn }
   outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; update: Fn; delete: Fn }
   $transaction: Fn
@@ -163,6 +165,7 @@ beforeEach(() => {
   setMailboxes([mailbox({ id: 'mb-1', sentToday: 5 })])
 
   mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
+  mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null })
 
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
@@ -611,5 +614,37 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     expect(rejected.reason).toBeInstanceOf(DraftSendInProgressError)
     expect(mockSendEmail).toHaveBeenCalledTimes(1) // exactly one send
     expect(store['mb-1'].sentToday).toBe(6) // exactly one slot consumed
+  })
+
+  // ─── Microsoft Graph: tenant selection, threading, id persistence ─────────
+
+  it('uses the org tenant when selecting the provider', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    await sendDraft(INPUT)
+    expect(mockGetEmailProvider).toHaveBeenCalledWith({ msTenantId: 'tenant-1' })
+  })
+
+  it('Graph follow-up: replies to the most recent prior graph message', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, sequenceEnrollmentId: 'enr-1' })
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { messageId: '<m1@app.test>', subject: 'Intro', graphMessageId: 'g1' },
+      { messageId: '<m2@app.test>', subject: 'Re: Intro', graphMessageId: 'g2' },
+    ])
+    await sendDraft(INPUT)
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { replyToProviderMessageId?: string }
+    expect(sent.replyToProviderMessageId).toBe('g2')
+  })
+
+  it('persists the Graph id via onPrepared and stores ids on finalize', async () => {
+    mockSendEmail.mockImplementation(async (input: { onPrepared?: (id: string) => Promise<void> }) => {
+      await input.onPrepared?.('g-new')
+      return { sgMessageId: null, providerMessageId: 'g-new', conversationId: 'conv-1' }
+    })
+    const result = await sendDraft(INPUT)
+    expect(mockPrisma.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { graphMessageId: 'g-new' },
+    })
+    expect(result.status).toBe('SENT')
   })
 })

@@ -16,69 +16,12 @@ import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
+import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 
 interface SendDraftInput {
   organizationId: string
   draftId: string
   clerkUserId: string
-}
-
-function startOfDay(d: Date): Date {
-  const s = new Date(d)
-  s.setHours(0, 0, 0, 0)
-  return s
-}
-
-/**
- * Atomically reserve one daily-send slot on a mailbox. Returns true iff a slot
- * was claimed. Two conditional updates, each atomic at the row level (so they
- * are race-free under concurrency, exactly like the sequence-runner's claim):
- *
- *   1. Lazy reset — zero sentToday at most ONCE per day. The `lastResetAt < startOfToday`
- *      guard means the first concurrent send of a new day resets the counter and
- *      stamps lastResetAt=startOfToday; every other concurrent send then sees a
- *      non-stale lastResetAt and its reset is a no-op. No read-modify-write, so
- *      no lost reset and no double-reset.
- *   2. Conditional increment — bump sentToday ONLY while it is below
- *      `limitToday`. Because the guard lives in the WHERE clause, the database
- *      serializes the row updates: at most `limitToday` increments can ever
- *      succeed, no matter how many sends race. count === 0 means the mailbox hit
- *      today's limit. `limitToday` is the EFFECTIVE limit (warmup ramp applied),
- *      computed by the caller and passed as the literal bound — so warmup
- *      throttling is enforced with the same atomic guarantee.
- */
-async function reserveMailboxSlot(
-  mailboxId: string,
-  limitToday: number,
-  startOfToday: Date,
-): Promise<boolean> {
-  await prisma.mailbox.updateMany({
-    where: { id: mailboxId, lastResetAt: { lt: startOfToday } },
-    data: { sentToday: 0, lastResetAt: startOfToday },
-  })
-
-  // The isActive/autoPaused guards are defense-in-depth: candidates are already
-  // filtered, but if a mailbox is disabled or breaker-paused in the window
-  // between selection and reservation, this conditional UPDATE matches 0 rows
-  // and the caller rolls to the next mailbox — a paused mailbox can NEVER be
-  // reserved, atomically.
-  const reservation = await prisma.mailbox.updateMany({
-    where: { id: mailboxId, isActive: true, autoPaused: false, sentToday: { lt: limitToday } },
-    data: { sentToday: { increment: 1 } },
-  })
-
-  return reservation.count === 1
-}
-
-/**
- * Release a previously reserved slot (atomic decrement, guarded so it can never
- * underflow below 0). Used to roll back a reservation when the send fails.
- */
-async function releaseMailboxSlot(mailboxId: string): Promise<void> {
-  await prisma.mailbox.updateMany({
-    where: { id: mailboxId, sentToday: { gt: 0 } },
-    data: { sentToday: { decrement: 1 } },
-  })
 }
 
 export async function sendDraft({
@@ -105,6 +48,11 @@ export async function sendDraft({
   if (TERMINAL_STATUSES.includes(draft.lead.status)) {
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
+
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { msTenantId: true },
+  })
 
   // 3. Select a sending mailbox by rotating across the org's active mailboxes.
   //    Spreading sends across every connected inbox is the whole point of
@@ -181,13 +129,16 @@ export async function sendDraft({
           draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
         },
         orderBy: { sentAt: 'asc' },
-        select: { messageId: true, subject: true },
+        select: { messageId: true, subject: true, graphMessageId: true },
       })
     : []
   const priorMessageIds = priorMessages
     .map((m) => m.messageId)
     .filter((id): id is string => id !== null)
   const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
+  // Graph threads by replying to the most recent prior message it sent.
+  const replyToProviderMessageId =
+    [...priorMessages].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
   // Reuse the thread's original subject (oldest message) as "Re: ..."; never
   // double-prefix. First send keeps the draft's own subject.
   const threadRoot = priorMessages[0]
@@ -263,9 +214,9 @@ export async function sendDraft({
   const sendingMailbox = reserved
 
   // 6. Send via provider. We own both the draft claim and a mailbox slot.
-  let sgMessageId: string | null
+  let sent: Awaited<ReturnType<ReturnType<typeof getEmailProvider>['sendEmail']>>
   try {
-    ;({ sgMessageId } = await getEmailProvider().sendEmail({
+    sent = await getEmailProvider({ msTenantId: org?.msTenantId }).sendEmail({
       to: draft.lead.email,
       fromEmail: sendingMailbox.email,
       fromName: sendingMailbox.displayName,
@@ -276,7 +227,11 @@ export async function sendDraft({
       messageId,
       ...(inReplyTo && { inReplyTo }),
       ...(references && references.length > 0 && { references }),
-    }))
+      ...(replyToProviderMessageId && { replyToProviderMessageId }),
+      onPrepared: async (providerMessageId) => {
+        await prisma.outboundMessage.update({ where: { id: claim.id }, data: { graphMessageId: providerMessageId } })
+      },
+    })
   } catch (sendErr) {
     // DEFINITE failure: the provider threw, so no email went out. Roll BOTH
     // pre-send reservations back: release the mailbox slot (atomic decrement) so
@@ -299,7 +254,14 @@ export async function sendDraft({
   const finalized = await prisma.$transaction(async (tx) => {
     const message = await tx.outboundMessage.update({
       where: { id: claim.id },
-      data: { status: 'SENT', sgMessageId, sentAt, mailboxId: sendingMailbox.id },
+      data: {
+        status: 'SENT',
+        sgMessageId: sent.sgMessageId,
+        sentAt,
+        mailboxId: sendingMailbox.id,
+        ...(sent.providerMessageId && { graphMessageId: sent.providerMessageId }),
+        ...(sent.conversationId && { conversationId: sent.conversationId }),
+      },
     })
 
     await tx.auditLog.create({
