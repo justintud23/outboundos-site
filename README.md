@@ -274,7 +274,7 @@ The **Deliverability** page (available only when Microsoft 365 is connected) mon
 
 ### Ramp Presets
 
-Email warming is built in. Every mailbox starts with a conservative ramp that gradually increases daily send volume over 29 days. Choose a preset during setup; adjust per-mailbox on the Deliverability page:
+Email warming is built in. Every mailbox starts with a conservative ramp that gradually increases daily send volume over 29 days. Change the preset per mailbox on the Deliverability page (changing it keeps the current ramp day); **Restart ramp** there sends a mailbox back to day 1:
 
 | Ramp Day | Conservative | Standard | Aggressive |
 |----------|--------------|----------|-----------|
@@ -285,7 +285,7 @@ Email warming is built in. Every mailbox starts with a conservative ramp that gr
 | 22–28 | 25/day | full | full |
 | 29+ | full | full | full |
 
-"Full" means the mailbox's daily limit (set in Settings). Turning off the ramp gives you the full limit immediately, but young domains (registered < 30 days ago) are still capped at 10/day until they age.
+"Full" means the mailbox's daily limit. Turning off the ramp gives you the full limit immediately, but young domains (registered < 30 days ago) are still capped at 10/day until they age.
 
 ### Domain Health Checks
 
@@ -303,8 +303,8 @@ Outbound mail is queued until your domains pass verification. Checks run on impo
 
 ### Alerts
 
-You receive one email when a domain **starts failing** checks and one email when it **recovers**. Alerts go to the notifications mailbox.
+You receive one email when a domain **starts failing** checks and one email when it **recovers**. Alerts are sent from `MS_NOTIFY_MAILBOX` to the organization's escalation email.
 
 ### What We Don't Do
 
-OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means real sending: careful volume, clean content, and genuine engagement tracking. No bots, no farms, no shortcuts.
+OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means careful real sending: a slow volume ramp on correctly authenticated domains, with bounce and complaint monitoring.
