@@ -79,19 +79,28 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000
   for (const org of orgs) {
     if (!isInSendWindow(now, org)) continue
 
-    const mailboxes = await prisma.mailbox.findMany({
-      where: {
-        organizationId: org.id,
-        isActive: true,
-        autoPaused: false,
-        // Every org here has a tenant: only Graph mailboxes send (and are
-        // monitored for replies).
-        provider: 'MICROSOFT_GRAPH',
-        OR: [{ nextSendAt: null }, { nextSendAt: { lte: now } }],
-      },
-    })
-
-    const domainHealth = await getDomainHealthMap(org.id)
+    // A failure loading this org's mailboxes or domain health (e.g. a
+    // transient DB error) must not abort the whole tick for every other org —
+    // skip this org for this tick and keep going.
+    let mailboxes: Awaited<ReturnType<typeof prisma.mailbox.findMany>>
+    let domainHealth: Awaited<ReturnType<typeof getDomainHealthMap>>
+    try {
+      mailboxes = await prisma.mailbox.findMany({
+        where: {
+          organizationId: org.id,
+          isActive: true,
+          autoPaused: false,
+          // Every org here has a tenant: only Graph mailboxes send (and are
+          // monitored for replies).
+          provider: 'MICROSOFT_GRAPH',
+          OR: [{ nextSendAt: null }, { nextSendAt: { lte: now } }],
+        },
+      })
+      domainHealth = await getDomainHealthMap(org.id)
+    } catch (err) {
+      console.error(`[send-queue] org ${org.id}: failed to load mailboxes or domain health, skipping this org for the tick:`, err)
+      continue
+    }
 
     for (const mailbox of mailboxes) {
       if (total >= MAX_SENDS_PER_TICK || Date.now() - startedAt > budgetMs) return result

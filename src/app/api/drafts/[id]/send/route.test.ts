@@ -7,7 +7,7 @@ vi.mock('@/features/messages/server/send-draft', () => ({ sendDraft: vi.fn() }))
 import { auth } from '@clerk/nextjs/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { sendDraft } from '@/features/messages/server/send-draft'
-import { DraftOnSendQueueError } from '@/features/messages/types'
+import { DraftOnSendQueueError, DomainNotHealthyError } from '@/features/messages/types'
 import { POST } from './route'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -36,5 +36,11 @@ describe('POST /api/drafts/[id]/send', () => {
     const res = await call()
     expect(res.status).toBe(409)
     expect((await res.json()).error).toMatch(/use Retry/)
+  })
+  it('422 DOMAIN_NOT_HEALTHY when the sending mailbox is on a blocked domain', async () => {
+    ;(sendDraft as Fn).mockRejectedValue(new DomainNotHealthyError('bad.com', 'FAILING'))
+    const res = await call()
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ code: 'DOMAIN_NOT_HEALTHY', domain: 'bad.com' })
   })
 })

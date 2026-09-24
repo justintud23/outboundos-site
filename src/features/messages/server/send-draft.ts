@@ -123,10 +123,34 @@ export async function sendDraft({
   // (autoPaused: true) mailboxes — neither can be selected or reserved. A
   // Microsoft 365 org only sends from Graph mailboxes.
   const graphOnly = !!org?.msTenantId
+  // Domain health (Microsoft 365 orgs): never send from a mailbox whose domain
+  // fails SPF/DKIM/MX or was never verified. Pinned follow-ups fail loudly;
+  // rotation drops blocked mailboxes and fails only if none remain. Computed
+  // up front so the pinned branch below can also use it (a fresh enrollment
+  // whose only candidate mailboxes are all domain-blocked must report THAT,
+  // not a generic "no active mailbox").
+  const domainHealth = graphOnly ? await getDomainHealthMap(organizationId) : null
+  const domainFor = (m: { email: string }) => (domainHealth ? domainHealth.get(domainOf(m.email)) ?? null : null)
+
   let mailboxes: Awaited<ReturnType<typeof prisma.mailbox.findMany>>
   if (draft.sequenceEnrollmentId) {
     const pinnedId = await resolveEnrollmentMailboxId(organizationId, draft.sequenceEnrollmentId, priorMessages)
-    if (!pinnedId) throw new NoActiveMailboxError()
+    if (!pinnedId) {
+      if (domainHealth) {
+        const activeGraphMailboxes = await prisma.mailbox.findMany({
+          where: { organizationId, isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH' as const },
+          select: { email: true },
+        })
+        if (
+          activeGraphMailboxes.length > 0 &&
+          activeGraphMailboxes.every((m) => !isDomainUsable(domainFor(m)?.status))
+        ) {
+          const first = activeGraphMailboxes[0]!
+          throw new DomainNotHealthyError(domainOf(first.email), domainFor(first)?.status ?? 'UNVERIFIED')
+        }
+      }
+      throw new NoActiveMailboxError()
+    }
     const pinned = await prisma.mailbox.findFirst({ where: { id: pinnedId, organizationId } })
     if (!pinned || !pinned.isActive || pinned.autoPaused || (graphOnly && pinned.provider !== 'MICROSOFT_GRAPH')) {
       throw new MailboxLimitExceededError(
@@ -143,11 +167,6 @@ export async function sendDraft({
     }
   }
 
-  // Domain health (Microsoft 365 orgs): never send from a mailbox whose domain
-  // fails SPF/DKIM/MX or was never verified. Pinned follow-ups fail loudly;
-  // rotation drops blocked mailboxes and fails only if none remain.
-  const domainHealth = graphOnly ? await getDomainHealthMap(organizationId) : null
-  const domainFor = (m: { email: string }) => (domainHealth ? domainHealth.get(domainOf(m.email)) ?? null : null)
   if (domainHealth) {
     const blocked = mailboxes.filter((m) => !isDomainUsable(domainFor(m)?.status))
     mailboxes = mailboxes.filter((m) => isDomainUsable(domainFor(m)?.status))

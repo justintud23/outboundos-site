@@ -335,4 +335,45 @@ describe('processSendQueue', () => {
     await processSendQueue(NOW)
     expect((reserveMailboxSlot as Fn).mock.calls[0][1]).toBe(10)
   })
+
+  // ─── Fix round 1 ────────────────────────────────────────────
+
+  it('Fix round 1 #2: a domain-health failure for one org does not abort the tick for other orgs', async () => {
+    const org2 = { ...org, id: 'org-2' }
+    const mailbox2 = { ...mailbox, id: 'mb-2', organizationId: 'org-2', email: 'sam@othercorp.com' }
+    p.organization.findMany.mockResolvedValue([org, org2])
+    p.mailbox.findMany.mockImplementation(async ({ where }: { where: { organizationId: string } }) =>
+      where.organizationId === 'org-1' ? [mailbox] : [mailbox2],
+    )
+    p.domainHealth.findMany
+      .mockRejectedValueOnce(new Error('db timeout'))
+      .mockResolvedValueOnce([{ domain: 'othercorp.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') }])
+    const res = await processSendQueue(NOW)
+    expect(res.sent).toBe(1)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ fromEmail: 'sam@othercorp.com' })
+  })
+
+  it('Fix round 1 #3a: a mixed org — the healthy mailbox sends, the blocked one is never claimed and never consumes the tick budget', async () => {
+    const mailboxBad = { ...mailbox, id: 'mb-bad', email: 'bad@getacmesnow.com' }
+    const mailboxGood = { ...mailbox, id: 'mb-good', email: 'ok@healthydomain.com' }
+    p.mailbox.findMany.mockResolvedValue([mailboxBad, mailboxGood])
+    p.domainHealth.findMany.mockResolvedValue([
+      { domain: 'getacmesnow.com', status: 'FAILING', registeredAt: new Date('2025-01-01') },
+      { domain: 'healthydomain.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') },
+    ])
+    p.outboundMessage.findFirst.mockImplementation(async ({ where }: { where: { mailboxId: string } }) =>
+      where.mailboxId === 'mb-good' ? { id: 'msg-1' } : null,
+    )
+    const res = await processSendQueue(NOW)
+    expect(res.sent).toBe(1)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ fromEmail: 'ok@healthydomain.com' })
+    // The blocked mailbox is skipped before its queue is ever queried — no
+    // message is claimed for it, and no budget slot is spent on it.
+    expect(p.outboundMessage.findFirst).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ mailboxId: 'mb-bad' }) }),
+    )
+    expect(p.outboundMessage.findFirst).toHaveBeenCalledTimes(1)
+  })
 })

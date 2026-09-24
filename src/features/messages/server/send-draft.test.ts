@@ -760,6 +760,15 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
     expect(sentFrom()).toBe('mb-2@company.com')
   })
 
+  it('Fix round 1 #1: Microsoft 365 org, fresh enrollment, every active Graph mailbox domain-blocked → DomainNotHealthyError, not NoActiveMailboxError', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: null })
+    ;(assignEnrollmentMailbox as Fn).mockResolvedValue(null)
+    mockPrisma.domainHealth.findMany.mockResolvedValue([{ domain: 'company.com', status: 'UNVERIFIED', registeredAt: null }])
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DomainNotHealthyError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
   it('pinned mailbox at capacity → MailboxLimitExceededError, no fallback to another mailbox', async () => {
     setMailboxes([mailbox({ id: 'mb-1', sentToday: 0 }), mailbox({ id: 'mb-2', sentToday: 50, dailyLimit: 50 })])
     mockPrisma.outboundMessage.findMany.mockResolvedValue([
@@ -838,5 +847,35 @@ describe('sendDraft — domain health enforcement (Task 6)', () => {
   it('non-Microsoft 365 org — domain health is not consulted', async () => {
     mockPrisma.domainHealth.findMany.mockResolvedValue([])
     await expect(sendDraft(INPUT)).resolves.toMatchObject({ status: 'SENT' })
+  })
+
+  it('Fix round 1 #3b: rotation skips a blocked mailbox in favor of a healthy one', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
+    setMailboxes([
+      mailbox({ id: 'mb-bad', email: 'a@bad.com', sentToday: 0 }),
+      mailbox({ id: 'mb-good', email: 'b@good.com', sentToday: 0 }),
+    ])
+    mockPrisma.domainHealth.findMany.mockResolvedValue([
+      { domain: 'bad.com', status: 'FAILING', registeredAt: null },
+      { domain: 'good.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') },
+    ])
+    const result = await sendDraft(INPUT)
+    expect(result.status).toBe('SENT')
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ fromEmail: 'b@good.com' }))
+    expect(store['mb-bad'].sentToday).toBe(0)
+    expect(store['mb-good'].sentToday).toBe(1)
+  })
+
+  it('Fix round 1 #3c: a young domain (registered 5 days ago) caps the reservation bound (sentToday.lt) at 10, not dailyLimit', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
+    setMailboxes([mailbox({ id: 'mb-1', sentToday: 0, dailyLimit: 50, warmupEnabled: false })])
+    mockPrisma.domainHealth.findMany.mockResolvedValue([
+      { domain: 'company.com', status: 'HEALTHY', registeredAt: new Date(Date.now() - 5 * 86_400_000) },
+    ])
+    await sendDraft(INPUT)
+    const reserveCall = mockPrisma.mailbox.updateMany.mock.calls.find(
+      ([args]) => typeof (args as UpdateManyArgs).where.sentToday?.lt === 'number',
+    )
+    expect((reserveCall?.[0] as UpdateManyArgs).where.sentToday?.lt).toBe(10)
   })
 })
