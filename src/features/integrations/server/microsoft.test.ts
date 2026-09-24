@@ -73,4 +73,25 @@ describe('microsoft integration', () => {
       importGraphMailboxes('org-1', [{ id: 'u1', email: 'mike@getacmesnow.com', displayName: 'Mike Smith' }]),
     ).resolves.toEqual({ created: 1 })
   })
+  it('does not reject the import when ensureDomainRows itself fails', async () => {
+    ;(prisma.mailbox.createMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 2 })
+    ;(ensureDomainRows as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('db down'))
+    await expect(
+      importGraphMailboxes('org-1', [
+        { id: 'u1', email: 'mike@getacmesnow.com', displayName: 'Mike Smith' },
+        { id: 'u2', email: 'amy@getacmesnow.com', displayName: 'Amy Lee' },
+      ]),
+    ).resolves.toEqual({ created: 2 })
+  })
+  it('logs a rejected checkDomain instead of swallowing it silently', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    ;(prisma.mailbox.createMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 })
+    ;(checkDomain as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('dns boom'))
+    await importGraphMailboxes('org-1', [{ id: 'u1', email: 'mike@getacmesnow.com', displayName: 'Mike Smith' }])
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[importGraphMailboxes] check getacmesnow.com failed',
+      expect.any(Error),
+    )
+    errorSpy.mockRestore()
+  })
 })
