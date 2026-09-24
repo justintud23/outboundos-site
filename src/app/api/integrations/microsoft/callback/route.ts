@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
-import { saveTenant, CONNECT_STATE_COOKIE } from '@/features/integrations/server/microsoft'
+import { saveTenant, CONNECT_STATE_COOKIE, TenantMismatchError } from '@/features/integrations/server/microsoft'
 
 function settingsRedirect(request: Request, status: string) {
   return NextResponse.redirect(new URL(`/settings?microsoft=${status}`, request.url))
@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     await saveTenant(org.id, tenant)
   } catch (err) {
     console.error('[microsoft callback]', err)
+    if (err instanceof TenantMismatchError) return settingsRedirect(request, 'tenant_mismatch')
     return settingsRedirect(request, 'error')
   }
   return settingsRedirect(request, 'connected')

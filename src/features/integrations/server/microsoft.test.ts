@@ -5,12 +5,13 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/db/prisma'
-import { buildAdminConsentUrl, saveTenant, importGraphMailboxes } from './microsoft'
+import { buildAdminConsentUrl, saveTenant, importGraphMailboxes, TenantMismatchError } from './microsoft'
 
 beforeEach(() => {
   vi.resetAllMocks()
   process.env.MS_GRAPH_CLIENT_ID = 'cid'
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.test'
+  process.env.MS_GRAPH_TENANT_ID = '72F988BF-86F1-41AF-91AB-2D7CD011DB47'
 })
 
 describe('microsoft integration', () => {
@@ -31,6 +32,15 @@ describe('microsoft integration', () => {
       where: { id: 'org-1' },
       data: { msTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47', sendingPaused: false, pausedReason: null },
     })
+  })
+  it('refuses a tenant other than the pinned MS_GRAPH_TENANT_ID (I5)', async () => {
+    await expect(saveTenant('org-1', '11111111-2222-3333-4444-555555555555')).rejects.toBeInstanceOf(TenantMismatchError)
+    expect(prisma.organization.update).not.toHaveBeenCalled()
+  })
+  it('refuses to connect at all when MS_GRAPH_TENANT_ID is not set (I5)', async () => {
+    delete process.env.MS_GRAPH_TENANT_ID
+    await expect(saveTenant('org-1', '72f988bf-86f1-41af-91ab-2d7cd011db47')).rejects.toThrow(/MS_GRAPH_TENANT_ID/)
+    expect(prisma.organization.update).not.toHaveBeenCalled()
   })
   it('imports Graph mailboxes with warmup on, 30/day, skipping duplicates', async () => {
     ;(prisma.mailbox.createMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 2 })

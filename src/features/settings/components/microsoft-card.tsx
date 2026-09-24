@@ -20,6 +20,8 @@ const CONNECT_MESSAGES: Record<string, string> = {
   connected: 'Microsoft 365 connected.',
   denied: 'Admin consent was not granted.',
   state_mismatch: 'Connection expired — try again.',
+  tenant_mismatch:
+    'That Microsoft 365 account is not the one this OutboundOS deployment is set up for. Sign in with the admin of the configured tenant.',
   error: 'Something went wrong saving the connection.',
 }
 

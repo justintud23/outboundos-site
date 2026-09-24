@@ -15,8 +15,13 @@ vi.mock('@/lib/auth/resolve-organization', () => ({
   resolveOrganization: vi.fn(),
 }))
 
+const { actualSaveTenant } = vi.hoisted(() => ({
+  actualSaveTenant: { fn: null as null | ((orgId: string, tenant: string) => Promise<void>) },
+}))
+
 vi.mock('@/features/integrations/server/microsoft', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/features/integrations/server/microsoft')>()
+  actualSaveTenant.fn = actual.saveTenant
   return {
     ...actual,
     saveTenant: vi.fn(),
@@ -85,5 +90,28 @@ describe('GET /api/integrations/microsoft/callback', () => {
     await GET(req)
 
     expect(mockCookieDelete).toHaveBeenCalledWith('ms_connect_state')
+  })
+
+  it('rejects a tenant that is not the pinned MS_GRAPH_TENANT_ID → tenant_mismatch, nothing saved (I5)', async () => {
+    process.env.MS_GRAPH_TENANT_ID = '72f988bf-86f1-41af-91ab-2d7cd011db47'
+    mockCookieGet.mockReturnValue({ value: 'st8' })
+    // Real saveTenant: the pin check rejects before any database write.
+    mockSaveTenant.mockImplementation((orgId: string, tenant: string) => actualSaveTenant.fn!(orgId, tenant))
+
+    const req = makeRequest('?state=st8&admin_consent=True&tenant=11111111-2222-3333-4444-555555555555')
+    const res = await GET(req)
+
+    expect(res.headers.get('location')).toBe('https://app.test/settings?microsoft=tenant_mismatch')
+    delete process.env.MS_GRAPH_TENANT_ID
+  })
+
+  it('refuses with error when MS_GRAPH_TENANT_ID is not configured (I5)', async () => {
+    delete process.env.MS_GRAPH_TENANT_ID
+    mockCookieGet.mockReturnValue({ value: 'st8' })
+    mockSaveTenant.mockImplementation((orgId: string, tenant: string) => actualSaveTenant.fn!(orgId, tenant))
+
+    const res = await GET(makeRequest('?state=st8&admin_consent=True&tenant=72f988bf-86f1-41af-91ab-2d7cd011db47'))
+
+    expect(res.headers.get('location')).toBe('https://app.test/settings?microsoft=error')
   })
 })

@@ -21,8 +21,29 @@ export function buildAdminConsentUrl(state: string): string {
   return url.toString()
 }
 
+export class TenantMismatchError extends Error {
+  constructor(public readonly tenantId: string) {
+    super(`Tenant ${tenantId} is not the Microsoft 365 tenant this deployment is configured for (MS_GRAPH_TENANT_ID).`)
+    this.name = 'TenantMismatchError'
+    Object.setPrototypeOf(this, TenantMismatchError.prototype)
+  }
+}
+
+/**
+ * The admin-consent callback's `tenant` parameter is user-controllable, so it
+ * is never trusted on its own: it must equal the tenant pinned in
+ * MS_GRAPH_TENANT_ID (case-insensitive). Without the pin, connecting is
+ * refused outright.
+ */
+function assertPinnedTenant(tenantId: string): void {
+  const pinned = process.env.MS_GRAPH_TENANT_ID?.trim()
+  if (!pinned) throw new Error('MS_GRAPH_TENANT_ID must be set to connect Microsoft 365')
+  if (tenantId.toLowerCase() !== pinned.toLowerCase()) throw new TenantMismatchError(tenantId)
+}
+
 export async function saveTenant(organizationId: string, tenantId: string): Promise<void> {
   if (!GUID.test(tenantId)) throw new Error(`Invalid tenant id: ${tenantId}`)
+  assertPinnedTenant(tenantId)
   await prisma.organization.update({
     where: { id: organizationId },
     // Reconnecting is how a human clears an auth-failure pause.
