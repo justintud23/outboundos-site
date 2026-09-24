@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 import { createMailbox } from '@/features/mailboxes/server/create-mailbox'
-import { MailboxAlreadyExistsError } from '@/features/mailboxes/types'
+import { MailboxAlreadyExistsError, ManualMailboxNotAllowedError } from '@/features/mailboxes/types'
 
 export async function GET() {
   const { orgId } = await auth()
@@ -67,6 +67,12 @@ export async function POST(request: Request) {
     if (err instanceof MailboxAlreadyExistsError) {
       return NextResponse.json(
         { code: 'MAILBOX_ALREADY_EXISTS', error: err.message },
+        { status: 409 },
+      )
+    }
+    if (err instanceof ManualMailboxNotAllowedError) {
+      return NextResponse.json(
+        { code: 'USE_MICROSOFT_IMPORT', error: err.message },
         { status: 409 },
       )
     }

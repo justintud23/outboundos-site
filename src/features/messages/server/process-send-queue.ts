@@ -76,6 +76,9 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 45_000
         organizationId: org.id,
         isActive: true,
         autoPaused: false,
+        // Every org here has a tenant: only Graph mailboxes send (and are
+        // monitored for replies).
+        provider: 'MICROSOFT_GRAPH',
         OR: [{ nextSendAt: null }, { nextSendAt: { lte: now } }],
       },
     })

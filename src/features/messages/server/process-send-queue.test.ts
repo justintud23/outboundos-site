@@ -285,4 +285,9 @@ describe('processSendQueue', () => {
     expect(sendEmail).not.toHaveBeenCalled()
     expect(p.outboundMessage.update).not.toHaveBeenCalled()
   })
+
+  it('only sends from Microsoft 365 mailboxes (I3)', async () => {
+    await processSendQueue(NOW)
+    expect(p.mailbox.findMany.mock.calls[0][0].where).toMatchObject({ organizationId: 'org-1', provider: 'MICROSOFT_GRAPH' })
+  })
 })

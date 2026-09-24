@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react'
 import { Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import type { MailboxDTO } from '@/features/mailboxes/types'
+import { IMPORT_FROM_MICROSOFT_MESSAGE, type MailboxDTO } from '@/features/mailboxes/types'
 import type { SendingSettingsDTO } from '@/features/settings/server/sending-settings'
 import { MicrosoftCard } from '@/features/settings/components/microsoft-card'
 import { SendingSettingsForm } from '@/features/settings/components/sending-settings-form'
@@ -155,31 +155,40 @@ export function SettingsClient({ initialMailboxes, sendingSettings }: SettingsCl
         </div>
       )}
 
-      <form onSubmit={handleAdd} className="space-y-3">
-        <h3 className="text-[var(--text-secondary)] text-xs font-medium uppercase tracking-wide">Add mailbox</h3>
-        <div className="flex gap-3">
-          <Input
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="flex-1"
-          />
-          <Input
-            type="text"
-            placeholder="Display name"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            required
-            className="flex-1"
-          />
+      {sendingSettings.msConnected ? (
+        <div className="space-y-1">
+          <p className="text-[var(--text-muted)] text-xs">
+            Mailboxes can&apos;t be added by hand while Microsoft 365 is connected. {IMPORT_FROM_MICROSOFT_MESSAGE}
+          </p>
+          {error && <p className="text-[var(--status-danger)] text-xs">{error}</p>}
         </div>
-        {error && <p className="text-[var(--status-danger)] text-xs">{error}</p>}
-        <Button type="submit" variant="primary" size="sm" disabled={saving}>
-          {saving ? 'Adding\u2026' : 'Add mailbox'}
-        </Button>
-      </form>
+      ) : (
+        <form onSubmit={handleAdd} className="space-y-3">
+          <h3 className="text-[var(--text-secondary)] text-xs font-medium uppercase tracking-wide">Add mailbox</h3>
+          <div className="flex gap-3">
+            <Input
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="flex-1"
+            />
+            <Input
+              type="text"
+              placeholder="Display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              className="flex-1"
+            />
+          </div>
+          {error && <p className="text-[var(--status-danger)] text-xs">{error}</p>}
+          <Button type="submit" variant="primary" size="sm" disabled={saving}>
+            {saving ? 'Adding\u2026' : 'Add mailbox'}
+          </Button>
+        </form>
+      )}
     </div>
   )
 }

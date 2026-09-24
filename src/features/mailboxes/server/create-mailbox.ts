@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
-import { type MailboxDTO, toMailboxDTO, MailboxAlreadyExistsError } from '../types'
+import { type MailboxDTO, toMailboxDTO, MailboxAlreadyExistsError, ManualMailboxNotAllowedError } from '../types'
 
 interface CreateMailboxInput {
   organizationId: string
@@ -13,6 +13,9 @@ export async function createMailbox({
   email,
   displayName,
 }: CreateMailboxInput): Promise<MailboxDTO> {
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { msTenantId: true } })
+  if (org?.msTenantId) throw new ManualMailboxNotAllowedError()
+
   try {
     const m = await prisma.mailbox.create({
       // warmupEnabled (true) and warmupStartedAt (now) come from schema defaults:

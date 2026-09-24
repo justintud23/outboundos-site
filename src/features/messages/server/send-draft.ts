@@ -18,6 +18,7 @@ import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
+import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
 
 interface SendDraftInput {
   organizationId: string
@@ -65,17 +66,66 @@ export async function sendDraft({
     select: { msTenantId: true },
   })
 
-  // 3. Select a sending mailbox by rotating across the org's active mailboxes.
-  //    Spreading sends across every connected inbox is the whole point of
-  //    supporting multiple mailboxes: volume scaling and reputation spreading.
-  // Exclude both user-disabled (isActive: false) and breaker-paused
-  // (autoPaused: true) mailboxes — neither can be selected or reserved.
-  const mailboxes = await prisma.mailbox.findMany({
-    where: { organizationId, isActive: true, autoPaused: false },
-  })
+  // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
+  // the same sequence enrollment (the thread), we set In-Reply-To = the prior
+  // message and References = the full prior chain (oldest→newest), and reuse the
+  // original thread subject as "Re: <subject>". The first email in a sequence (no
+  // prior sent messages) gets only its own Message-ID. Drafts not tied to a
+  // sequence enrollment never thread.
+  const messageId = generateMessageId()
+  const priorMessages = draft.sequenceEnrollmentId
+    ? await prisma.outboundMessage.findMany({
+        where: {
+          organizationId,
+          status: 'SENT',
+          messageId: { not: null },
+          draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
+        },
+        orderBy: { sentAt: 'asc' },
+        select: { messageId: true, subject: true, graphMessageId: true, mailboxId: true },
+      })
+    : []
+  const priorMessageIds = priorMessages
+    .map((m) => m.messageId)
+    .filter((id): id is string => id !== null)
+  const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
+  // Graph threads by replying to the most recent prior message it sent.
+  const replyToProviderMessageId =
+    [...priorMessages].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
+  // Reuse the thread's original subject (oldest message) as "Re: ..."; never
+  // double-prefix. First send keeps the draft's own subject.
+  const threadRoot = priorMessages[0]
+  const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
 
-  if (mailboxes.length === 0) {
-    throw new NoActiveMailboxError()
+  // 3. Select the sending mailbox.
+  //    - Sequence drafts are PINNED to the enrollment's mailbox (the one that
+  //      sent earlier steps): a follow-up must come from the same inbox so
+  //      Graph can reply in-thread and replies land where we monitor. No
+  //      fallback to another mailbox — if it can't send, report capacity.
+  //    - Other drafts rotate across the org's active mailboxes (volume
+  //      scaling and reputation spreading).
+  // Exclude both user-disabled (isActive: false) and breaker-paused
+  // (autoPaused: true) mailboxes — neither can be selected or reserved. A
+  // Microsoft 365 org only sends from Graph mailboxes.
+  const graphOnly = !!org?.msTenantId
+  let mailboxes: Awaited<ReturnType<typeof prisma.mailbox.findMany>>
+  if (draft.sequenceEnrollmentId) {
+    const pinnedId = await resolveEnrollmentMailboxId(organizationId, draft.sequenceEnrollmentId, priorMessages)
+    if (!pinnedId) throw new NoActiveMailboxError()
+    const pinned = await prisma.mailbox.findFirst({ where: { id: pinnedId, organizationId } })
+    if (!pinned || !pinned.isActive || pinned.autoPaused || (graphOnly && pinned.provider !== 'MICROSOFT_GRAPH')) {
+      throw new MailboxLimitExceededError(
+        `The mailbox this sequence sends from (${pinned?.email ?? 'unknown'}) is paused or inactive, so this follow-up can't be sent right now.`,
+      )
+    }
+    mailboxes = [pinned]
+  } else {
+    mailboxes = await prisma.mailbox.findMany({
+      where: { organizationId, isActive: true, autoPaused: false, ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }) },
+    })
+    if (mailboxes.length === 0) {
+      throw new NoActiveMailboxError()
+    }
   }
 
   const now = new Date()
@@ -123,37 +173,6 @@ export async function sendDraft({
   // /api/unsubscribe endpoint will decrypt back to { leadId, organizationId }.
   const unsubscribeToken = signUnsubscribeToken({ leadId: draft.leadId, organizationId })
   const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${unsubscribeToken}`
-
-  // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
-  // the same sequence enrollment (the thread), we set In-Reply-To = the prior
-  // message and References = the full prior chain (oldest→newest), and reuse the
-  // original thread subject as "Re: <subject>". The first email in a sequence (no
-  // prior sent messages) gets only its own Message-ID. Drafts not tied to a
-  // sequence enrollment never thread.
-  const messageId = generateMessageId()
-  const priorMessages = draft.sequenceEnrollmentId
-    ? await prisma.outboundMessage.findMany({
-        where: {
-          organizationId,
-          status: 'SENT',
-          messageId: { not: null },
-          draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId },
-        },
-        orderBy: { sentAt: 'asc' },
-        select: { messageId: true, subject: true, graphMessageId: true },
-      })
-    : []
-  const priorMessageIds = priorMessages
-    .map((m) => m.messageId)
-    .filter((id): id is string => id !== null)
-  const { inReplyTo, references } = buildThreadHeaders(priorMessageIds)
-  // Graph threads by replying to the most recent prior message it sent.
-  const replyToProviderMessageId =
-    [...priorMessages].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
-  // Reuse the thread's original subject (oldest message) as "Re: ..."; never
-  // double-prefix. First send keeps the draft's own subject.
-  const threadRoot = priorMessages[0]
-  const effectiveSubject = threadRoot ? buildReplySubject(threadRoot.subject) : draft.subject
 
   // A/B test attribution: carry the assigned variant onto the OutboundMessage
   // (the row events join to) ONLY for a genuine first send with an UNEDITED
@@ -299,6 +318,27 @@ export async function sendDraft({
   })
 
   return toDTO(finalized)
+}
+
+/**
+ * The mailbox a sequence enrollment sends from: the one that sent its most
+ * recent message, else the enrollment's assigned mailbox, else a fresh sticky
+ * assignment (persisted on the enrollment).
+ */
+async function resolveEnrollmentMailboxId(
+  organizationId: string,
+  enrollmentId: string,
+  priorMessages: { mailboxId: string }[],
+): Promise<string | null> {
+  const lastSent = priorMessages[priorMessages.length - 1]
+  if (lastSent) return lastSent.mailboxId
+  const enrollment = await prisma.sequenceEnrollment.findFirst({
+    where: { id: enrollmentId, organizationId },
+    select: { mailboxId: true },
+  })
+  if (enrollment?.mailboxId) return enrollment.mailboxId
+  if (!enrollment) return null
+  return assignEnrollmentMailbox(organizationId, enrollmentId)
 }
 
 // How long a QUEUED claim is treated as an in-flight send. A claim older than

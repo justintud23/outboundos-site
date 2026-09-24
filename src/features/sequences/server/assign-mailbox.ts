@@ -6,8 +6,15 @@ import { prisma } from '@/lib/db/prisma'
  * The conditional update (mailboxId: null) makes concurrent assignment safe.
  */
 export async function assignEnrollmentMailbox(organizationId: string, enrollmentId: string): Promise<string | null> {
+  // A Microsoft 365 org only sends from (and only monitors) Graph mailboxes.
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { msTenantId: true } })
   const mailboxes = await prisma.mailbox.findMany({
-    where: { organizationId, isActive: true, autoPaused: false },
+    where: {
+      organizationId,
+      isActive: true,
+      autoPaused: false,
+      ...(org?.msTenantId && { provider: 'MICROSOFT_GRAPH' as const }),
+    },
     select: { id: true, _count: { select: { enrollments: { where: { status: 'ACTIVE' } } } } },
   })
   if (mailboxes.length === 0) return null
