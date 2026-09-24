@@ -40,6 +40,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
+import { presetCapForDay } from '@/features/mailboxes/warmup'
 import { sendDraft } from './send-draft'
 import {
   DraftNotApprovedError,
@@ -613,24 +614,25 @@ describe('sendDraft — atomic daily-limit reservation', () => {
   // ─── Warmup ramp ──────────────────────────────────────────────────────────
 
   it('a warming mailbox blocks at its ramped limit even though dailyLimit is higher', async () => {
-    // Day 1 of warmup → ramp floor is 10, far below dailyLimit 50.
+    // Day 1 of warmup → ramp cap (CONSERVATIVE preset) is 3, far below dailyLimit 50.
+    const rampCap = presetCapForDay('CONSERVATIVE', 1)
     setMailboxes([
-      mailbox({ id: 'mb-1', sentToday: 9, dailyLimit: 50, warmupEnabled: true, warmupStartedAt: new Date() }),
+      mailbox({ id: 'mb-1', sentToday: rampCap - 1, dailyLimit: 50, warmupEnabled: true, warmupStartedAt: new Date() }),
     ])
 
-    // 9 -> 10 succeeds (10 is today's effective cap).
+    // (rampCap - 1) -> rampCap succeeds (rampCap is today's effective cap).
     const ok = await sendDraft(INPUT)
     expect(ok.status).toBe('SENT')
-    expect(store['mb-1'].sentToday).toBe(10)
+    expect(store['mb-1'].sentToday).toBe(rampCap)
 
-    // Now at the ramped cap (10) though dailyLimit is 50 → blocked.
+    // Now at the ramped cap though dailyLimit is 50 → blocked.
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
-    expect(store['mb-1'].sentToday).toBe(10) // never exceeds the effective cap
+    expect(store['mb-1'].sentToday).toBe(rampCap) // never exceeds the effective cap
   })
 
   it('atomic under warmup: N concurrent sends against effective cap K → exactly K succeed', async () => {
-    // dailyLimit 50 but day-1 warmup → effective cap 10.
-    const K = 10
+    // dailyLimit 50 but day-1 warmup → effective cap (CONSERVATIVE preset) is 3.
+    const K = presetCapForDay('CONSERVATIVE', 1)
     const N = 14
     setMailboxes([
       mailbox({ id: 'mb-1', sentToday: 0, dailyLimit: 50, warmupEnabled: true, warmupStartedAt: new Date() }),
