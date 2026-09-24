@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    outboundMessage: { updateMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+    outboundMessage: { updateMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
     organization: { findMany: vi.fn(), updateMany: vi.fn() },
     mailbox: { findMany: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -31,7 +31,7 @@ import { processSendQueue } from './process-send-queue'
 
 type Fn = ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
-  outboundMessage: { updateMany: Fn; findMany: Fn; findFirst: Fn; update: Fn; findUnique: Fn }
+  outboundMessage: { updateMany: Fn; findMany: Fn; findFirst: Fn; update: Fn; findUnique: Fn; count: Fn }
   organization: { findMany: Fn; updateMany: Fn }
   mailbox: { findMany: Fn; update: Fn }
   auditLog: { create: Fn }
@@ -66,6 +66,7 @@ beforeEach(() => {
   p.outboundMessage.findFirst.mockResolvedValue({ id: 'msg-1' })
   p.outboundMessage.findUnique.mockResolvedValue(queued())
   p.outboundMessage.findMany.mockResolvedValue([]) // no prior thread
+  p.outboundMessage.count.mockResolvedValue(0) // no unsent earlier step
   ;(reserveMailboxSlot as Fn).mockResolvedValue(true)
   ;(checkEnrollmentStop as Fn).mockResolvedValue({ shouldStop: false })
 })
@@ -227,5 +228,61 @@ describe('processSendQueue', () => {
       where: { id: 'msg-1' },
       data: { status: 'FAILED', processing: false, lastError: 'Graph message missing from mailbox; not resent automatically' },
     })
+  })
+
+  // ─── Final review fixes ─────────────────────────────────────
+
+  const followUp = (o: Record<string, unknown> = {}) =>
+    queued({
+      draft: {
+        sequenceEnrollmentId: 'enr-1',
+        sequenceEnrollment: { id: 'enr-1', status: 'ACTIVE', startedAt: new Date('2026-09-01') },
+        sequenceStep: { stepNumber: 2 },
+      },
+      ...o,
+    })
+
+  it('defers a follow-up whose earlier step is not SENT yet: stays QUEUED, +1h, nothing sent (I1)', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(followUp())
+    p.outboundMessage.count.mockResolvedValue(1)
+    const res = await processSendQueue(NOW)
+    expect(res.deferred).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(reserveMailboxSlot).not.toHaveBeenCalled()
+    expect(p.outboundMessage.count).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        id: { not: 'msg-1' },
+        status: { in: ['QUEUED', 'FAILED'] },
+        draft: { sequenceEnrollmentId: 'enr-1', sequenceStep: { stepNumber: { lt: 2 } } },
+      },
+    })
+    const upd = p.outboundMessage.update.mock.calls.at(-1)![0]
+    expect(upd.where).toEqual({ id: 'msg-1' })
+    expect(upd.data).toEqual({ processing: false, processingStartedAt: null, scheduledFor: new Date(NOW.getTime() + 60 * 60 * 1000) })
+    expect(upd.data.status).toBeUndefined()
+  })
+
+  it('sends a follow-up once every earlier step is SENT', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(followUp())
+    p.outboundMessage.count.mockResolvedValue(0)
+    const res = await processSendQueue(NOW)
+    expect(res.sent).toBe(1)
+  })
+
+  it('holds messages of campaigns whose auto-send is off (only picks campaign-less or autoSend campaigns) (I6)', async () => {
+    await processSendQueue(NOW)
+    expect(p.outboundMessage.findFirst.mock.calls[0][0].where).toMatchObject({
+      status: 'QUEUED',
+      OR: [{ campaignId: null }, { campaign: { is: { autoSend: true } } }],
+    })
+  })
+
+  it('a held (autoSend=false) message is not sent: nothing selectable for the mailbox', async () => {
+    p.outboundMessage.findFirst.mockResolvedValue(null) // the autoSend filter excluded it
+    const res = await processSendQueue(NOW)
+    expect(res).toEqual({ sent: 0, cancelled: 0, deferred: 0, failed: 0, reconciled: 0 })
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).not.toHaveBeenCalled()
   })
 })

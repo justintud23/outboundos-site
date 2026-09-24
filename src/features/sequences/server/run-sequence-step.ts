@@ -27,6 +27,32 @@ async function defer(enrollmentId: string, ms = DEFER_MS): Promise<'DEFERRED'> {
   return 'DEFERRED'
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Auto-send ordering gate for step N > 1: a follow-up may only be generated
+ * once step N-1 has actually been SENT and step N's delay has elapsed since
+ * then. Returns how long to wait (0 = go ahead).
+ *  - step N-1 REJECTED (a human skipped it) → go ahead (step N starts a thread)
+ *  - step N-1 sent at T → wait until T + delayDays
+ *  - step N-1 BLOCKED / pending / approved-unsent / QUEUED / FAILED → wait
+ */
+async function followUpWaitMs(
+  enrollment: { sequenceId: string; leadId: string },
+  previousStepId: string,
+  delayDays: number,
+): Promise<number> {
+  const previous = await prisma.draft.findFirst({
+    where: { sequenceId: enrollment.sequenceId, leadId: enrollment.leadId, sequenceStepId: previousStepId },
+    select: { status: true, outboundMessages: { select: { sentAt: true }, take: 1 } },
+  })
+  // No draft for the previous step (e.g. the step was added later): nothing to follow.
+  if (!previous || previous.status === 'REJECTED') return 0
+  const sentAt = previous.outboundMessages[0]?.sentAt
+  if (!sentAt) return DEFER_MS
+  return Math.max(0, sentAt.getTime() + delayDays * DAY_MS - Date.now())
+}
+
 export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<StepResult> {
   // 1. Fetch enrollment with sequence, steps, campaign, lead and org settings
   const enrollment = await prisma.sequenceEnrollment.findFirst({
@@ -98,6 +124,11 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
   let mailboxId = enrollment.mailboxId
   if (campaign.autoSend) {
     if (org.sendingPaused) return defer(enrollmentId)
+    const previousStep = enrollment.sequence.steps.find((s) => s.stepNumber === nextStepNumber - 1)
+    if (previousStep) {
+      const waitMs = await followUpWaitMs(enrollment, previousStep.id, nextStep.delayDays)
+      if (waitMs > 0) return defer(enrollmentId, Math.max(DEFER_MS, waitMs))
+    }
     if (!campaign.sampleApprovedAt) {
       const samples = await prisma.draft.count({ where: { campaignId: campaign.id, isSample: true } })
       if (samples >= campaign.sampleSize) return defer(enrollmentId)

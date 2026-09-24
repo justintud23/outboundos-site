@@ -80,6 +80,12 @@ export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sa
         </button>
       </div>
 
+      {!autoSend && (
+        <p className="text-[var(--text-muted)] text-xs">
+          Auto-send is off. Emails already queued for this campaign are held — nothing sends until you turn it back on.
+        </p>
+      )}
+
       {autoSend && !sampleApprovedAt && (
         <div className="space-y-2">
           <p className="text-[var(--text-secondary)] text-sm">

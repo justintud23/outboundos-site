@@ -297,4 +297,83 @@ describe('runSequenceStep — auto-send pipeline', () => {
     ;(assignEnrollmentMailbox as ReturnType<typeof vi.fn>).mockResolvedValue(null)
     expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
   })
+
+  describe('auto-send follow-up ordering (step N waits for step N-1 to be SENT + delay)', () => {
+    const DAY = 24 * 60 * 60 * 1000
+    const twoStepAuto = () => ({
+      campaignId: 'camp-1',
+      campaign: { id: 'camp-1', autoSend: true, sampleSize: 2, sampleApprovedAt: new Date('2026-09-01') },
+      steps: [
+        { id: 'step-1', stepNumber: 1, subject: 'Hi', body: 'Hello', delayDays: 0, personalizationPrompt: null },
+        { id: 'step-2', stepNumber: 2, subject: 'Follow up', body: 'Just checking', delayDays: 3, personalizationPrompt: null },
+      ],
+    })
+    const atStep1 = () => makeEnrollment({ sequence: twoStepAuto(), currentStepNumber: 1, mailboxId: 'mb-1' })
+    const mockDraftFind = () => prisma.draft.findFirst as ReturnType<typeof vi.fn>
+    const deferredUntil = () => {
+      const call = (prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as { data: { nextDueAt: Date } }
+      return call.data.nextDueAt.getTime()
+    }
+
+    beforeEach(() => mockCheckStop.mockResolvedValue({ shouldStop: false }))
+
+    it('step 1 BLOCKED → DEFERRED ~1h, no step-2 draft', async () => {
+      mockEnrollmentFind.mockResolvedValue(atStep1())
+      mockDraftFind().mockResolvedValue({ status: 'BLOCKED', outboundMessages: [] })
+      const { draftCreate } = txFake()
+      const before = Date.now()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
+      expect(draftCreate).not.toHaveBeenCalled()
+      expect(mockDraftFind()).toHaveBeenCalledWith({
+        where: { sequenceId: 'seq-1', leadId: 'lead-1', sequenceStepId: 'step-1' },
+        select: { status: true, outboundMessages: { select: { sentAt: true }, take: 1 } },
+      })
+      expect(deferredUntil() - before).toBeGreaterThanOrEqual(60 * 60 * 1000 - 50)
+      expect(deferredUntil() - before).toBeLessThan(2 * 60 * 60 * 1000)
+    })
+
+    it('step 1 still QUEUED (not sent) → DEFERRED, no draft', async () => {
+      mockEnrollmentFind.mockResolvedValue(atStep1())
+      mockDraftFind().mockResolvedValue({ status: 'APPROVED', outboundMessages: [{ sentAt: null }] })
+      const { draftCreate } = txFake()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
+      expect(draftCreate).not.toHaveBeenCalled()
+      expect(personalize).not.toHaveBeenCalled()
+    })
+
+    it('step 1 SENT 1 day ago with a 3-day delay → DEFERRED until sentAt + 3 days', async () => {
+      const sentAt = new Date(Date.now() - DAY)
+      mockEnrollmentFind.mockResolvedValue(atStep1())
+      mockDraftFind().mockResolvedValue({ status: 'APPROVED', outboundMessages: [{ sentAt }] })
+      const { draftCreate } = txFake()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
+      expect(draftCreate).not.toHaveBeenCalled()
+      expect(Math.abs(deferredUntil() - (sentAt.getTime() + 3 * DAY))).toBeLessThan(1000)
+    })
+
+    it('step 1 SENT longer ago than the delay → step 2 generated and queued', async () => {
+      mockEnrollmentFind.mockResolvedValue(atStep1())
+      mockDraftFind().mockResolvedValue({ status: 'APPROVED', outboundMessages: [{ sentAt: new Date(Date.now() - 4 * DAY) }] })
+      const { draftCreate, messageCreate } = txFake()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('QUEUED')
+      expect(draftCreate.mock.calls[0][0].data).toMatchObject({ sequenceStepId: 'step-2', status: 'APPROVED' })
+      expect(messageCreate).toHaveBeenCalledTimes(1)
+    })
+
+    it('step 1 REJECTED (skipped by a human) → step 2 proceeds as a new thread', async () => {
+      mockEnrollmentFind.mockResolvedValue(atStep1())
+      mockDraftFind().mockResolvedValue({ status: 'REJECTED', outboundMessages: [] })
+      const { draftCreate } = txFake()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('QUEUED')
+      expect(draftCreate).toHaveBeenCalledTimes(1)
+    })
+
+    it('manual (non-auto-send) campaigns are not gated', async () => {
+      mockEnrollmentFind.mockResolvedValue(makeEnrollment({ currentStepNumber: 1 }))
+      const { draftCreate } = txFake()
+      expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DRAFT_GENERATED')
+      expect(draftCreate).toHaveBeenCalledTimes(1)
+      expect(mockDraftFind()).not.toHaveBeenCalled()
+    })
+  })
 })

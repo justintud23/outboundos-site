@@ -38,4 +38,9 @@ describe('CampaignSendingPanel', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/campaigns/c1', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ autoSend: true }) })),
     )
   })
+
+  it('explains that queued emails are held while auto-send is off (I6)', () => {
+    render(<CampaignSendingPanel campaignId="c1" autoSend={false} sampleSize={10} sampleApprovedAt={new Date('2026-09-20')} sampleCount={10} />)
+    expect(screen.getByText(/queued for this campaign are held/i)).toBeInTheDocument()
+  })
 })

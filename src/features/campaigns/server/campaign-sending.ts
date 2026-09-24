@@ -67,14 +67,37 @@ export async function approveCampaignSample(input: {
     })
 
     const toQueue = await tx.draft.findMany({
-      where: { campaignId: campaign.id, isSample: true, status: 'APPROVED', outboundMessages: { none: {} } },
-      include: { sequenceEnrollment: { select: { mailboxId: true } } },
+      where: {
+        campaignId: campaign.id,
+        organizationId: input.organizationId,
+        isSample: true,
+        status: 'APPROVED',
+        outboundMessages: { none: {} },
+      },
+      include: {
+        sequenceEnrollment: { select: { mailboxId: true } },
+        sequenceStep: { select: { stepNumber: true } },
+      },
     })
 
     let queued = 0
     for (const draft of toQueue) {
       const mailboxId = draft.sequenceEnrollment?.mailboxId
       if (!mailboxId) continue
+      // Follow-ups only once the step before them has actually been sent —
+      // otherwise steps 1 and 2 would be queued together. The sequence runner
+      // generates and queues the rest in order.
+      const stepNumber = draft.sequenceStep?.stepNumber ?? 1
+      if (stepNumber > 1) {
+        const previousSent = await tx.outboundMessage.count({
+          where: {
+            organizationId: input.organizationId,
+            sentAt: { not: null },
+            draft: { sequenceEnrollmentId: draft.sequenceEnrollmentId, sequenceStep: { stepNumber: stepNumber - 1 } },
+          },
+        })
+        if (previousSent === 0) continue
+      }
       await queueApprovedDraft(tx, draft, mailboxId, now)
       queued++
     }

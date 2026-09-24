@@ -24,6 +24,7 @@ const MAX_SENDS_PER_TICK = 25
 const MAX_SEND_ATTEMPTS = 3
 const STALE_LOCK_MS = 10 * 60 * 1000
 const CAPACITY_BACKOFF_MS = 60 * 60 * 1000
+const ORDER_BACKOFF_MS = 60 * 60 * 1000
 
 type Outcome = keyof SendQueueResult | 'skipped'
 
@@ -86,7 +87,15 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 45_000
       // sendOne has its own safety net, but this is defense in depth.
       try {
         const next = await prisma.outboundMessage.findFirst({
-          where: { mailboxId: mailbox.id, status: 'QUEUED', processing: false, scheduledFor: { lte: now } },
+          where: {
+            mailboxId: mailbox.id,
+            status: 'QUEUED',
+            processing: false,
+            scheduledFor: { lte: now },
+            // Turning a campaign's auto-send off holds its queued mail (left
+            // QUEUED) until it is turned back on.
+            OR: [{ campaignId: null }, { campaign: { is: { autoSend: true } } }],
+          },
           orderBy: { scheduledFor: 'asc' },
           select: { id: true },
         })
@@ -144,6 +153,7 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
           select: {
             sequenceEnrollmentId: true,
             sequenceEnrollment: { select: { id: true, status: true, startedAt: true } },
+            sequenceStep: { select: { stepNumber: true } },
           },
         },
       },
@@ -227,6 +237,28 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
         data: { status: 'FAILED', processing: false, lastError: 'Graph message missing from mailbox; not resent automatically' },
       })
       return 'failed'
+    }
+
+    // Ordering: a follow-up never goes out while an earlier step of the same
+    // enrollment is still unsent (QUEUED, mid-send or FAILED) — sending it now
+    // would start a fresh thread ahead of (or instead of) the email it follows.
+    const stepNumber = message.draft?.sequenceStep?.stepNumber
+    if (enrollment && stepNumber && stepNumber > 1) {
+      const unsentEarlier = await prisma.outboundMessage.count({
+        where: {
+          organizationId: message.organizationId,
+          id: { not: messageId },
+          status: { in: ['QUEUED', 'FAILED'] },
+          draft: { sequenceEnrollmentId: enrollment.id, sequenceStep: { stepNumber: { lt: stepNumber } } },
+        },
+      })
+      if (unsentEarlier > 0) {
+        await prisma.outboundMessage.update({
+          where: { id: messageId },
+          data: { processing: false, processingStartedAt: null, scheduledFor: new Date(now.getTime() + ORDER_BACKOFF_MS) },
+        })
+        return 'deferred'
+      }
     }
 
     if (!(await reserveMailboxSlot(mailbox.id, limitToday, startOfDay(now)))) {
