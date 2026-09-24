@@ -3,8 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: { organization: { update: vi.fn() }, mailbox: { createMany: vi.fn() } },
 }))
+vi.mock('@/features/deliverability/server/domain-health', () => ({
+  ensureDomainRows: vi.fn().mockResolvedValue([{ id: 'dh-1', domain: 'getacmesnow.com' }]),
+  checkDomain: vi.fn().mockResolvedValue({}),
+}))
 
 import { prisma } from '@/lib/db/prisma'
+import { ensureDomainRows, checkDomain } from '@/features/deliverability/server/domain-health'
 import { buildAdminConsentUrl, saveTenant, importGraphMailboxes, TenantMismatchError } from './microsoft'
 
 beforeEach(() => {
@@ -12,6 +17,8 @@ beforeEach(() => {
   process.env.MS_GRAPH_CLIENT_ID = 'cid'
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.test'
   process.env.MS_GRAPH_TENANT_ID = '72F988BF-86F1-41AF-91AB-2D7CD011DB47'
+  ;(ensureDomainRows as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 'dh-1', domain: 'getacmesnow.com' }])
+  ;(checkDomain as ReturnType<typeof vi.fn>).mockResolvedValue({})
 })
 
 describe('microsoft integration', () => {
@@ -56,5 +63,14 @@ describe('microsoft integration', () => {
       ],
       skipDuplicates: true,
     })
+    expect(ensureDomainRows).toHaveBeenCalledWith('org-1')
+    expect(checkDomain).toHaveBeenCalledWith('dh-1')
+  })
+  it('does not reject the import when checking a new domain fails', async () => {
+    ;(prisma.mailbox.createMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 })
+    ;(checkDomain as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('dns boom'))
+    await expect(
+      importGraphMailboxes('org-1', [{ id: 'u1', email: 'mike@getacmesnow.com', displayName: 'Mike Smith' }]),
+    ).resolves.toEqual({ created: 1 })
   })
 })
