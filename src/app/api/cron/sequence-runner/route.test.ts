@@ -7,6 +7,7 @@ vi.mock('@/lib/db/prisma', () => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    cronHeartbeat: { upsert: vi.fn() },
   },
 }))
 

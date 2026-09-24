@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
+import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
 
 const STALE_LOCK_MINUTES = 10
 const BATCH_SIZE = 50
 
 export async function GET(request: Request) {
-  // Auth: verify CRON_SECRET
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorizedCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -66,6 +63,8 @@ export async function GET(request: Request) {
       })
     }
   }
+
+  await recordHeartbeat('sequence-runner', { processed: results.length })
 
   return NextResponse.json({
     processed: results.length,
