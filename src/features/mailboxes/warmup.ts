@@ -1,36 +1,36 @@
-// Mailbox warmup ramp.
-//
-// A brand-new sending mailbox that blasts its full daily volume from day one
-// looks like spam and torches its sender reputation. Warmup ramps the allowed
-// daily volume up gradually over the first days, then hands off to the
-// mailbox's configured dailyLimit once the ramp catches up.
+// Mailbox ramp. New mailboxes send a small, slowly rising number of real
+// emails per day — careful real sending IS the warmup (no fake engagement).
+// Today's limit = the mailbox's preset cap for its ramp day, never above its
+// dailyLimit, and never above YOUNG_DOMAIN_CAP while its domain is < 30 days old.
 
-// Daily send-volume cap during warmup, indexed by warmup day (day 1 = index 0).
-// This array is the single source of truth for the ramp — tune it here.
-// Starts low (~10/day) and eases up; effectiveDailyLimit() always takes the
-// min() with the mailbox's dailyLimit, so a small dailyLimit reaches full ramp
-// sooner and the ramp never pushes a mailbox above its configured limit.
-export const WARMUP_RAMP_PER_DAY: readonly number[] = [
-  10, // day 1
-  20, // day 2
-  30, // day 3
-  40, // day 4
-  50, // day 5
-  75, // day 6
-  100, // day 7
-  150, // day 8
-  200, // day 9
-  300, // day 10
-  400, // day 11
-  500, // day 12
-]
-// After the ramp array, warmup is complete and the configured dailyLimit applies.
-export const WARMUP_DAYS = WARMUP_RAMP_PER_DAY.length
+export type RampPresetName = 'CONSERVATIVE' | 'STANDARD' | 'AGGRESSIVE'
+
+// Per-day caps: a step applies through `throughDay` (inclusive); after the last
+// step the ramp is complete ("full" = dailyLimit).
+export const RAMP_STEPS: Record<RampPresetName, { throughDay: number; cap: number }[]> = {
+  CONSERVATIVE: [
+    { throughDay: 3, cap: 3 }, { throughDay: 7, cap: 5 }, { throughDay: 14, cap: 10 },
+    { throughDay: 21, cap: 18 }, { throughDay: 28, cap: 25 },
+  ],
+  STANDARD: [
+    { throughDay: 3, cap: 5 }, { throughDay: 7, cap: 10 }, { throughDay: 14, cap: 18 }, { throughDay: 21, cap: 25 },
+  ],
+  AGGRESSIVE: [{ throughDay: 3, cap: 10 }, { throughDay: 7, cap: 18 }, { throughDay: 14, cap: 25 }],
+}
+
+export const YOUNG_DOMAIN_DAYS = 30
+export const YOUNG_DOMAIN_CAP = 10
+const DAY_MS = 86_400_000
 
 export interface WarmupFields {
   dailyLimit: number
   warmupEnabled: boolean
   warmupStartedAt: Date
+  rampPreset?: RampPresetName
+}
+
+export interface DomainAge {
+  registeredAt: Date | null
 }
 
 function startOfDay(d: Date): Date {
@@ -39,39 +39,44 @@ function startOfDay(d: Date): Date {
   return s
 }
 
-/**
- * 1-based warmup day. The calendar day on which warmup started is day 1.
- * Uses calendar-day boundaries so it lines up with the per-day reset.
- */
+/** 1-based ramp day; the calendar day the ramp started is day 1. */
 export function warmupDay(warmupStartedAt: Date, now: Date): number {
-  const ms = startOfDay(now).getTime() - startOfDay(warmupStartedAt).getTime()
-  const days = Math.floor(ms / 86_400_000)
+  const days = Math.floor((startOfDay(now).getTime() - startOfDay(warmupStartedAt).getTime()) / DAY_MS)
   return Math.max(1, days + 1)
 }
 
-/**
- * The send limit that applies to a mailbox TODAY:
- *   min(dailyLimit, rampCapForToday)
- * If warmup is disabled, this is simply dailyLimit. The ramp cap never exceeds
- * dailyLimit (the min()), and once the warmup window has elapsed the cap is
- * effectively unbounded so dailyLimit takes over.
- */
-export function effectiveDailyLimit(mailbox: WarmupFields, now: Date): number {
-  if (!mailbox.warmupEnabled) {
-    return mailbox.dailyLimit
-  }
-  const day = warmupDay(mailbox.warmupStartedAt, now)
-  const rampCap =
-    day <= WARMUP_DAYS
-      ? (WARMUP_RAMP_PER_DAY[day - 1] ?? mailbox.dailyLimit)
-      : Number.POSITIVE_INFINITY
-  return Math.min(mailbox.dailyLimit, rampCap)
+/** First ramp day on which the preset is at full volume. */
+export function rampFullDay(preset: RampPresetName): number {
+  const steps = RAMP_STEPS[preset]
+  return (steps[steps.length - 1]?.throughDay ?? 0) + 1
+}
+
+/** The preset's cap for a ramp day; Infinity once the ramp is complete. */
+export function presetCapForDay(preset: RampPresetName, day: number): number {
+  return RAMP_STEPS[preset].find((s) => day <= s.throughDay)?.cap ?? Number.POSITIVE_INFINITY
 }
 
 /**
- * True while the mailbox is still ramping: warmup is on AND today's effective
- * limit is below the configured dailyLimit. Useful for UI ("warming up, day N").
+ * Young = registered < 30 days ago, or registration unknown. No domain row
+ * (non-Graph / legacy mailboxes) → the rule doesn't apply.
  */
-export function isWarmingUp(mailbox: WarmupFields, now: Date): boolean {
-  return mailbox.warmupEnabled && effectiveDailyLimit(mailbox, now) < mailbox.dailyLimit
+export function isYoungDomain(domain: DomainAge | null | undefined, now: Date): boolean {
+  if (!domain) return false
+  if (!domain.registeredAt) return true
+  return now.getTime() - domain.registeredAt.getTime() < YOUNG_DOMAIN_DAYS * DAY_MS
+}
+
+export function effectiveDailyLimit(mailbox: WarmupFields, now: Date, domain?: DomainAge | null): number {
+  const preset = mailbox.rampPreset ?? 'CONSERVATIVE'
+  const rampCap = mailbox.warmupEnabled
+    ? presetCapForDay(preset, warmupDay(mailbox.warmupStartedAt, now))
+    : Number.POSITIVE_INFINITY
+  let limit = Math.min(mailbox.dailyLimit, rampCap)
+  if (isYoungDomain(domain, now)) limit = Math.min(limit, YOUNG_DOMAIN_CAP)
+  return limit
+}
+
+/** True while today's limit is below the mailbox's configured dailyLimit. */
+export function isWarmingUp(mailbox: WarmupFields, now: Date, domain?: DomainAge | null): boolean {
+  return effectiveDailyLimit(mailbox, now, domain) < mailbox.dailyLimit
 }
