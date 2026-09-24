@@ -1,16 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { MailboxDTO } from '@/features/mailboxes/types'
+import type { SendingSettingsDTO } from '@/features/settings/server/sending-settings'
+import { MicrosoftCard } from '@/features/settings/components/microsoft-card'
+import { SendingSettingsForm } from '@/features/settings/components/sending-settings-form'
 
 interface SettingsClientProps {
   initialMailboxes: MailboxDTO[]
+  sendingSettings: SendingSettingsDTO
 }
 
-export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
+export function SettingsClient({ initialMailboxes, sendingSettings }: SettingsClientProps) {
   const [mailboxes, setMailboxes] = useState<MailboxDTO[]>(initialMailboxes)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -73,10 +77,16 @@ export function SettingsClient({ initialMailboxes }: SettingsClientProps) {
 
   return (
     <div className="space-y-8 max-w-xl">
+      <Suspense fallback={null}>
+        <MicrosoftCard connected={sendingSettings.msConnected} mailboxEmails={mailboxes.map((m) => m.email)} />
+      </Suspense>
+
+      <SendingSettingsForm initial={sendingSettings} />
+
       <div>
         <h2 className="text-[var(--text-primary)] text-sm font-medium mb-1">Sending mailboxes</h2>
         <p className="text-[var(--text-muted)] text-xs">
-          Outbound emails are sent from the active mailbox. Daily limit defaults to 50 emails/day.
+          Outbound emails rotate across active mailboxes. Daily limit defaults to 50 emails/day.
           New mailboxes warm up — daily volume ramps gradually to protect sender reputation.
         </p>
       </div>
