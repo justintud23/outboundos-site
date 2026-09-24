@@ -1,4 +1,4 @@
-import type { Mailbox } from '@prisma/client'
+import type { Mailbox, RampPreset } from '@prisma/client'
 import { effectiveDailyLimit, warmupDay, isWarmingUp } from './warmup'
 
 export interface MailboxDTO {
@@ -14,6 +14,7 @@ export interface MailboxDTO {
   effectiveDailyLimit: number // today's ramped limit (== dailyLimit when not warming)
   warmupDay: number // 1-based day in the ramp
   isWarmingUp: boolean
+  rampPreset: RampPreset
   // Circuit breaker (bounce/spam auto-pause):
   autoPaused: boolean
   pausedAt: Date | null
@@ -36,6 +37,7 @@ export function toMailboxDTO(m: Mailbox, now: Date = new Date()): MailboxDTO {
     effectiveDailyLimit: effectiveDailyLimit(m, now),
     warmupDay: warmupDay(m.warmupStartedAt, now),
     isWarmingUp: isWarmingUp(m, now),
+    rampPreset: m.rampPreset,
     autoPaused: m.autoPaused,
     pausedAt: m.pausedAt,
     pauseReason: m.pauseReason,
