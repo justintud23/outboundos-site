@@ -5,6 +5,7 @@ vi.mock('@/lib/db/prisma', () => ({
     organization: { findUnique: vi.fn() },
     mailbox: { findMany: vi.fn() },
     sequenceEnrollment: { updateMany: vi.fn(), findUnique: vi.fn() },
+    domainHealth: { findMany: vi.fn() },
   },
 }))
 
@@ -16,17 +17,19 @@ const p = prisma as unknown as {
   organization: { findUnique: Fn }
   mailbox: { findMany: Fn }
   sequenceEnrollment: { updateMany: Fn; findUnique: Fn }
+  domainHealth: { findMany: Fn }
 }
 beforeEach(() => {
   vi.resetAllMocks()
   p.organization.findUnique.mockResolvedValue({ msTenantId: null })
+  p.domainHealth.findMany.mockResolvedValue([])
 })
 
 describe('assignEnrollmentMailbox', () => {
   it('picks the usable mailbox with the fewest ACTIVE enrollments and sets it only if unset', async () => {
     p.mailbox.findMany.mockResolvedValue([
-      { id: 'mb-a', _count: { enrollments: 5 } },
-      { id: 'mb-b', _count: { enrollments: 2 } },
+      { id: 'mb-a', email: 'a@company.com', _count: { enrollments: 5 } },
+      { id: 'mb-b', email: 'b@company.com', _count: { enrollments: 2 } },
     ])
     p.sequenceEnrollment.updateMany.mockResolvedValue({ count: 1 })
     expect(await assignEnrollmentMailbox('org-1', 'enr-1')).toBe('mb-b')
@@ -34,7 +37,7 @@ describe('assignEnrollmentMailbox', () => {
     expect(p.sequenceEnrollment.updateMany).toHaveBeenCalledWith({ where: { id: 'enr-1', mailboxId: null }, data: { mailboxId: 'mb-b' } })
   })
   it('returns the already-assigned mailbox if another worker won the race', async () => {
-    p.mailbox.findMany.mockResolvedValue([{ id: 'mb-a', _count: { enrollments: 0 } }])
+    p.mailbox.findMany.mockResolvedValue([{ id: 'mb-a', email: 'a@company.com', _count: { enrollments: 0 } }])
     p.sequenceEnrollment.updateMany.mockResolvedValue({ count: 0 })
     p.sequenceEnrollment.findUnique.mockResolvedValue({ mailboxId: 'mb-z' })
     expect(await assignEnrollmentMailbox('org-1', 'enr-1')).toBe('mb-z')
@@ -45,11 +48,33 @@ describe('assignEnrollmentMailbox', () => {
   })
   it('only assigns Microsoft 365 mailboxes when the org has a tenant (I3)', async () => {
     p.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
-    p.mailbox.findMany.mockResolvedValue([{ id: 'mb-g', _count: { enrollments: 0 } }])
+    p.mailbox.findMany.mockResolvedValue([{ id: 'mb-g', email: 'g@company.com', _count: { enrollments: 0 } }])
+    p.domainHealth.findMany.mockResolvedValue([{ domain: 'company.com', status: 'HEALTHY', registeredAt: null }])
     p.sequenceEnrollment.updateMany.mockResolvedValue({ count: 1 })
     expect(await assignEnrollmentMailbox('org-1', 'enr-1')).toBe('mb-g')
     expect(p.mailbox.findMany.mock.calls[0][0].where).toEqual({
       organizationId: 'org-1', isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH',
     })
+  })
+
+  it('Review Focus #1: in a Microsoft 365 org, skips mailboxes on unusable domains', async () => {
+    p.organization.findUnique.mockResolvedValue({ msTenantId: 't' })
+    p.mailbox.findMany.mockResolvedValue([
+      { id: 'mb-bad', email: 'a@bad.com', _count: { enrollments: 0 } },
+      { id: 'mb-ok', email: 'b@ok.com', _count: { enrollments: 9 } },
+    ])
+    p.domainHealth.findMany.mockResolvedValue([
+      { domain: 'bad.com', status: 'FAILING', registeredAt: null },
+      { domain: 'ok.com', status: 'WARNING', registeredAt: null },
+    ])
+    p.sequenceEnrollment.updateMany.mockResolvedValue({ count: 1 })
+    expect(await assignEnrollmentMailbox('org-1', 'enr-1')).toBe('mb-ok')
+  })
+
+  it('returns null when every mailbox is on an unusable domain', async () => {
+    p.organization.findUnique.mockResolvedValue({ msTenantId: 't' })
+    p.mailbox.findMany.mockResolvedValue([{ id: 'mb-bad', email: 'a@bad.com', _count: { enrollments: 0 } }])
+    p.domainHealth.findMany.mockResolvedValue([])
+    expect(await assignEnrollmentMailbox('org-1', 'enr-1')).toBeNull()
   })
 })

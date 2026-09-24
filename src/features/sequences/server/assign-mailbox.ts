@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
+import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
+import { isDomainUsable } from '@/features/deliverability/readiness'
 
 /**
  * Sticky, least-loaded mailbox assignment: a lead hears from ONE mailbox for
@@ -15,12 +17,22 @@ export async function assignEnrollmentMailbox(organizationId: string, enrollment
       autoPaused: false,
       ...(org?.msTenantId && { provider: 'MICROSOFT_GRAPH' as const }),
     },
-    select: { id: true, _count: { select: { enrollments: { where: { status: 'ACTIVE' } } } } },
+    select: { id: true, email: true, _count: { select: { enrollments: { where: { status: 'ACTIVE' } } } } },
   })
   if (mailboxes.length === 0) return null
 
-  mailboxes.sort((a, b) => a._count.enrollments - b._count.enrollments || (a.id < b.id ? -1 : 1))
-  const first = mailboxes[0]
+  // Microsoft 365 orgs only send from Graph mailboxes: never assign one whose
+  // domain fails its DNS checks (or was never checked) — it would land in
+  // spam or lose replies.
+  let usable = mailboxes
+  if (org?.msTenantId) {
+    const domainHealth = await getDomainHealthMap(organizationId)
+    usable = mailboxes.filter((m) => isDomainUsable(domainHealth.get(domainOf(m.email))?.status))
+  }
+  if (usable.length === 0) return null
+
+  usable.sort((a, b) => a._count.enrollments - b._count.enrollments || (a.id < b.id ? -1 : 1))
+  const first = usable[0]
   if (!first) return null
   const chosen = first.id
 

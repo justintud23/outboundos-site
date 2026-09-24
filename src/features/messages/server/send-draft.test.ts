@@ -13,6 +13,7 @@ vi.mock('@/lib/db/prisma', () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    domainHealth: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }))
@@ -50,6 +51,7 @@ import {
   DraftSendInProgressError,
   DraftOnSendQueueError,
   MissingPostalAddressError,
+  DomainNotHealthyError,
 } from '@/features/messages/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
@@ -61,6 +63,7 @@ const mockPrisma = prisma as unknown as {
   mailbox: { findMany: Fn; findFirst: Fn; updateMany: Fn }
   sequenceEnrollment: { findFirst: Fn }
   outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; update: Fn; delete: Fn }
+  domainHealth: { findMany: Fn }
   $transaction: Fn
 }
 const mockGetEmailProvider = getEmailProvider as ReturnType<typeof vi.fn>
@@ -96,6 +99,7 @@ interface MailboxRow {
   warmupEnabled: boolean
   warmupStartedAt: Date
   autoPaused: boolean
+  provider?: string
 }
 
 // ── Typed shapes for the Prisma mock callbacks (no `any`) ──
@@ -104,7 +108,7 @@ interface UpdateManyArgs {
   where: { id: string; isActive?: boolean; autoPaused?: boolean; lastResetAt?: { lt: Date }; sentToday?: { lt?: number; gt?: number } }
   data: { sentToday?: number | IncDec; lastResetAt?: Date }
 }
-interface FindManyArgs { where: { organizationId: string; isActive: boolean; autoPaused: boolean } }
+interface FindManyArgs { where: { organizationId: string; isActive: boolean; autoPaused: boolean; provider?: string } }
 interface CreateArgs { data: Record<string, unknown> }
 interface UpdateArgs { where: { id: string }; data: Record<string, unknown> }
 interface FindFirstArgs { where: { id: string } }
@@ -183,7 +187,8 @@ beforeEach(() => {
         (m) =>
           m.organizationId === where.organizationId &&
           m.isActive === where.isActive &&
-          m.autoPaused === where.autoPaused,
+          m.autoPaused === where.autoPaused &&
+          (!where.provider || !m.provider || m.provider === where.provider),
       )
       .map((m) => ({ ...m })),
   )
@@ -244,6 +249,8 @@ beforeEach(() => {
     ...data,
   }))
   mockPrisma.outboundMessage.delete.mockResolvedValue({})
+
+  mockPrisma.domainHealth.findMany.mockResolvedValue([{ domain: 'company.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') }])
 
   // Finalize transaction: outboundMessage.update -> SENT, auditLog.create.
   mockPrisma.$transaction.mockImplementation(async (fn: (tx: Tx) => Promise<unknown>) =>
@@ -815,6 +822,21 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
     expect(mockSendEmail).not.toHaveBeenCalled()
 
     mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme Snow', postalAddress: '1 Main St', allowCanadianRecipients: true })
+    await expect(sendDraft(INPUT)).resolves.toMatchObject({ status: 'SENT' })
+  })
+})
+
+describe('sendDraft — domain health enforcement (Task 6)', () => {
+  it('Review Focus #1: Microsoft 365 org — refuses to send from a mailbox on an unverified domain', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
+    setMailboxes([{ ...mailbox({ id: 'mb-1' }), provider: 'MICROSOFT_GRAPH' } as MailboxRow])
+    mockPrisma.domainHealth.findMany.mockResolvedValue([{ domain: 'company.com', status: 'UNVERIFIED', registeredAt: null }])
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DomainNotHealthyError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('non-Microsoft 365 org — domain health is not consulted', async () => {
+    mockPrisma.domainHealth.findMany.mockResolvedValue([])
     await expect(sendDraft(INPUT)).resolves.toMatchObject({ status: 'SENT' })
   })
 })

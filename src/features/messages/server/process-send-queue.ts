@@ -6,6 +6,8 @@ import { GraphAuthError, GraphThrottledError } from '@/lib/email/graph/client'
 import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
+import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
+import { isDomainUsable } from '@/features/deliverability/readiness'
 import { checkEnrollmentStop } from '@/features/sequences/server/check-enrollment-stop'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES } from '@/features/leads/types'
@@ -89,8 +91,13 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000
       },
     })
 
+    const domainHealth = await getDomainHealthMap(org.id)
+
     for (const mailbox of mailboxes) {
       if (total >= MAX_SENDS_PER_TICK || Date.now() - startedAt > budgetMs) return result
+
+      const dh = domainHealth.get(domainOf(mailbox.email))
+      if (!isDomainUsable(dh?.status)) continue // blocked domain: messages stay QUEUED
 
       // One message's unhandled failure must never abort the whole tick —
       // sendOne has its own safety net, but this is defense in depth.
@@ -110,7 +117,7 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000
         })
         if (!next) continue
 
-        const outcome = await sendOne(next.id, mailbox, org, now)
+        const outcome = await sendOne(next.id, mailbox, org, now, dh ?? null)
         if (outcome !== 'skipped') result[outcome]++
         total++
         if (outcome === 'failed' && (await isOrgPaused(org.id))) break
@@ -140,7 +147,13 @@ interface OrgRow {
   allowCanadianRecipients: boolean
 }
 
-async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now: Date): Promise<Outcome> {
+async function sendOne(
+  messageId: string,
+  mailbox: MailboxRow,
+  org: OrgRow,
+  now: Date,
+  domain: { registeredAt: Date | null } | null,
+): Promise<Outcome> {
   // Atomic claim.
   const claimed = await prisma.outboundMessage.updateMany({
     where: { id: messageId, status: 'QUEUED', processing: false },
@@ -194,7 +207,7 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
       return 'cancelled'
     }
 
-    const limitToday = effectiveDailyLimit(mailbox, now)
+    const limitToday = effectiveDailyLimit(mailbox, now, domain)
     const paceMailbox = () =>
       prisma.mailbox.update({
         where: { id: mailbox.id },

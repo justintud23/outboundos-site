@@ -10,6 +10,7 @@ import {
   LeadInTerminalStateError,
   DraftOnSendQueueError,
   MissingPostalAddressError,
+  DomainNotHealthyError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
@@ -78,6 +79,9 @@ export async function POST(
     }
     if (err instanceof LeadExcludedCanadaError) {
       return NextResponse.json({ code: 'LEAD_EXCLUDED_CANADA', error: err.message }, { status: 422 })
+    }
+    if (err instanceof DomainNotHealthyError) {
+      return NextResponse.json({ code: 'DOMAIN_NOT_HEALTHY', error: err.message, domain: err.domain }, { status: 422 })
     }
     if (err instanceof LeadInTerminalStateError) {
       return NextResponse.json(

@@ -6,6 +6,7 @@ vi.mock('@/lib/db/prisma', () => ({
     organization: { findMany: vi.fn(), updateMany: vi.fn() },
     mailbox: { findMany: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
+    domainHealth: { findMany: vi.fn() },
   },
 }))
 vi.mock('@/lib/email', () => ({ getEmailProvider: vi.fn() }))
@@ -35,6 +36,7 @@ const p = prisma as unknown as {
   organization: { findMany: Fn; updateMany: Fn }
   mailbox: { findMany: Fn; update: Fn }
   auditLog: { create: Fn }
+  domainHealth: { findMany: Fn }
 }
 const sendEmail = vi.fn()
 const NOW = new Date('2026-09-23T14:00:00Z') // Wed 10:00 EDT — inside the window
@@ -69,6 +71,7 @@ beforeEach(() => {
   p.outboundMessage.count.mockResolvedValue(0) // no unsent earlier step
   ;(reserveMailboxSlot as Fn).mockResolvedValue(true)
   ;(checkEnrollmentStop as Fn).mockResolvedValue({ shouldStop: false })
+  p.domainHealth.findMany.mockResolvedValue([{ domain: 'getacmesnow.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') }])
 })
 
 describe('processSendQueue', () => {
@@ -309,5 +312,27 @@ describe('processSendQueue', () => {
       where: { id: 'msg-1' },
       data: { status: 'CANCELLED', processing: false, lastError: 'excluded_canada: email ends in .ca' },
     })
+  })
+
+  it('Review Focus #1: a mailbox on an UNVERIFIED or FAILING domain does not send; its message stays QUEUED', async () => {
+    for (const status of ['UNVERIFIED', 'FAILING']) {
+      vi.clearAllMocks()
+      p.domainHealth.findMany.mockResolvedValue([{ domain: 'getacmesnow.com', status, registeredAt: new Date('2025-01-01') }])
+      const res = await processSendQueue(NOW)
+      expect(res.sent).toBe(0)
+      expect(sendEmail).not.toHaveBeenCalled()
+      expect(p.outboundMessage.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }))
+    }
+  })
+
+  it('Review Focus #1: a Graph mailbox whose domain has no row is treated as unverified', async () => {
+    p.domainHealth.findMany.mockResolvedValue([])
+    expect((await processSendQueue(NOW)).sent).toBe(0)
+  })
+
+  it('young domain: today’s limit is capped at 10 for the slot reservation', async () => {
+    p.domainHealth.findMany.mockResolvedValue([{ domain: 'getacmesnow.com', status: 'HEALTHY', registeredAt: new Date(NOW.getTime() - 5 * 86_400_000) }])
+    await processSendQueue(NOW)
+    expect((reserveMailboxSlot as Fn).mock.calls[0][1]).toBe(10)
   })
 })

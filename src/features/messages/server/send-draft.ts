@@ -11,6 +11,7 @@ import {
   DraftSendInProgressError,
   DraftOnSendQueueError,
   MissingPostalAddressError,
+  DomainNotHealthyError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
@@ -18,6 +19,8 @@ import { TERMINAL_STATUSES, LeadExcludedCanadaError } from '@/features/leads/typ
 import { canadaExclusionReason } from '@/features/leads/canada'
 import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
+import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
+import { isDomainUsable } from '@/features/deliverability/readiness'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
@@ -140,6 +143,20 @@ export async function sendDraft({
     }
   }
 
+  // Domain health (Microsoft 365 orgs): never send from a mailbox whose domain
+  // fails SPF/DKIM/MX or was never verified. Pinned follow-ups fail loudly;
+  // rotation drops blocked mailboxes and fails only if none remain.
+  const domainHealth = graphOnly ? await getDomainHealthMap(organizationId) : null
+  const domainFor = (m: { email: string }) => (domainHealth ? domainHealth.get(domainOf(m.email)) ?? null : null)
+  if (domainHealth) {
+    const blocked = mailboxes.filter((m) => !isDomainUsable(domainFor(m)?.status))
+    mailboxes = mailboxes.filter((m) => isDomainUsable(domainFor(m)?.status))
+    if (mailboxes.length === 0) {
+      const first = blocked[0]!
+      throw new DomainNotHealthyError(domainOf(first.email), domainFor(first)?.status ?? 'UNVERIFIED')
+    }
+  }
+
   const now = new Date()
   const startOfToday = startOfDay(now)
 
@@ -157,7 +174,7 @@ export async function sendDraft({
   // may be well below its configured dailyLimit, so cold mailboxes don't blast
   // full volume. A mailbox with warmup off uses its dailyLimit directly.
   const candidates = withUsage.filter(
-    (c) => c.effectiveSentToday < effectiveDailyLimit(c.mailbox, now),
+    (c) => c.effectiveSentToday < effectiveDailyLimit(c.mailbox, now, domainFor(c.mailbox)),
   )
 
   // Least-recently-used selection so volume spreads evenly instead of always
@@ -241,7 +258,7 @@ export async function sendDraft({
     // raw dailyLimit. The effective limit is computed in JS and passed as the
     // literal bound in the conditional UPDATE's WHERE, so the reservation stays
     // atomic: at most `effectiveLimitToday` increments can succeed today.
-    const effectiveLimitToday = effectiveDailyLimit(c.mailbox, now)
+    const effectiveLimitToday = effectiveDailyLimit(c.mailbox, now, domainFor(c.mailbox))
     if (await reserveMailboxSlot(c.mailbox.id, effectiveLimitToday, startOfToday)) {
       reserved = c.mailbox
       break
