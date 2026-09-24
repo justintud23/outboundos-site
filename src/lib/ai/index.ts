@@ -6,6 +6,7 @@ export type {
   LeadScoreOutput,
   EmailDraftInput,
   EmailDraftOutput,
+  PersonalizeInput,
   ReplyClassifyInput,
   ReplyClassifyOutput,
   ReplyClassificationValue,
