@@ -26,6 +26,8 @@ export interface DraftWithLeadDTO extends DraftDTO {
     lastName: string | null
     company: string | null
   }
+  // Only populated for BLOCKED drafts; omitted elsewhere.
+  guardrailFlags?: { rule: string; match: string }[] | null
 }
 
 export class PendingDraftExistsError extends Error {

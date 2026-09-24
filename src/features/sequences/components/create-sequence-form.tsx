@@ -10,6 +10,7 @@ interface StepForm {
   subject: string
   body: string
   delayDays: number
+  personalizationPrompt: string
 }
 
 interface CreateSequenceFormProps {
@@ -20,12 +21,12 @@ interface CreateSequenceFormProps {
 export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormProps) {
   const [name, setName] = useState('')
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? '')
-  const [steps, setSteps] = useState<StepForm[]>([{ subject: '', body: '', delayDays: 0 }])
+  const [steps, setSteps] = useState<StepForm[]>([{ subject: '', body: '', delayDays: 0, personalizationPrompt: '' }])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function addStep() {
-    setSteps((prev) => [...prev, { subject: '', body: '', delayDays: 3 }])
+    setSteps((prev) => [...prev, { subject: '', body: '', delayDays: 3, personalizationPrompt: '' }])
   }
 
   function removeStep(index: number) {
@@ -55,6 +56,7 @@ export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormP
           subject: s.subject,
           body: s.body,
           delayDays: s.delayDays,
+          personalizationPrompt: s.personalizationPrompt,
         })),
       }),
     })
@@ -130,6 +132,14 @@ export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormP
               required
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] rounded-[var(--radius-btn)] px-3 py-2 text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] resize-none"
             />
+            <Input
+              placeholder='AI line guidance (optional) — e.g. "Mention their property type and city"'
+              value={step.personalizationPrompt}
+              onChange={(e) => updateStep(i, 'personalizationPrompt', e.target.value)}
+            />
+            <p className="text-[var(--text-muted)] text-xs">
+              Put {'{personalization}'} in the body where the AI line goes. Merge fields: {'{firstName|there}'}, {'{company}'}, {'{title}'}, or any CSV column.
+            </p>
           </div>
         ))}
         <button

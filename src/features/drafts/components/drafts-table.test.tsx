@@ -63,6 +63,22 @@ describe('DraftsTable', () => {
     expect(screen.getByText('Rejected')).toBeDefined()
   })
 
+  it('renders red "Blocked" badge with joined guardrail flag text for BLOCKED status', () => {
+    render(
+      <DraftsTable
+        drafts={[{ ...makeDraft({ status: 'BLOCKED' }), guardrailFlags: [{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }] }]}
+        onReview={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Blocked')).toBeDefined()
+    expect(screen.getByText(/unfilled token \(\{firstName\}\)/i)).toBeDefined()
+  })
+
+  it('shows Review button for BLOCKED drafts', () => {
+    render(<DraftsTable drafts={[makeDraft({ status: 'BLOCKED' })]} onReview={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /review/i })).toBeDefined()
+  })
+
   it('shows Review button only for PENDING_REVIEW drafts', () => {
     render(<DraftsTable drafts={[makeDraft({ status: 'PENDING_REVIEW' })]} onReview={vi.fn()} />)
     expect(screen.getByRole('button', { name: /review/i })).toBeDefined()

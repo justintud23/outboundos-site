@@ -20,11 +20,13 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
   const [sendError, setSendError] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('all')
 
-  const pendingCount  = useMemo(() => drafts.filter((d) => d.status === 'PENDING_REVIEW').length, [drafts])
+  // BLOCKED drafts need review just like PENDING_REVIEW ones — they're
+  // grouped together in the "Pending" tab so a human can fix or reject them.
+  const pendingCount  = useMemo(() => drafts.filter((d) => d.status === 'PENDING_REVIEW' || d.status === 'BLOCKED').length, [drafts])
   const approvedCount = useMemo(() => drafts.filter((d) => d.status === 'APPROVED').length, [drafts])
 
   const visibleDrafts = useMemo(() => {
-    if (filter === 'pending')  return drafts.filter((d) => d.status === 'PENDING_REVIEW')
+    if (filter === 'pending')  return drafts.filter((d) => d.status === 'PENDING_REVIEW' || d.status === 'BLOCKED')
     if (filter === 'approved') return drafts.filter((d) => d.status === 'APPROVED')
     return drafts
   }, [drafts, filter])

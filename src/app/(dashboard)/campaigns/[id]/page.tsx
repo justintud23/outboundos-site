@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
 import { getCampaignDetail } from '@/features/campaigns/server/get-campaign-detail'
+import { CampaignSendingPanel } from '@/features/campaigns/components/campaign-sending-panel'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { formatEnumLabel } from '@/lib/format'
 import type { CampaignStatus, DraftStatus, ReplyClassification } from '@prisma/client'
@@ -199,6 +200,14 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
             <Link href="/drafts" className="text-[var(--status-warning)] text-xs underline hover:no-underline transition-all">Review now &rarr;</Link>
           </div>
         )}
+
+        <CampaignSendingPanel
+          campaignId={campaign.id}
+          autoSend={campaign.autoSend}
+          sampleSize={campaign.sampleSize}
+          sampleApprovedAt={campaign.sampleApprovedAt}
+          sampleCount={campaign.sampleCount}
+        />
 
         <DraftsSection drafts={campaign.drafts} draftTotal={campaign.draftTotal} />
         <RepliesSection replies={campaign.replies} replyCount={campaign.replyCount} />

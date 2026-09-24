@@ -47,13 +47,13 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                   <span className="text-[var(--text-primary)] truncate block max-w-[200px]">{draft.subject}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <StatusBadge status={draft.status} />
+                  <StatusBadge status={draft.status} guardrailFlags={draft.guardrailFlags} />
                 </td>
                 <td className="px-4 py-3 text-[var(--text-secondary)] hidden md:table-cell">
                   {new Date(draft.createdAt).toLocaleDateString('en-US')}
                 </td>
                 <td className="px-4 py-3">
-                  {draft.status === 'PENDING_REVIEW' && (
+                  {(draft.status === 'PENDING_REVIEW' || draft.status === 'BLOCKED') && (
                     <button
                       onClick={() => onReview(draft)}
                       aria-label={`Review draft for ${displayName}`}
@@ -82,12 +82,29 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
   )
 }
 
-function StatusBadge({ status }: { status: DraftDTO['status'] }) {
+function StatusBadge({
+  status,
+  guardrailFlags,
+}: {
+  status: DraftDTO['status']
+  guardrailFlags?: { rule: string; match: string }[] | null
+}) {
   if (status === 'PENDING_REVIEW') {
     return <Badge variant="warning">Pending Review</Badge>
   }
   if (status === 'APPROVED') {
     return <Badge variant="success">Approved</Badge>
+  }
+  if (status === 'BLOCKED') {
+    const flagText = (guardrailFlags ?? [])
+      .map((f) => `${f.rule.toLowerCase().replace(/_/g, ' ')} (${f.match})`)
+      .join(', ')
+    return (
+      <div className="space-y-0.5">
+        <Badge variant="danger">Blocked</Badge>
+        {flagText && <p className="text-[var(--status-danger)] text-xs opacity-80">{flagText}</p>}
+      </div>
+    )
   }
   // REJECTED
   return <Badge variant="danger">Rejected</Badge>

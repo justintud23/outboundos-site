@@ -19,6 +19,8 @@ const TYPE_COLORS: Record<ActionType, string> = {
   ENROLL_SEQUENCE: 'bg-[var(--accent-indigo-glow)] text-[var(--accent-indigo-hover)]',
   REVIEW_INTERESTED_LEAD: 'bg-[var(--status-success-bg)] text-[var(--status-success)]',
   MARK_CONVERTED: 'bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)] text-[var(--status-success)]',
+  FIX_BLOCKED_DRAFT: 'bg-[var(--status-danger-bg)] text-[var(--status-danger)]',
+  RETRY_FAILED_SEND: 'bg-[color-mix(in_srgb,var(--status-danger)_12%,transparent)] text-[var(--status-danger)]',
   NO_ACTION: 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)]',
 }
 

@@ -7,6 +7,8 @@ import {
   GitBranch,
   UserCheck,
   Star,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react'
 import type { NextAction, ActionType } from '../types'
 import { ACTION_CTA, ACTION_HREF, getUrgencyTier } from '../types'
@@ -44,6 +46,8 @@ const TYPE_CONFIG: Record<ActionType, {
   ENROLL_SEQUENCE: { ...tone('--accent-indigo', '--accent-indigo-hover'), icon: GitBranch },
   REVIEW_INTERESTED_LEAD: { ...tone('--status-success'), icon: Star }, // positive
   MARK_CONVERTED: { ...tone('--status-success'), icon: UserCheck }, // won
+  FIX_BLOCKED_DRAFT: { ...tone('--status-danger'), icon: ShieldAlert },
+  RETRY_FAILED_SEND: { ...tone('--status-danger'), icon: RotateCcw },
   NO_ACTION: { ...tone('--text-muted'), icon: FileCheck },
 }
 

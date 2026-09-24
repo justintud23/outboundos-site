@@ -9,6 +9,8 @@ import {
   UserCheck,
   Star,
   CheckCircle2,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react'
 import type { NextAction, ActionType } from '@/features/actions/types'
 import { ACTION_CTA, getUrgencyTier } from '@/features/actions/types'
@@ -88,6 +90,22 @@ const TYPE_CONFIG: Record<ActionType, {
     icon: UserCheck,
     ctaBg: 'bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)]',
     ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-success)_22%,transparent)]',
+  },
+  FIX_BLOCKED_DRAFT: {
+    accent: 'var(--status-danger)',
+    bg: 'color-mix(in srgb, var(--status-danger) 10%, transparent)',
+    text: 'text-[var(--status-danger)]',
+    icon: ShieldAlert,
+    ctaBg: 'bg-[var(--status-danger-bg)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-danger)_22%,transparent)]',
+  },
+  RETRY_FAILED_SEND: {
+    accent: 'var(--status-danger)',
+    bg: 'color-mix(in srgb, var(--status-danger) 10%, transparent)',
+    text: 'text-[var(--status-danger)]',
+    icon: RotateCcw,
+    ctaBg: 'bg-[var(--status-danger-bg)]',
+    ctaHoverBg: 'hover:bg-[color-mix(in_srgb,var(--status-danger)_22%,transparent)]',
   },
   NO_ACTION: {
     accent: 'var(--text-muted)',

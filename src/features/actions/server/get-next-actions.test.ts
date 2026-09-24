@@ -5,6 +5,7 @@ vi.mock('@/lib/db/prisma', () => ({
     draft: { findMany: vi.fn() },
     inboundReply: { findMany: vi.fn() },
     lead: { findMany: vi.fn() },
+    outboundMessage: { findMany: vi.fn() },
   },
 }))
 
@@ -15,6 +16,7 @@ const mockPrisma = prisma as unknown as {
   draft: { findMany: ReturnType<typeof vi.fn> }
   inboundReply: { findMany: ReturnType<typeof vi.fn> }
   lead: { findMany: ReturnType<typeof vi.fn> }
+  outboundMessage: { findMany: ReturnType<typeof vi.fn> }
 }
 
 const ORG_ID = 'org-test-1'
@@ -28,6 +30,7 @@ beforeEach(() => {
   mockPrisma.draft.findMany.mockResolvedValue([])
   mockPrisma.inboundReply.findMany.mockResolvedValue([])
   mockPrisma.lead.findMany.mockResolvedValue([])
+  mockPrisma.outboundMessage.findMany.mockResolvedValue([])
 })
 
 describe('getNextActions', () => {
@@ -195,6 +198,9 @@ describe('getNextActions', () => {
     for (const call of mockPrisma.lead.findMany.mock.calls) {
       expect(call[0].where.organizationId).toBe(ORG_ID)
     }
+    for (const call of mockPrisma.outboundMessage.findMany.mock.calls) {
+      expect(call[0].where.organizationId).toBe(ORG_ID)
+    }
   })
 
   it('includes id and reason fields on every action', async () => {
@@ -210,5 +216,42 @@ describe('getNextActions', () => {
       expect(action.reason).toBeDefined()
       expect(action.reason!.length).toBeGreaterThan(0)
     }
+  })
+
+  it('creates FIX_BLOCKED_DRAFT with guardrail flags in the reason', async () => {
+    mockPrisma.draft.findMany.mockImplementation(async (args: { where: { status?: string } }) => {
+      if (args.where.status === 'BLOCKED') {
+        return [{
+          id: 'draft-3',
+          subject: 'Hello',
+          createdAt: now,
+          guardrailFlags: [{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }],
+          lead: fakeLead,
+        }]
+      }
+      return []
+    })
+
+    const result = await getNextActions({ organizationId: ORG_ID })
+    const action = result.find((a) => a.type === 'FIX_BLOCKED_DRAFT')!
+
+    expect(action).toBeDefined()
+    expect(action.draftId).toBe('draft-3')
+    expect(action.priority).toBe(95)
+    expect(action.reason).toContain('unfilled token ({firstName})')
+  })
+
+  it('creates RETRY_FAILED_SEND with the lastError text', async () => {
+    mockPrisma.outboundMessage.findMany.mockResolvedValue([
+      { id: 'msg-1', subject: 'Follow up', lastError: 'SMTP timeout', updatedAt: now, draftId: 'draft-4', lead: fakeLead },
+    ])
+
+    const result = await getNextActions({ organizationId: ORG_ID })
+    const action = result.find((a) => a.type === 'RETRY_FAILED_SEND')!
+
+    expect(action).toBeDefined()
+    expect(action.draftId).toBe('draft-4')
+    expect(action.priority).toBe(85)
+    expect(action.reason).toContain('SMTP timeout')
   })
 })

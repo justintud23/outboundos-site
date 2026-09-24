@@ -53,6 +53,7 @@ export async function getSequence({
       subject: s.subject,
       body: s.body,
       delayDays: s.delayDays,
+      personalizationPrompt: s.personalizationPrompt,
       winningVariantId: s.winningVariantId,
       variants: s.subjectVariants.map((v) => ({
         id: v.id,

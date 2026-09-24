@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import type { NextAction } from '../types'
 import { ACTION_PRIORITY, ACTION_LABELS, ACTION_HREF } from '../types'
+import type { GuardrailFlag } from '@/features/drafts/guardrails'
 import { relativeTime } from '@/lib/format'
 
 interface GetNextActionsInput {
@@ -50,6 +51,8 @@ export async function getNextActions({
     newLeadsWithoutEnrollment,
     repliedLeadsWithoutFollowUp,
     interestedLeads,
+    blockedDrafts,
+    failedSends,
   ] = await Promise.all([
     prisma.draft.findMany({
       where: { organizationId, status: 'PENDING_REVIEW', ...leadFilter },
@@ -124,6 +127,26 @@ export async function getNextActions({
       select: { id: true, email: true, firstName: true, lastName: true, company: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 10,
+    }),
+
+    prisma.draft.findMany({
+      where: { organizationId, status: 'BLOCKED', ...leadFilter },
+      select: {
+        id: true, subject: true, createdAt: true, guardrailFlags: true,
+        lead: { select: { id: true, email: true, firstName: true, lastName: true, company: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+
+    prisma.outboundMessage.findMany({
+      where: { organizationId, status: 'FAILED', ...leadFilter },
+      select: {
+        id: true, subject: true, lastError: true, updatedAt: true, draftId: true,
+        lead: { select: { id: true, email: true, firstName: true, lastName: true, company: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
     }),
   ])
 
@@ -241,6 +264,41 @@ export async function getNextActions({
       leadName: leadName(lead),
       href: ACTION_HREF.MARK_CONVERTED,
       createdAt: lead.updatedAt,
+    })
+  }
+
+  // FIX_BLOCKED_DRAFT
+  for (const draft of blockedDrafts) {
+    const flags = Array.isArray(draft.guardrailFlags) ? (draft.guardrailFlags as unknown as GuardrailFlag[]) : []
+    actions.push({
+      id: actionId('fix-blocked-draft'),
+      type: 'FIX_BLOCKED_DRAFT',
+      priority: ACTION_PRIORITY.FIX_BLOCKED_DRAFT,
+      label: ACTION_LABELS.FIX_BLOCKED_DRAFT,
+      description: `"${draft.subject}" for ${leadContext(draft.lead)}`,
+      reason: flags.length ? `Blocked: ${flags.map((f) => `${f.rule.toLowerCase().replace(/_/g, ' ')} (${f.match})`).join(', ')}` : 'Blocked by guardrails',
+      leadId: draft.lead.id,
+      leadName: leadName(draft.lead),
+      draftId: draft.id,
+      href: ACTION_HREF.FIX_BLOCKED_DRAFT,
+      createdAt: draft.createdAt,
+    })
+  }
+
+  // RETRY_FAILED_SEND
+  for (const msg of failedSends) {
+    actions.push({
+      id: actionId('failed-send'),
+      type: 'RETRY_FAILED_SEND',
+      priority: ACTION_PRIORITY.RETRY_FAILED_SEND,
+      label: ACTION_LABELS.RETRY_FAILED_SEND,
+      description: `"${msg.subject}" to ${leadContext(msg.lead)}`,
+      reason: `Failed after 3 attempts${msg.lastError ? `: ${msg.lastError.slice(0, 120)}` : ''}`,
+      leadId: msg.lead.id,
+      leadName: leadName(msg.lead),
+      ...(msg.draftId && { draftId: msg.draftId }),
+      href: ACTION_HREF.RETRY_FAILED_SEND,
+      createdAt: msg.updatedAt,
     })
   }
 

@@ -58,7 +58,7 @@ describe('getDrafts', () => {
     expect(result.drafts[0]?.subject).toBe('Hello Jane')
   })
 
-  it('defaults to PENDING_REVIEW and APPROVED statuses', async () => {
+  it('defaults to PENDING_REVIEW, APPROVED, and BLOCKED statuses', async () => {
     mockPrisma.draft.findMany.mockResolvedValue([])
     mockPrisma.draft.count.mockResolvedValue(0)
 
@@ -67,7 +67,7 @@ describe('getDrafts', () => {
     expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          status: { in: ['PENDING_REVIEW', 'APPROVED'] },
+          status: { in: ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'] },
         }),
       }),
     )
@@ -107,5 +107,27 @@ describe('getDrafts', () => {
 
     expect(result.drafts).toEqual([])
     expect(result.total).toBe(0)
+  })
+
+  it('maps guardrailFlags for BLOCKED drafts', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([{
+      ...fakeDraftWithLead,
+      status: 'BLOCKED',
+      guardrailFlags: [{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }],
+    }])
+    mockPrisma.draft.count.mockResolvedValue(1)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(result.drafts[0]?.guardrailFlags).toEqual([{ rule: 'UNFILLED_TOKEN', match: '{firstName}' }])
+  })
+
+  it('returns null guardrailFlags when absent', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([fakeDraftWithLead])
+    mockPrisma.draft.count.mockResolvedValue(1)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(result.drafts[0]?.guardrailFlags).toBeNull()
   })
 })

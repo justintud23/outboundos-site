@@ -33,6 +33,11 @@ export interface CampaignDetailDTO {
   status: CampaignStatus
   createdAt: Date
   updatedAt: Date
+  // Auto-send
+  autoSend: boolean
+  sampleSize: number
+  sampleApprovedAt: Date | null
+  sampleCount: number
   // Stats
   messageCount: number
   draftTotal: number
@@ -67,6 +72,7 @@ export async function getCampaignDetail({
     positiveReplyCount,
     messageCount,
     draftStatusCounts,
+    sampleCount,
   ] = await Promise.all([
     // Drafts for display (latest 50 — enough for any real campaign in demo)
     prisma.draft.findMany({
@@ -119,6 +125,11 @@ export async function getCampaignDetail({
       where: { campaignId, organizationId },
       _count: { _all: true },
     }),
+
+    // Sample drafts still awaiting or having received a human decision
+    prisma.draft.count({
+      where: { campaignId, isSample: true, status: { in: ['PENDING_REVIEW', 'APPROVED'] } },
+    }),
   ])
 
   const countByStatus = new Map(draftStatusCounts.map((r) => [r.status, r._count._all]))
@@ -130,6 +141,10 @@ export async function getCampaignDetail({
     status: campaign.status,
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
+    autoSend: campaign.autoSend,
+    sampleSize: campaign.sampleSize,
+    sampleApprovedAt: campaign.sampleApprovedAt,
+    sampleCount,
     messageCount,
     draftTotal: draftStatusCounts.reduce((s, r) => s + r._count._all, 0),
     draftPendingCount: countByStatus.get('PENDING_REVIEW') ?? 0,

@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       organizationId: org.id,
       campaignId: body.campaignId,
       name: body.name,
-      steps: body.steps as { stepNumber: number; subject: string; body: string; delayDays: number }[],
+      steps: body.steps as { stepNumber: number; subject: string; body: string; delayDays: number; personalizationPrompt?: string | null }[],
     })
     return NextResponse.json(sequence, { status: 201 })
   } catch (err) {

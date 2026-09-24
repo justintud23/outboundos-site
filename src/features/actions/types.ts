@@ -6,6 +6,8 @@ export type ActionType =
   | 'ENROLL_SEQUENCE'
   | 'REVIEW_INTERESTED_LEAD'
   | 'MARK_CONVERTED'
+  | 'FIX_BLOCKED_DRAFT'
+  | 'RETRY_FAILED_SEND'
   | 'NO_ACTION'
 
 export interface NextAction {
@@ -33,6 +35,8 @@ export const ACTION_PRIORITY: Record<ActionType, number> = {
   ENROLL_SEQUENCE: 60,
   REVIEW_INTERESTED_LEAD: 55,
   MARK_CONVERTED: 50,
+  FIX_BLOCKED_DRAFT: 95,
+  RETRY_FAILED_SEND: 85,
   NO_ACTION: 0,
 }
 
@@ -44,6 +48,8 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   ENROLL_SEQUENCE: 'Enroll in Sequence',
   REVIEW_INTERESTED_LEAD: 'Review Lead',
   MARK_CONVERTED: 'Mark Converted',
+  FIX_BLOCKED_DRAFT: 'Fix Blocked Draft',
+  RETRY_FAILED_SEND: 'Failed Send',
   NO_ACTION: 'No Action',
 }
 
@@ -55,6 +61,8 @@ export const ACTION_CTA: Record<ActionType, string> = {
   ENROLL_SEQUENCE: 'Enroll',
   REVIEW_INTERESTED_LEAD: 'View Lead',
   MARK_CONVERTED: 'Convert',
+  FIX_BLOCKED_DRAFT: 'Fix',
+  RETRY_FAILED_SEND: 'Review',
   NO_ACTION: '',
 }
 
@@ -74,5 +82,7 @@ export const ACTION_HREF: Record<ActionType, string> = {
   ENROLL_SEQUENCE: '/sequences',
   REVIEW_INTERESTED_LEAD: '/pipeline',
   MARK_CONVERTED: '/pipeline',
+  FIX_BLOCKED_DRAFT: '/drafts',
+  RETRY_FAILED_SEND: '/drafts',
   NO_ACTION: '/dashboard',
 }
