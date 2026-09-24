@@ -297,6 +297,7 @@ export async function getNextActions({
       leadId: msg.lead.id,
       leadName: leadName(msg.lead),
       ...(msg.draftId && { draftId: msg.draftId }),
+      messageId: msg.id,
       href: ACTION_HREF.RETRY_FAILED_SEND,
       createdAt: msg.updatedAt,
     })

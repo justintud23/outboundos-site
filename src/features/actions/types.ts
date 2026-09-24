@@ -20,6 +20,8 @@ export interface NextAction {
   leadId?: string
   leadName?: string
   draftId?: string
+  // RETRY_FAILED_SEND: the FAILED OutboundMessage to put back on the queue.
+  messageId?: string
   replyId?: string
   sequenceId?: string
   href?: string
@@ -62,7 +64,7 @@ export const ACTION_CTA: Record<ActionType, string> = {
   REVIEW_INTERESTED_LEAD: 'View Lead',
   MARK_CONVERTED: 'Convert',
   FIX_BLOCKED_DRAFT: 'Fix',
-  RETRY_FAILED_SEND: 'Review',
+  RETRY_FAILED_SEND: 'Retry',
   NO_ACTION: '',
 }
 

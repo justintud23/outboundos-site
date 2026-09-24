@@ -21,6 +21,7 @@ const INLINE_TYPES = new Set<ActionType>([
   'APPROVE_DRAFT',
   'SEND_DRAFT',
   'MARK_CONVERTED',
+  'RETRY_FAILED_SEND',
 ])
 
 export function isInlineAction(type: ActionType): boolean {
@@ -127,6 +128,7 @@ const SUCCESS_LABELS: Partial<Record<ActionType, string>> = {
   APPROVE_DRAFT: 'Approved',
   SEND_DRAFT: 'Sent',
   MARK_CONVERTED: 'Converted',
+  RETRY_FAILED_SEND: 'Queued',
 }
 
 function UrgencyDot({ priority }: { priority: number }) {
@@ -181,6 +183,15 @@ export async function executeAction(action: NextAction): Promise<void> {
       if (!res.ok) {
         const data = await res.json().catch(() => null)
         throw new Error(data?.error ?? 'Failed to convert lead')
+      }
+      return
+    }
+    case 'RETRY_FAILED_SEND': {
+      if (!action.messageId) throw new Error('Missing message ID')
+      const res = await fetch(`/api/messages/${action.messageId}/retry`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error ?? 'Failed to retry send')
       }
       return
     }

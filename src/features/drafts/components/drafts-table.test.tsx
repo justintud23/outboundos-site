@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+
 import { DraftsTable } from './drafts-table'
 import type { DraftWithLeadDTO } from '@/features/drafts/types'
 
@@ -28,6 +30,7 @@ function makeDraft(overrides: Partial<DraftWithLeadDTO> = {}): DraftWithLeadDTO 
       company:   'Acme',
       ...overrides.lead,
     },
+    outboundMessage: overrides.outboundMessage ?? null,
   }
 }
 
@@ -107,5 +110,23 @@ describe('DraftsTable', () => {
     const draft = makeDraft({ lead: { id: 'l1', email: 'anon@co.com', firstName: null, lastName: null, company: null } })
     render(<DraftsTable drafts={[draft]} onReview={vi.fn()} />)
     expect(screen.getAllByText('anon@co.com')).toBeDefined()
+  })
+
+  it('hides Send for an APPROVED draft already on the send queue', () => {
+    const draft = makeDraft({ status: 'APPROVED', outboundMessage: { id: 'msg-1', status: 'QUEUED' } })
+    render(<DraftsTable drafts={[draft]} onReview={vi.fn()} onSend={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /send draft/i })).toBeNull()
+    expect(screen.getByText('Queued to send')).toBeDefined()
+  })
+
+  it('offers Retry (not Send) for a draft whose queued send FAILED', () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'msg-9', status: 'QUEUED' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const draft = makeDraft({ status: 'APPROVED', outboundMessage: { id: 'msg-9', status: 'FAILED' } })
+    render(<DraftsTable drafts={[draft]} onReview={vi.fn()} onSend={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /send draft/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/messages/msg-9/retry', { method: 'POST' })
+    vi.unstubAllGlobals()
   })
 })

@@ -43,6 +43,7 @@ import {
   MailboxLimitExceededError,
   DraftAlreadySentError,
   DraftSendInProgressError,
+  DraftOnSendQueueError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 
@@ -545,6 +546,54 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DraftSendInProgressError)
     expect(mockSendEmail).not.toHaveBeenCalled()
     expect(store['mb-1'].sentToday).toBe(5)
+  })
+
+  // ─── Drafts owned by the automatic send queue (C1) ─────────────────────────
+
+  it('QUEUED queue message: refuses with DraftOnSendQueueError, message untouched, nothing sent', async () => {
+    mockPrisma.outboundMessage.findUnique.mockResolvedValue({
+      id: 'msg-q', status: 'QUEUED', scheduledFor: new Date('2026-01-01'),
+    })
+
+    const err = await sendDraft(INPUT).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(DraftOnSendQueueError)
+    expect((err as DraftOnSendQueueError).messageStatus).toBe('QUEUED')
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(store['mb-1'].sentToday).toBe(5)
+  })
+
+  it('FAILED queue message: refuses (use Retry) instead of reconciling it to SENT', async () => {
+    mockPrisma.outboundMessage.findUnique.mockResolvedValue({
+      ...baseRow, id: 'msg-f', status: 'FAILED', scheduledFor: new Date('2026-01-01'), createdAt: new Date('2026-01-01'),
+    })
+
+    await expect(sendDraft(INPUT)).rejects.toThrow(/use Retry/)
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('queue row that appears between the check and the claim (P2002): still never reconciled to SENT', async () => {
+    mockPrisma.outboundMessage.findUnique
+      .mockResolvedValueOnce(null) // up-front check: nothing yet
+      .mockResolvedValue({ ...baseRow, status: 'QUEUED', scheduledFor: new Date(), createdAt: new Date('2026-01-01') })
+    mockPrisma.outboundMessage.create.mockReset().mockRejectedValue(P2002)
+
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(DraftOnSendQueueError)
+    expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('stale MANUAL claim (no scheduledFor) is still reconciled to SENT without re-sending', async () => {
+    mockPrisma.outboundMessage.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ ...baseRow, status: 'QUEUED', scheduledFor: null, createdAt: new Date(Date.now() - 10 * 60_000) })
+    mockPrisma.outboundMessage.create.mockReset().mockRejectedValue(P2002)
+
+    const out = await sendDraft(INPUT)
+    expect(out.status).toBe('SENT')
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
   // ─── Warmup ramp ──────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import {
   MailboxLimitExceededError,
   DraftAlreadySentError,
   DraftSendInProgressError,
+  DraftOnSendQueueError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
@@ -47,6 +48,16 @@ export async function sendDraft({
   // 2b. Check lead is not in terminal state
   if (TERMINAL_STATUSES.includes(draft.lead.status)) {
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
+  }
+
+  // 2c. A draft already on the automatic send queue is owned by the queue —
+  //     refuse up front (before any mailbox work) and leave its message alone.
+  const queued = await prisma.outboundMessage.findUnique({
+    where: { draftId },
+    select: { id: true, status: true, scheduledFor: true },
+  })
+  if (queued?.scheduledFor) {
+    throw new DraftOnSendQueueError(queued.status, queued.id)
   }
 
   const org = await prisma.organization.findUnique({
@@ -299,7 +310,9 @@ const CLAIM_STALE_MS = 2 * 60 * 1000
 /**
  * A claim row already exists for this draft (the claiming insert hit the unique
  * draftId constraint). Resolve it WITHOUT ever re-sending:
- *  - SENT                  → the send already completed → DraftAlreadySentError.
+ *  - scheduledFor set       → a send-queue message, never a manual claim →
+ *                             DraftOnSendQueueError (untouched).
+ *  - past QUEUED (SENT, …)  → the send already completed → DraftAlreadySentError.
  *  - QUEUED, claim fresh    → another invocation is mid-send → DraftSendInProgressError.
  *  - QUEUED, claim stale    → the prior attempt's process died (or its finalize
  *                             UPDATE failed) after the provider call. We cannot
@@ -326,7 +339,17 @@ async function resolveExistingClaim({
     throw new DraftSendInProgressError()
   }
 
-  if (existing.status === 'SENT') {
+  // A row with scheduledFor belongs to the automatic send queue, not to a
+  // manual claim. Never reconcile it: a QUEUED one is still going to send (or
+  // is mid-send), and a FAILED one never went out and must be retried through
+  // the queue. Marking either SENT here would silently drop the email.
+  if (existing.scheduledFor) {
+    throw new DraftOnSendQueueError(existing.status, existing.id)
+  }
+
+  // Any manual row past QUEUED (SENT, or advanced by delivery events) has
+  // already gone out.
+  if (existing.status !== 'QUEUED') {
     throw new DraftAlreadySentError(existing.id)
   }
 

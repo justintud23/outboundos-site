@@ -43,6 +43,7 @@ const fakeDraftWithLead = {
     lastName: 'Doe',
     company: 'Acme',
   },
+  outboundMessages: [] as { id: string; status: string }[],
 }
 
 describe('getDrafts', () => {
@@ -97,6 +98,23 @@ describe('getDrafts', () => {
     expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 200 }),
     )
+  })
+
+  it('exposes the draft\'s outbound message (so the UI hides Send for queued/failed drafts)', async () => {
+    mockPrisma.draft.findMany.mockResolvedValue([
+      { ...fakeDraftWithLead, status: 'APPROVED', outboundMessages: [{ id: 'msg-1', status: 'QUEUED' }] },
+      fakeDraftWithLead,
+    ])
+    mockPrisma.draft.count.mockResolvedValue(2)
+
+    const result = await getDrafts({ organizationId: 'org-1' })
+
+    expect(mockPrisma.draft.findMany.mock.calls[0]?.[0]?.include?.outboundMessages).toEqual({
+      select: { id: true, status: true },
+      take: 1,
+    })
+    expect(result.drafts[0]?.outboundMessage).toEqual({ id: 'msg-1', status: 'QUEUED' })
+    expect(result.drafts[1]?.outboundMessage).toBeNull()
   })
 
   it('returns empty list when no drafts exist', async () => {

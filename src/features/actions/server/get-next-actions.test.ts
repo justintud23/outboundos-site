@@ -251,6 +251,7 @@ describe('getNextActions', () => {
 
     expect(action).toBeDefined()
     expect(action.draftId).toBe('draft-4')
+    expect(action.messageId).toBe('msg-1') // inline Retry targets the message
     expect(action.priority).toBe(85)
     expect(action.reason).toContain('SMTP timeout')
   })

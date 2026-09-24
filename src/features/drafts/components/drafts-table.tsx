@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import type { DraftDTO, DraftWithLeadDTO } from '@/features/drafts/types'
+import { RetrySendButton } from '@/features/messages/components/retry-send-button'
 
 interface DraftsTableProps {
   drafts: DraftWithLeadDTO[]
@@ -62,7 +63,8 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
                       Review
                     </button>
                   )}
-                  {draft.status === 'APPROVED' && onSend && (
+                  {draft.outboundMessage && <SendState message={draft.outboundMessage} />}
+                  {draft.status === 'APPROVED' && onSend && !draft.outboundMessage && (
                     <button
                       onClick={() => void onSend(draft)}
                       disabled={isSending}
@@ -80,6 +82,26 @@ export function DraftsTable({ drafts, onReview, onSend, sendingDraftId }: Drafts
       </table>
     </div>
   )
+}
+
+// A draft with an OutboundMessage belongs to a send (usually the automatic
+// queue) — show where it stands instead of a manual Send.
+function SendState({ message }: { message: NonNullable<DraftWithLeadDTO['outboundMessage']> }) {
+  if (message.status === 'QUEUED') {
+    return <span className="text-[var(--text-muted)] text-xs">Queued to send</span>
+  }
+  if (message.status === 'FAILED') {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="text-[var(--status-danger)] text-xs">Send failed</span>
+        <RetrySendButton messageId={message.id} />
+      </span>
+    )
+  }
+  if (message.status === 'CANCELLED') {
+    return <span className="text-[var(--text-muted)] text-xs">Cancelled</span>
+  }
+  return <span className="text-[var(--text-muted)] text-xs">Sent</span>
 }
 
 function StatusBadge({

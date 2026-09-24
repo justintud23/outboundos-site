@@ -25,6 +25,7 @@ describe('isInlineAction', () => {
     expect(isInlineAction('APPROVE_DRAFT')).toBe(true)
     expect(isInlineAction('SEND_DRAFT')).toBe(true)
     expect(isInlineAction('MARK_CONVERTED')).toBe(true)
+    expect(isInlineAction('RETRY_FAILED_SEND')).toBe(true)
   })
 
   it('returns false for unsupported types', () => {
@@ -78,6 +79,15 @@ describe('executeAction', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'CONVERTED' }),
     })
+  })
+
+  it('calls the retry API for RETRY_FAILED_SEND', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await executeAction(makeAction({ type: 'RETRY_FAILED_SEND', priority: 85, messageId: 'msg-7' }))
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/messages/msg-7/retry', { method: 'POST' })
   })
 
   it('throws on API error with server message', async () => {

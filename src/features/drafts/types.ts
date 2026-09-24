@@ -1,4 +1,4 @@
-import type { Draft } from '@prisma/client'
+import type { Draft, MessageStatus } from '@prisma/client'
 
 export type DraftDTO = Pick<
   Draft,
@@ -28,6 +28,9 @@ export interface DraftWithLeadDTO extends DraftDTO {
   }
   // Only populated for BLOCKED drafts; omitted elsewhere.
   guardrailFlags?: { rule: string; match: string }[] | null
+  // The draft's OutboundMessage, if one exists (queued, sent or failed). A
+  // draft with a message must not offer a manual Send.
+  outboundMessage?: { id: string; status: MessageStatus } | null
 }
 
 export class PendingDraftExistsError extends Error {

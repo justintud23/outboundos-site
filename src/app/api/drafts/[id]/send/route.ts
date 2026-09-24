@@ -8,6 +8,7 @@ import {
   NoActiveMailboxError,
   MailboxLimitExceededError,
   LeadInTerminalStateError,
+  DraftOnSendQueueError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 
@@ -43,6 +44,18 @@ export async function POST(
     if (err instanceof DraftAlreadySentError) {
       return NextResponse.json(
         { code: 'DRAFT_ALREADY_SENT', messageId: err.messageId, message: err.message },
+        { status: 409 },
+      )
+    }
+    if (err instanceof DraftOnSendQueueError) {
+      return NextResponse.json(
+        {
+          code: 'DRAFT_ON_SEND_QUEUE',
+          messageStatus: err.messageStatus,
+          messageId: err.messageId,
+          error: err.message,
+          message: err.message,
+        },
         { status: 409 },
       )
     }
