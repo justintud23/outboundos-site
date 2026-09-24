@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
@@ -10,14 +11,18 @@ interface Props {
   sampleSize: number
   sampleApprovedAt: Date | null
   sampleCount: number
+  // Auto-send goes through Microsoft 365: it can't be turned on until the org
+  // has connected a tenant (turning it off is always allowed).
+  msConnected: boolean
 }
 
-export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sampleSize, sampleApprovedAt, sampleCount }: Props) {
+export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sampleSize, sampleApprovedAt, sampleCount, msConnected }: Props) {
   const router = useRouter()
   const [autoSend, setAutoSend] = useState(initialAutoSend)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const needsMicrosoft = !msConnected && !autoSend
 
   async function toggleAutoSend() {
     setBusy(true)
@@ -72,13 +77,20 @@ export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sa
           role="switch"
           aria-checked={autoSend}
           aria-label="Send automatically"
-          disabled={busy}
+          aria-describedby={needsMicrosoft ? 'auto-send-needs-microsoft' : undefined}
+          disabled={busy || needsMicrosoft}
           onClick={() => void toggleAutoSend()}
-          className={`relative h-6 w-11 rounded-full transition-colors ${autoSend ? 'bg-[var(--accent-indigo)]' : 'bg-[var(--border-default)]'}`}
+          className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${autoSend ? 'bg-[var(--accent-indigo)]' : 'bg-[var(--border-default)]'}`}
         >
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${autoSend ? 'translate-x-5' : 'translate-x-0.5'}`} />
         </button>
       </div>
+
+      {needsMicrosoft && (
+        <p id="auto-send-needs-microsoft" className="text-[var(--text-secondary)] text-xs">
+          Connect Microsoft 365 in <Link href="/settings" className="underline">Settings</Link> first.
+        </p>
+      )}
 
       {!autoSend && (
         <p className="text-[var(--text-muted)] text-xs">
