@@ -22,4 +22,12 @@ describe('GET /api/cron/send-queue', () => {
     expect(await res.json()).toMatchObject({ sent: 2 })
     expect(recordHeartbeat).toHaveBeenCalledWith('send-queue', expect.objectContaining({ sent: 2 }))
   })
+  it('still records a heartbeat and returns 500 when processSendQueue throws', async () => {
+    ;(isAuthorizedCron as ReturnType<typeof vi.fn>).mockReturnValue(true)
+    ;(processSendQueue as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('boom'))
+    const res = await GET(new Request('http://x'))
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'boom' })
+    expect(recordHeartbeat).toHaveBeenCalledWith('send-queue', { error: 'boom' })
+  })
 })

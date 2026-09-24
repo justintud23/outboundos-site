@@ -170,4 +170,62 @@ describe('processSendQueue', () => {
     await processSendQueue(NOW)
     expect(sendEmail.mock.calls[0][0]).toMatchObject({ subject: 'Re: Snow plan for Acme', replyToProviderMessageId: 'g-root' })
   })
+
+  // ─── Fix round 1 ────────────────────────────────────────────
+
+  it('only queries orgs with a connected Microsoft 365 tenant (Important #2)', async () => {
+    await processSendQueue(NOW)
+    expect(p.organization.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ msTenantId: { not: null } }) }),
+    )
+  })
+
+  it('getMessageState throwing GraphAuthError pauses the org and alerts, without the tick throwing (Important #1)', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(queued({ graphMessageId: 'g-prev' }))
+    ;(getMessageState as Fn).mockRejectedValue(new GraphAuthError('denied', 403))
+    p.organization.updateMany.mockResolvedValue({ count: 1 })
+    const res = await processSendQueue(NOW)
+    expect(res.failed).toBe(1)
+    expect(p.organization.updateMany).toHaveBeenCalledWith({
+      where: { id: 'org-1', sendingPaused: false },
+      data: { sendingPaused: true, pausedReason: expect.stringContaining('Microsoft 365') },
+    })
+    expect(sendOrgAlert).toHaveBeenCalledTimes(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('threading lookup failing after slot reservation releases the slot and unclaims the message (Important #1)', async () => {
+    p.outboundMessage.findMany.mockRejectedValue(new Error('db timeout'))
+    const res = await processSendQueue(NOW)
+    expect(res.deferred).toBe(1)
+    expect(releaseMailboxSlot).toHaveBeenCalledWith('mb-1')
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { processing: false } })
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('finalizeSent failing twice after a successful send never releases the claim back to QUEUED (Important #2)', async () => {
+    p.outboundMessage.update.mockRejectedValue(new Error('db down'))
+    const res = await processSendQueue(NOW)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    // The SENT update was attempted twice (one retry) ...
+    const sentAttempts = p.outboundMessage.update.mock.calls.filter((c) => c[0].data?.status === 'SENT')
+    expect(sentAttempts.length).toBe(2)
+    // ... but the claim was never reverted to available (no bare processing:false reset).
+    expect(p.outboundMessage.update).not.toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { processing: false } })
+    expect(releaseMailboxSlot).not.toHaveBeenCalled()
+    expect(res.sent).toBe(1)
+  })
+
+  it('crash recovery: graphMessageId missing from the mailbox marks FAILED and never resends (Promoted minor #3)', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(queued({ graphMessageId: 'g-prev' }))
+    ;(getMessageState as Fn).mockResolvedValue({ state: 'MISSING', conversationId: null })
+    const res = await processSendQueue(NOW)
+    expect(res.failed).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(sendDraftMessage).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { status: 'FAILED', processing: false, lastError: 'Graph message missing from mailbox; not resent automatically' },
+    })
+  })
 })

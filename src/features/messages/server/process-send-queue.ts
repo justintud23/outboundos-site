@@ -52,9 +52,12 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 45_000
     data: { processing: false, processingStartedAt: null },
   })
 
+  // The send queue is a Microsoft 365 (Graph) feature — orgs without a
+  // connected tenant have nothing here to process.
   const orgs = await prisma.organization.findMany({
     where: {
       sendingPaused: false,
+      msTenantId: { not: null },
       outboundMessages: { some: { status: 'QUEUED', scheduledFor: { lte: now } } },
     },
     select: {
@@ -79,17 +82,23 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 45_000
     for (const mailbox of mailboxes) {
       if (total >= MAX_SENDS_PER_TICK || Date.now() - startedAt > budgetMs) return result
 
-      const next = await prisma.outboundMessage.findFirst({
-        where: { mailboxId: mailbox.id, status: 'QUEUED', processing: false, scheduledFor: { lte: now } },
-        orderBy: { scheduledFor: 'asc' },
-        select: { id: true },
-      })
-      if (!next) continue
+      // One message's unhandled failure must never abort the whole tick —
+      // sendOne has its own safety net, but this is defense in depth.
+      try {
+        const next = await prisma.outboundMessage.findFirst({
+          where: { mailboxId: mailbox.id, status: 'QUEUED', processing: false, scheduledFor: { lte: now } },
+          orderBy: { scheduledFor: 'asc' },
+          select: { id: true },
+        })
+        if (!next) continue
 
-      const outcome = await sendOne(next.id, mailbox, org, now)
-      if (outcome !== 'skipped') result[outcome]++
-      total++
-      if (outcome === 'failed' && (await isOrgPaused(org.id))) break
+        const outcome = await sendOne(next.id, mailbox, org, now)
+        if (outcome !== 'skipped') result[outcome]++
+        total++
+        if (outcome === 'failed' && (await isOrgPaused(org.id))) break
+      } catch (err) {
+        console.error(`[send-queue] mailbox ${mailbox.id}: unhandled error while processing the queue, skipping to next mailbox:`, err)
+      }
     }
   }
   return result
@@ -118,135 +127,182 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
   })
   if (claimed.count === 0) return 'skipped'
 
-  const message = await prisma.outboundMessage.findUnique({
-    where: { id: messageId },
-    include: {
-      lead: { select: { id: true, email: true, status: true } },
-      draft: {
-        select: {
-          sequenceEnrollmentId: true,
-          sequenceEnrollment: { select: { id: true, status: true, startedAt: true } },
-        },
-      },
-    },
-  })
-  if (!message) return 'skipped'
+  // slotReserved: a mailbox daily-limit slot is currently held and needs
+  // releasing if we bail out before a send actually happens.
+  // dispatched: the Graph send call itself succeeded — the prospect may
+  // already have this email in their inbox, so from this point on we must
+  // NEVER release the claim back to QUEUED (that risks a duplicate send).
+  let slotReserved = false
+  let dispatched = false
 
-  // Last-moment safety: never email someone who replied, bounced or unsubscribed.
-  const enrollment = message.draft?.sequenceEnrollment
-  let cancelReason: string | null = null
-  if (TERMINAL_STATUSES.includes(message.lead.status)) cancelReason = `lead_${message.lead.status.toLowerCase()}`
-  else if (enrollment && enrollment.status === 'STOPPED') cancelReason = 'enrollment_stopped'
-  else if (enrollment) {
-    const stop = await checkEnrollmentStop({
-      enrollment: { startedAt: enrollment.startedAt, leadId: message.leadId, organizationId: message.organizationId },
-      leadStatus: message.lead.status,
-    })
-    if (stop.shouldStop) cancelReason = stop.reason ?? 'stopped'
-  }
-  if (cancelReason) {
-    await prisma.outboundMessage.update({
-      where: { id: messageId },
-      data: { status: 'CANCELLED', processing: false, lastError: cancelReason },
-    })
-    return 'cancelled'
-  }
-
-  const limitToday = effectiveDailyLimit(mailbox, now)
-  const paceMailbox = () =>
-    prisma.mailbox.update({
-      where: { id: mailbox.id },
-      data: { nextSendAt: nextSendAt(now, mailboxSpacingMs(org, limitToday)) },
-    })
-
-  // Crash recovery: a previous attempt already created (and maybe sent) a Graph message.
-  if (message.graphMessageId && org.msTenantId) {
-    const state = await getMessageState(org.msTenantId, mailbox.email, message.graphMessageId)
-    if (state.state === 'SENT') {
-      await finalizeSent(messageId, message.leadId, message.organizationId, {
-        graphMessageId: message.graphMessageId,
-        conversationId: state.conversationId,
-        subject: message.subject,
-        sendAttempts: message.sendAttempts + 1,
-      })
-      await paceMailbox()
-      return 'reconciled'
-    }
-    if (state.state === 'DRAFT') {
-      if (!(await reserveMailboxSlot(mailbox.id, limitToday, startOfDay(now)))) {
-        return deferForCapacity(messageId, mailbox.id, now)
-      }
-      try {
-        await sendDraftMessage(org.msTenantId, mailbox.email, message.graphMessageId)
-      } catch (err) {
-        await releaseMailboxSlot(mailbox.id)
-        return handleSendError(err, messageId, message.sendAttempts, mailbox.id, org.id, now)
-      }
-      await finalizeSent(messageId, message.leadId, message.organizationId, {
-        graphMessageId: message.graphMessageId,
-        conversationId: state.conversationId,
-        subject: message.subject,
-        sendAttempts: message.sendAttempts + 1,
-      })
-      await paceMailbox()
-      return 'sent'
-    }
-    // MISSING: the draft was deleted; fall through and send fresh.
-  }
-
-  if (!(await reserveMailboxSlot(mailbox.id, limitToday, startOfDay(now)))) {
-    return deferForCapacity(messageId, mailbox.id, now)
-  }
-
-  // Threading: follow-ups reply to the most recent message we sent in this enrollment.
-  const prior = message.draft?.sequenceEnrollmentId
-    ? await prisma.outboundMessage.findMany({
-        where: {
-          organizationId: message.organizationId,
-          status: 'SENT',
-          id: { not: messageId },
-          draft: { sequenceEnrollmentId: message.draft.sequenceEnrollmentId },
-        },
-        orderBy: { sentAt: 'asc' },
-        select: { subject: true, graphMessageId: true },
-      })
-    : []
-  const root = prior[0]
-  const subject = root ? buildReplySubject(root.subject) : message.subject
-  const replyToProviderMessageId = [...prior].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
-
-  const token = signUnsubscribeToken({ leadId: message.leadId, organizationId: message.organizationId })
-  const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${token}`
-
-  let sent: { providerMessageId?: string | null; conversationId?: string | null }
   try {
-    sent = await getEmailProvider({ msTenantId: org.msTenantId }).sendEmail({
-      to: message.lead.email,
-      fromEmail: mailbox.email,
-      fromName: mailbox.displayName,
-      subject,
-      body: message.body,
-      listUnsubscribe: { url: unsubscribeUrl },
-      ...(message.messageId && { messageId: message.messageId }),
-      ...(replyToProviderMessageId && { replyToProviderMessageId }),
-      customArgs: { outboundMessageId: messageId, leadId: message.leadId },
-      onPrepared: async (providerMessageId) => {
-        await prisma.outboundMessage.update({ where: { id: messageId }, data: { graphMessageId: providerMessageId } })
+    const message = await prisma.outboundMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        lead: { select: { id: true, email: true, status: true } },
+        draft: {
+          select: {
+            sequenceEnrollmentId: true,
+            sequenceEnrollment: { select: { id: true, status: true, startedAt: true } },
+          },
+        },
       },
     })
-  } catch (err) {
-    await releaseMailboxSlot(mailbox.id)
-    return handleSendError(err, messageId, message.sendAttempts, mailbox.id, org.id, now)
-  }
+    if (!message) return 'skipped'
 
-  await finalizeSent(messageId, message.leadId, message.organizationId, {
-    graphMessageId: sent.providerMessageId ?? null,
-    conversationId: sent.conversationId ?? null,
-    subject,
-    sendAttempts: message.sendAttempts + 1,
-  })
-  await paceMailbox()
-  return 'sent'
+    // Last-moment safety: never email someone who replied, bounced or unsubscribed.
+    const enrollment = message.draft?.sequenceEnrollment
+    let cancelReason: string | null = null
+    if (TERMINAL_STATUSES.includes(message.lead.status)) cancelReason = `lead_${message.lead.status.toLowerCase()}`
+    else if (enrollment && enrollment.status === 'STOPPED') cancelReason = 'enrollment_stopped'
+    else if (enrollment) {
+      const stop = await checkEnrollmentStop({
+        enrollment: { startedAt: enrollment.startedAt, leadId: message.leadId, organizationId: message.organizationId },
+        leadStatus: message.lead.status,
+      })
+      if (stop.shouldStop) cancelReason = stop.reason ?? 'stopped'
+    }
+    if (cancelReason) {
+      await prisma.outboundMessage.update({
+        where: { id: messageId },
+        data: { status: 'CANCELLED', processing: false, lastError: cancelReason },
+      })
+      return 'cancelled'
+    }
+
+    const limitToday = effectiveDailyLimit(mailbox, now)
+    const paceMailbox = () =>
+      prisma.mailbox.update({
+        where: { id: mailbox.id },
+        data: { nextSendAt: nextSendAt(now, mailboxSpacingMs(org, limitToday)) },
+      })
+
+    // Crash recovery: a previous attempt already created (and maybe sent) a Graph message.
+    if (message.graphMessageId && org.msTenantId) {
+      let state: Awaited<ReturnType<typeof getMessageState>>
+      try {
+        state = await getMessageState(org.msTenantId, mailbox.email, message.graphMessageId)
+      } catch (err) {
+        return await handleSendError(err, messageId, message.sendAttempts, mailbox.id, org.id, now)
+      }
+
+      if (state.state === 'SENT') {
+        dispatched = true
+        await finalizeSent(messageId, message.leadId, message.organizationId, {
+          graphMessageId: message.graphMessageId,
+          conversationId: state.conversationId,
+          subject: message.subject,
+          sendAttempts: message.sendAttempts + 1,
+        })
+        await paceMailbox()
+        return 'reconciled'
+      }
+      if (state.state === 'DRAFT') {
+        if (!(await reserveMailboxSlot(mailbox.id, limitToday, startOfDay(now)))) {
+          return deferForCapacity(messageId, mailbox.id, now)
+        }
+        slotReserved = true
+        try {
+          await sendDraftMessage(org.msTenantId, mailbox.email, message.graphMessageId)
+          dispatched = true
+        } catch (err) {
+          await releaseMailboxSlot(mailbox.id)
+          slotReserved = false
+          return await handleSendError(err, messageId, message.sendAttempts, mailbox.id, org.id, now)
+        }
+        await finalizeSent(messageId, message.leadId, message.organizationId, {
+          graphMessageId: message.graphMessageId,
+          conversationId: state.conversationId,
+          subject: message.subject,
+          sendAttempts: message.sendAttempts + 1,
+        })
+        await paceMailbox()
+        return 'sent'
+      }
+      // MISSING: the Graph message no longer exists. It may have already been
+      // sent and then deleted from the mailbox — never resend automatically,
+      // that risks emailing the prospect twice.
+      await prisma.outboundMessage.update({
+        where: { id: messageId },
+        data: { status: 'FAILED', processing: false, lastError: 'Graph message missing from mailbox; not resent automatically' },
+      })
+      return 'failed'
+    }
+
+    if (!(await reserveMailboxSlot(mailbox.id, limitToday, startOfDay(now)))) {
+      return deferForCapacity(messageId, mailbox.id, now)
+    }
+    slotReserved = true
+
+    // Threading: follow-ups reply to the most recent message we sent in this enrollment.
+    const prior = message.draft?.sequenceEnrollmentId
+      ? await prisma.outboundMessage.findMany({
+          where: {
+            organizationId: message.organizationId,
+            status: 'SENT',
+            id: { not: messageId },
+            draft: { sequenceEnrollmentId: message.draft.sequenceEnrollmentId },
+          },
+          orderBy: { sentAt: 'asc' },
+          select: { subject: true, graphMessageId: true },
+        })
+      : []
+    const root = prior[0]
+    const subject = root ? buildReplySubject(root.subject) : message.subject
+    const replyToProviderMessageId = [...prior].reverse().find((m) => m.graphMessageId)?.graphMessageId ?? undefined
+
+    const token = signUnsubscribeToken({ leadId: message.leadId, organizationId: message.organizationId })
+    const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/unsubscribe?token=${token}`
+
+    let sent: { providerMessageId?: string | null; conversationId?: string | null }
+    try {
+      sent = await getEmailProvider({ msTenantId: org.msTenantId }).sendEmail({
+        to: message.lead.email,
+        fromEmail: mailbox.email,
+        fromName: mailbox.displayName,
+        subject,
+        body: message.body,
+        listUnsubscribe: { url: unsubscribeUrl },
+        ...(message.messageId && { messageId: message.messageId }),
+        ...(replyToProviderMessageId && { replyToProviderMessageId }),
+        customArgs: { outboundMessageId: messageId, leadId: message.leadId },
+        onPrepared: async (providerMessageId) => {
+          await prisma.outboundMessage.update({ where: { id: messageId }, data: { graphMessageId: providerMessageId } })
+        },
+      })
+      dispatched = true
+    } catch (err) {
+      await releaseMailboxSlot(mailbox.id)
+      slotReserved = false
+      return await handleSendError(err, messageId, message.sendAttempts, mailbox.id, org.id, now)
+    }
+
+    await finalizeSent(messageId, message.leadId, message.organizationId, {
+      graphMessageId: sent.providerMessageId ?? null,
+      conversationId: sent.conversationId ?? null,
+      subject,
+      sendAttempts: message.sendAttempts + 1,
+    })
+    await paceMailbox()
+    return 'sent'
+  } catch (err) {
+    console.error(`[send-queue] message ${messageId}: unexpected error, leaving for retry:`, err)
+    if (slotReserved && !dispatched) {
+      try {
+        await releaseMailboxSlot(mailbox.id)
+      } catch (cleanupErr) {
+        console.error(`[send-queue] message ${messageId}: failed to release mailbox slot during cleanup:`, cleanupErr)
+      }
+    }
+    if (!dispatched) {
+      try {
+        await prisma.outboundMessage.update({ where: { id: messageId }, data: { processing: false } })
+      } catch (cleanupErr) {
+        console.error(`[send-queue] message ${messageId}: failed to release processing claim during cleanup:`, cleanupErr)
+      }
+    }
+    return 'deferred'
+  }
 }
 
 async function finalizeSent(
@@ -255,20 +311,39 @@ async function finalizeSent(
   organizationId: string,
   f: { graphMessageId: string | null; conversationId: string | null; subject: string; sendAttempts: number },
 ): Promise<void> {
-  await prisma.outboundMessage.update({
-    where: { id: messageId },
-    data: {
-      status: 'SENT',
-      sentAt: new Date(),
-      subject: f.subject,
-      sendAttempts: f.sendAttempts,
-      processing: false,
-      processingStartedAt: null,
-      lastError: null,
-      ...(f.graphMessageId && { graphMessageId: f.graphMessageId }),
-      ...(f.conversationId && { conversationId: f.conversationId }),
-    },
-  })
+  const data = {
+    status: 'SENT' as const,
+    sentAt: new Date(),
+    subject: f.subject,
+    sendAttempts: f.sendAttempts,
+    processing: false,
+    processingStartedAt: null,
+    lastError: null,
+    ...(f.graphMessageId && { graphMessageId: f.graphMessageId }),
+    ...(f.conversationId && { conversationId: f.conversationId }),
+  }
+
+  // The send already happened — a failure here must never unclaim the
+  // message (that would let it be picked up and sent again). Retry once,
+  // and if it still fails, leave processing:true: the next tick's stale-lock
+  // recovery will release the claim and crash-recovery will reconcile
+  // against Graph Sent Items (graphMessageId is already set) instead of
+  // resending.
+  let persisted = false
+  try {
+    await prisma.outboundMessage.update({ where: { id: messageId }, data })
+    persisted = true
+  } catch (err) {
+    console.error(`[send-queue] message ${messageId}: SENT update failed after a successful send, retrying once:`, err)
+    try {
+      await prisma.outboundMessage.update({ where: { id: messageId }, data })
+      persisted = true
+    } catch (err2) {
+      console.error(`[send-queue] message ${messageId}: SENT update failed twice after a successful send — leaving processing:true for stale-lock reconciliation against Graph Sent Items:`, err2)
+    }
+  }
+  if (!persisted) return
+
   await prisma.auditLog.create({
     data: { organizationId, action: 'message.sent', entityType: 'OutboundMessage', entityId: messageId, metadata: { leadId, auto: true } },
   })
