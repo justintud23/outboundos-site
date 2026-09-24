@@ -15,7 +15,11 @@ export type LeadDTO = Pick<
   | 'scoreReason'
   | 'scoredAt'
   | 'createdAt'
->
+> & {
+  // CASL: why this lead is excluded as Canadian (null/absent when it isn't,
+  // or when the org allows Canadian recipients). Set by list queries.
+  canadaExclusion?: string | null
+}
 
 export type ImportBatchDTO = Pick<
   ImportBatch,
@@ -159,5 +163,15 @@ export class LeadInTerminalStateError extends Error {
     super(`Lead ${leadId} is in terminal state: ${status}`)
     this.name = 'LeadInTerminalStateError'
     Object.setPrototypeOf(this, LeadInTerminalStateError.prototype)
+  }
+}
+
+// CASL: cold email to Canadian recipients needs consent; blocked unless the
+// organization explicitly allows Canadian recipients.
+export class LeadExcludedCanadaError extends Error {
+  constructor(public readonly leadId: string, public readonly reason: string) {
+    super(`Excluded: Canada (CASL) — ${reason}. Canadian recipients need consent before you email them.`)
+    this.name = 'LeadExcludedCanadaError'
+    Object.setPrototypeOf(this, LeadExcludedCanadaError.prototype)
   }
 }

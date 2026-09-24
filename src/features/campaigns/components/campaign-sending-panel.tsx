@@ -14,15 +14,19 @@ interface Props {
   // Auto-send goes through Microsoft 365: it can't be turned on until the org
   // has connected a tenant (turning it off is always allowed).
   msConnected: boolean
+  // CAN-SPAM: sending is blocked until the org has a mailing address.
+  hasPostalAddress: boolean
 }
 
-export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sampleSize, sampleApprovedAt, sampleCount, msConnected }: Props) {
+export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sampleSize, sampleApprovedAt, sampleCount, msConnected, hasPostalAddress }: Props) {
   const router = useRouter()
   const [autoSend, setAutoSend] = useState(initialAutoSend)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const needsMicrosoft = !msConnected && !autoSend
+  const needsAddress = msConnected && !hasPostalAddress && !autoSend
+  const blockedHintId = needsMicrosoft ? 'auto-send-needs-microsoft' : needsAddress ? 'auto-send-needs-address' : undefined
 
   async function toggleAutoSend() {
     setBusy(true)
@@ -77,8 +81,8 @@ export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sa
           role="switch"
           aria-checked={autoSend}
           aria-label="Send automatically"
-          aria-describedby={needsMicrosoft ? 'auto-send-needs-microsoft' : undefined}
-          disabled={busy || needsMicrosoft}
+          aria-describedby={blockedHintId}
+          disabled={busy || needsMicrosoft || needsAddress}
           onClick={() => void toggleAutoSend()}
           className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${autoSend ? 'bg-[var(--accent-indigo)]' : 'bg-[var(--border-default)]'}`}
         >
@@ -89,6 +93,12 @@ export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sa
       {needsMicrosoft && (
         <p id="auto-send-needs-microsoft" className="text-[var(--text-secondary)] text-xs">
           Connect Microsoft 365 in <Link href="/settings" className="underline">Settings</Link> first.
+        </p>
+      )}
+
+      {needsAddress && (
+        <p id="auto-send-needs-address" className="text-[var(--text-secondary)] text-xs">
+          Add your business mailing address in <Link href="/settings" className="underline">Settings</Link> first. US law (CAN-SPAM) requires it in every email.
         </p>
       )}
 

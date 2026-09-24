@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { TERMINAL_STATUSES } from '@/features/leads/types'
-import { LeadInTerminalStateError } from '@/features/leads/types'
+import { LeadInTerminalStateError, LeadExcludedCanadaError } from '@/features/leads/types'
+import { canadaExclusionReason } from '@/features/leads/canada'
 import type { EnrollLeadInput } from '../types'
 import { SequenceHasNoStepsError, AlreadyEnrolledError } from '../types'
 import type { SequenceEnrollment } from '@prisma/client'
@@ -11,11 +12,20 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
   // 1. Validate lead exists and check terminal state
   const lead = await prisma.lead.findFirst({
     where: { id: leadId, organizationId },
-    select: { id: true, status: true },
+    select: {
+      id: true, status: true, email: true, phone: true, country: true, customFields: true,
+      organization: { select: { allowCanadianRecipients: true } },
+    },
   })
 
   if (!lead) {
     throw new Error('Lead not found')
+  }
+
+  // CASL: refuse to enrol Canadian recipients unless explicitly allowed.
+  if (!lead.organization.allowCanadianRecipients) {
+    const canadaReason = canadaExclusionReason(lead)
+    if (canadaReason) throw new LeadExcludedCanadaError(leadId, canadaReason)
   }
 
   if (TERMINAL_STATUSES.includes(lead.status)) {

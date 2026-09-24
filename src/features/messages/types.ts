@@ -104,3 +104,13 @@ export class LeadInTerminalStateError extends Error {
     Object.setPrototypeOf(this, LeadInTerminalStateError.prototype)
   }
 }
+
+// CAN-SPAM: a commercial email must carry the sender's physical postal address.
+// Nothing sends until the organization has one (Settings → Sending).
+export class MissingPostalAddressError extends Error {
+  constructor() {
+    super('Add your business mailing address in Settings before sending. US law (CAN-SPAM) requires it in every email.')
+    this.name = 'MissingPostalAddressError'
+    Object.setPrototypeOf(this, MissingPostalAddressError.prototype)
+  }
+}

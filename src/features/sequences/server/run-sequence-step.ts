@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { checkEnrollmentStop } from './check-enrollment-stop'
+import { canadaExclusionReason } from '@/features/leads/canada'
 import { selectSubjectVariant } from './select-subject-variant'
 import { assignEnrollmentMailbox } from './assign-mailbox'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '../render-template'
@@ -65,10 +66,10 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
         },
       },
       lead: {
-        select: { id: true, status: true, firstName: true, lastName: true, company: true, title: true, customFields: true },
+        select: { id: true, status: true, email: true, phone: true, country: true, firstName: true, lastName: true, company: true, title: true, customFields: true },
       },
       organization: {
-        select: { sendingPaused: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true },
+        select: { sendingPaused: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true, allowCanadianRecipients: true },
       },
     },
   })
@@ -77,15 +78,19 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
     return 'ERROR'
   }
 
-  // 2. Check stop conditions
-  const stopCheck = await checkEnrollmentStop({
-    enrollment: {
-      startedAt: enrollment.startedAt,
-      leadId: enrollment.leadId,
-      organizationId: enrollment.organizationId,
-    },
-    leadStatus: enrollment.lead.status,
-  })
+  // 2. Check stop conditions — CASL first: Canadian recipients are never
+  //    emailed unless the organization explicitly allows them.
+  const canadaReason = enrollment.organization.allowCanadianRecipients ? null : canadaExclusionReason(enrollment.lead)
+  const stopCheck = canadaReason
+    ? { shouldStop: true, reason: `excluded_canada: ${canadaReason}` }
+    : await checkEnrollmentStop({
+        enrollment: {
+          startedAt: enrollment.startedAt,
+          leadId: enrollment.leadId,
+          organizationId: enrollment.organizationId,
+        },
+        leadStatus: enrollment.lead.status,
+      })
 
   if (stopCheck.shouldStop) {
     await prisma.$transaction(async (tx) => {

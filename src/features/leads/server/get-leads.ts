@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import type { LeadDTO } from '../types'
+import { canadaExclusionReason } from '../canada'
 
 interface GetLeadsInput {
   organizationId: string
@@ -14,7 +15,7 @@ export async function getLeads({
 }: GetLeadsInput): Promise<{ leads: LeadDTO[]; total: number }> {
   const cappedLimit = Math.min(limit, 200)
 
-  const [leads, total] = await Promise.all([
+  const [rows, total, org] = await Promise.all([
     prisma.lead.findMany({
       where: { organizationId },
       orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
@@ -33,10 +34,19 @@ export async function getLeads({
         scoreReason: true,
         scoredAt: true,
         createdAt: true,
+        phone: true,
+        country: true,
+        customFields: true,
       },
     }),
     prisma.lead.count({ where: { organizationId } }),
+    prisma.organization.findUnique({ where: { id: organizationId }, select: { allowCanadianRecipients: true } }),
   ])
+
+  const leads = rows.map(({ phone, country, customFields, ...lead }) => ({
+    ...lead,
+    canadaExclusion: org?.allowCanadianRecipients ? null : canadaExclusionReason({ email: lead.email, phone, country, customFields }),
+  }))
 
   return { leads, total }
 }

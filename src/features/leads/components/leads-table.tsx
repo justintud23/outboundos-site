@@ -95,7 +95,16 @@ export function LeadsTable({
                 </td>
                 <td className="py-3 px-4 text-[var(--text-secondary)]">{lead.company ?? '\u2014'}</td>
                 <td className="py-3 px-4 text-[var(--text-secondary)]">{lead.title ?? '\u2014'}</td>
-                <td className="py-3 px-4"><StatusBadge status={lead.status} /></td>
+                <td className="py-3 px-4">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge status={lead.status} />
+                    {lead.canadaExclusion && (
+                      <span title={`Not emailed: ${lead.canadaExclusion}. Canada's anti-spam law (CASL) requires consent.`}>
+                        <Badge variant="danger">Excluded: Canada (CASL)</Badge>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-3 px-4"><ScoreBadge score={lead.score} /></td>
                 <td className="py-3 px-4 text-[var(--text-muted)] text-xs hidden lg:table-cell max-w-xs truncate">
                   {lead.scoreReason ?? '\u2014'}

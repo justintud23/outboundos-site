@@ -10,10 +10,12 @@ import {
   DraftAlreadySentError,
   DraftSendInProgressError,
   DraftOnSendQueueError,
+  MissingPostalAddressError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
-import { TERMINAL_STATUSES } from '@/features/leads/types'
+import { TERMINAL_STATUSES, LeadExcludedCanadaError } from '@/features/leads/types'
+import { canadaExclusionReason } from '@/features/leads/canada'
 import { LeadInTerminalStateError } from '../types'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
@@ -34,7 +36,7 @@ export async function sendDraft({
   // 1. Fetch draft (org-scoped)
   const draft = await prisma.draft.findFirst({
     where: { id: draftId, organizationId },
-    include: { lead: { select: { id: true, email: true, status: true } } },
+    include: { lead: { select: { id: true, email: true, status: true, phone: true, country: true, customFields: true } } },
   })
 
   if (!draft) {
@@ -63,8 +65,18 @@ export async function sendDraft({
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { msTenantId: true },
+    select: { msTenantId: true, businessName: true, postalAddress: true, allowCanadianRecipients: true },
   })
+
+  // 2d. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
+  const postalAddress = org?.postalAddress?.trim()
+  if (!org || !postalAddress) {
+    throw new MissingPostalAddressError()
+  }
+  if (!org.allowCanadianRecipients) {
+    const canadaReason = canadaExclusionReason(draft.lead)
+    if (canadaReason) throw new LeadExcludedCanadaError(draft.leadId, canadaReason)
+  }
 
   // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in
   // the same sequence enrollment (the thread), we set In-Reply-To = the prior
@@ -254,6 +266,7 @@ export async function sendDraft({
       body: draft.body,
       customArgs: { draftId, leadId: draft.leadId },
       listUnsubscribe: { url: unsubscribeUrl },
+      sender: { businessName: org.businessName, postalAddress },
       messageId,
       ...(inReplyTo && { inReplyTo }),
       ...(references && references.length > 0 && { references }),

@@ -230,9 +230,11 @@ Once infrastructure is in place:
 2. **Load mailboxes** — the app lists available mailboxes; import the sending ones.
 3. **Configure defaults:**
    - Set escalation email (where replies are forwarded).
+   - **Set business name and mailing address — required.** CAN-SPAM requires a physical postal address (a USPS-registered PO box is fine) in every commercial email; the app adds it to every email's footer and **blocks all sending until it is set**.
    - Set timezone and business hours (default 08:00–17:00, Mon–Fri).
+   - Leave **Allow Canadian recipients** off. Canada's anti-spam law (CASL) requires consent even for B2B email, so leads that look Canadian (country/province column, `.ca` email, or Canadian phone area code) are never enrolled or emailed and are labelled *Excluded: Canada (CASL)* on the Leads page. Turn it on only if you have documented consent.
 4. **Create a campaign** and add a multi-step sequence.
-5. **Enroll leads** from your CSV.
+5. **Enroll leads** from your CSV. Extra columns (city, state, country, lot count, …) are kept on each lead and usable as `{city}`-style merge fields.
 6. **Turn on auto-send** for the campaign. The app generates a sample batch of 10 drafts.
 7. **Approve the sample** — review personalization and guardrail flags. Once approved, the sequence runs automatically.
 

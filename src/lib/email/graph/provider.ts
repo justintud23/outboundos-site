@@ -1,12 +1,6 @@
 import type { EmailProvider, SendEmailInput, SendEmailOutput } from '../provider'
+import { buildComplianceFooter } from '../compliance'
 import { createDraftMessage, createReplyDraft, sendDraftMessage } from './mail'
-
-// Graph can't set List-Unsubscribe (only X- headers are allowed), so the
-// unsubscribe intent is carried as a plain link at the end of the body.
-export function appendUnsubscribeFooter(body: string, lu?: { url: string }): string {
-  if (!lu) return body
-  return `${body.trimEnd()}\n\n--\nIf you'd prefer not to hear from me again, unsubscribe here: ${lu.url}`
-}
 
 export class GraphEmailProvider implements EmailProvider {
   constructor(private readonly tenantId: string) {}
@@ -15,7 +9,7 @@ export class GraphEmailProvider implements EmailProvider {
     const content = {
       to: input.to,
       subject: input.subject,
-      text: appendUnsubscribeFooter(input.body, input.listUnsubscribe),
+      text: buildComplianceFooter(input.body, input.sender, input.listUnsubscribe),
     }
     const draft = input.replyToProviderMessageId
       ? await createReplyDraft(this.tenantId, input.fromEmail, input.replyToProviderMessageId, content)

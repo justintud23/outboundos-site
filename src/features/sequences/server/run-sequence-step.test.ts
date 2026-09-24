@@ -47,8 +47,8 @@ function makeEnrollment(overrides: Record<string, unknown> = {}) {
         { id: 'step-2', stepNumber: 2, subject: 'Follow up', body: 'Just checking', delayDays: 3, personalizationPrompt: null },
       ],
     },
-    lead: { id: 'lead-1', status: 'NEW', firstName: 'Jane', lastName: null, company: 'Acme', title: null, customFields: null },
-    organization: { sendingPaused: false, guardrailBlockedPhrases: [], guardrailAllowedWords: [] },
+    lead: { id: 'lead-1', status: 'NEW', email: 'jane@acmepm.com', phone: null, country: null, firstName: 'Jane', lastName: null, company: 'Acme', title: null, customFields: null },
+    organization: { sendingPaused: false, guardrailBlockedPhrases: [], guardrailAllowedWords: [], allowCanadianRecipients: false },
     ...overrides,
   }
 }
@@ -287,7 +287,7 @@ describe('runSequenceStep — auto-send pipeline', () => {
   it('org sending paused: auto-send campaign defers', async () => {
     mockEnrollmentFind.mockResolvedValue(makeEnrollment({
       sequence: autoCampaign(new Date()),
-      organization: { sendingPaused: true, guardrailBlockedPhrases: [], guardrailAllowedWords: [] },
+      organization: { sendingPaused: true, guardrailBlockedPhrases: [], guardrailAllowedWords: [], allowCanadianRecipients: false },
     }))
     expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
   })
@@ -375,5 +375,16 @@ describe('runSequenceStep — auto-send pipeline', () => {
       expect(draftCreate).toHaveBeenCalledTimes(1)
       expect(mockDraftFind()).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('runSequenceStep — CASL', () => {
+  it('stops the enrollment of a Canadian lead without generating a draft', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ lead: { ...makeEnrollment().lead, customFields: { province: 'ON' } } }))
+    const update = vi.fn().mockResolvedValue({})
+    mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn({ sequenceEnrollment: { update } }))
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('STOPPED')
+    expect(update.mock.calls[0][0].data).toMatchObject({ status: 'STOPPED', stoppedReason: 'excluded_canada: province is Ontario' })
+    expect(mockCheckStop).not.toHaveBeenCalled()
   })
 })

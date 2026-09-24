@@ -48,7 +48,9 @@ import {
   DraftAlreadySentError,
   DraftSendInProgressError,
   DraftOnSendQueueError,
+  MissingPostalAddressError,
 } from '@/features/messages/types'
+import { LeadExcludedCanadaError } from '@/features/leads/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -78,7 +80,7 @@ const fakeDraft = {
   subjectEdited: false,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-02'),
-  lead: { id: 'lead-1', email: 'jane@acme.com', status: 'NEW' },
+  lead: { id: 'lead-1', email: 'jane@acme.com', status: 'NEW', phone: null, country: null, customFields: null },
 }
 
 interface MailboxRow {
@@ -171,7 +173,7 @@ beforeEach(() => {
   setMailboxes([mailbox({ id: 'mb-1', sentToday: 5 })])
 
   mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-  mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null })
+  mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
 
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
@@ -680,7 +682,7 @@ describe('sendDraft — atomic daily-limit reservation', () => {
   // ─── Microsoft Graph: tenant selection, threading, id persistence ─────────
 
   it('uses the org tenant when selecting the provider', async () => {
-    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
     await sendDraft(INPUT)
     expect(mockGetEmailProvider).toHaveBeenCalledWith({ msTenantId: 'tenant-1' })
   })
@@ -768,7 +770,7 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
 
   it('Microsoft 365 org: rotation only considers Graph mailboxes', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
-    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
     await sendDraft(INPUT)
     expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
       organizationId: 'org-1', isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH',
@@ -784,10 +786,33 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
   })
 
   it('Microsoft 365 org: a pinned non-Graph mailbox is refused', async () => {
-    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
     setMailboxes([{ ...mailbox({ id: 'mb-2' }), provider: 'SENDGRID' } as MailboxRow])
     mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-2' })
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MailboxLimitExceededError)
     expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('CAN-SPAM: refuses to send without a postal address, before any claim or send', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: null, postalAddress: '  ', allowCanadianRecipients: false })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(MissingPostalAddressError)
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('CAN-SPAM: passes the business name and postal address to the provider footer', async () => {
+    await sendDraft(INPUT)
+    expect(mockSendEmail.mock.calls[0]?.[0]).toMatchObject({
+      sender: { businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201' },
+    })
+  })
+
+  it('CASL: refuses a Canadian lead unless the org allows Canadian recipients', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, lead: { ...fakeDraft.lead, email: 'jane@acme.ca' } })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(LeadExcludedCanadaError)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme Snow', postalAddress: '1 Main St', allowCanadianRecipients: true })
+    await expect(sendDraft(INPUT)).resolves.toMatchObject({ status: 'SENT' })
   })
 })

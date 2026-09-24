@@ -11,6 +11,7 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/db/prisma'
+import { LeadExcludedCanadaError } from '@/features/leads/types'
 import { enrollLead } from './enroll-lead'
 import { LeadInTerminalStateError } from '@/features/leads/types'
 import { AlreadyEnrolledError, SequenceHasNoStepsError } from '../types'
@@ -34,26 +35,26 @@ describe('enrollLead', () => {
   })
 
   it('throws if lead is in terminal state', async () => {
-    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'UNSUBSCRIBED' })
+    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'UNSUBSCRIBED', email: 'a@acme.com', phone: null, country: null, customFields: null, organization: { allowCanadianRecipients: false } })
     await expect(enrollLead(BASE_INPUT)).rejects.toThrow(LeadInTerminalStateError)
   })
 
   it('throws if already enrolled', async () => {
-    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW' })
+    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW', email: 'a@acme.com', phone: null, country: null, customFields: null, organization: { allowCanadianRecipients: false } })
     mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [{ stepNumber: 1, delayDays: 0 }] })
     mockEnrollFind.mockResolvedValue({ id: 'existing' })
     await expect(enrollLead(BASE_INPUT)).rejects.toThrow(AlreadyEnrolledError)
   })
 
   it('throws if sequence has no steps', async () => {
-    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW' })
+    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW', email: 'a@acme.com', phone: null, country: null, customFields: null, organization: { allowCanadianRecipients: false } })
     mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [] })
     mockEnrollFind.mockResolvedValue(null)
     await expect(enrollLead(BASE_INPUT)).rejects.toThrow(SequenceHasNoStepsError)
   })
 
   it('creates enrollment with correct nextDueAt', async () => {
-    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW' })
+    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW', email: 'a@acme.com', phone: null, country: null, customFields: null, organization: { allowCanadianRecipients: false } })
     mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [{ stepNumber: 1, delayDays: 3 }] })
     mockEnrollFind.mockResolvedValue(null)
 
@@ -67,5 +68,11 @@ describe('enrollLead', () => {
     expect(result.id).toBe('enroll-1')
     expect(result.status).toBe('ACTIVE')
     expect(mockTransaction).toHaveBeenCalled()
+  })
+
+  it('CASL: refuses to enroll a Canadian lead', async () => {
+    mockLeadFind.mockResolvedValue({ id: 'lead-1', status: 'NEW', email: 'a@acme.com', phone: '(416) 555-0199', country: null, customFields: null, organization: { allowCanadianRecipients: false } })
+    await expect(enrollLead({ organizationId: 'org-1', sequenceId: 'seq-1', leadId: 'lead-1', actorClerkId: 'user-1' })).rejects.toBeInstanceOf(LeadExcludedCanadaError)
+    expect(mockSeqFind).not.toHaveBeenCalled()
   })
 })

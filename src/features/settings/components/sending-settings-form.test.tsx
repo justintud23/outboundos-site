@@ -14,6 +14,9 @@ const initial: SendingSettingsDTO = {
   pausedReason: null,
   guardrailBlockedPhrases: [],
   guardrailAllowedWords: [],
+  businessName: 'Acme Snow',
+  postalAddress: '1 Main St, Buffalo, NY 14201',
+  allowCanadianRecipients: false,
   msConnected: false,
 }
 
@@ -59,5 +62,22 @@ describe('SendingSettingsForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
     await waitFor(() => expect(screen.getByText('Invalid escalation email')).toBeDefined())
+  })
+
+  it('warns that sending is blocked when there is no mailing address', () => {
+    render(<SendingSettingsForm initial={{ ...initial, postalAddress: null }} />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/sending is blocked/i)
+  })
+
+  it('saves business name, mailing address and the Canada switch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...initial, allowCanadianRecipients: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SendingSettingsForm initial={initial} />)
+    fireEvent.change(screen.getByLabelText(/mailing address/i), { target: { value: 'PO Box 9\nBuffalo, NY 14201' } })
+    fireEvent.click(screen.getByLabelText(/allow canadian recipients/i))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toMatchObject({ businessName: 'Acme Snow', postalAddress: 'PO Box 9\nBuffalo, NY 14201', allowCanadianRecipients: true })
   })
 })

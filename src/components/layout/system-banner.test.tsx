@@ -1,3 +1,4 @@
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
@@ -18,6 +19,7 @@ beforeEach(() => {
     sendingPaused: false,
     pausedReason: null,
     msTenantId: 'test-tenant',
+    postalAddress: '1 Main St, Buffalo, NY 14201',
   })
   ;(getStaleJobs as Fn).mockResolvedValue([])
 })
@@ -54,6 +56,8 @@ describe('SystemBanner', () => {
       sendingPaused: true,
       pausedReason: 'Weekly maintenance',
       msTenantId: 'test-tenant',
+      postalAddress: '1 Main St, Buffalo, NY 14201',
+    postalAddress: '1 Main St, Buffalo, NY 14201',
     })
 
     const result = await SystemBanner()
@@ -65,6 +69,8 @@ describe('SystemBanner', () => {
       sendingPaused: false,
       pausedReason: null,
       msTenantId: 'test-tenant',
+      postalAddress: '1 Main St, Buffalo, NY 14201',
+    postalAddress: '1 Main St, Buffalo, NY 14201',
     })
     ;(getStaleJobs as Fn).mockResolvedValue([])
 
@@ -99,5 +105,17 @@ describe('SystemBanner', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith('[SystemBanner]', expect.any(Error))
 
     consoleErrorSpy.mockRestore()
+  })
+
+  it('CAN-SPAM: warns that sending is blocked when there is no mailing address', async () => {
+    ;(prisma.organization.findUnique as Fn).mockResolvedValue({
+      sendingPaused: false,
+      pausedReason: null,
+      msTenantId: 'test-tenant',
+      postalAddress: null,
+    })
+    const result = await SystemBanner()
+    render(result!)
+    expect(screen.getByText(/add your business mailing address/i)).toBeInTheDocument()
   })
 })

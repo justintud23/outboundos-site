@@ -9,6 +9,7 @@ import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { checkEnrollmentStop } from '@/features/sequences/server/check-enrollment-stop'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES } from '@/features/leads/types'
+import { canadaExclusionReason } from '@/features/leads/canada'
 import { sendOrgAlert } from '@/features/replies/server/notify'
 import { isInSendWindow, mailboxSpacingMs, nextSendAt } from '../send-window'
 import { buildReplySubject } from '../threading'
@@ -60,11 +61,15 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000
     where: {
       sendingPaused: false,
       msTenantId: { not: null },
+      // CAN-SPAM: no postal address, no sending (Settings and the banner say why).
+      postalAddress: { not: null },
+      NOT: { postalAddress: '' },
       outboundMessages: { some: { status: 'QUEUED', scheduledFor: { lte: now } } },
     },
     select: {
       id: true, msTenantId: true, timezone: true, businessHoursStart: true,
       businessHoursEnd: true, sendDays: true, sendingPaused: true,
+      businessName: true, postalAddress: true, allowCanadianRecipients: true,
     },
   })
 
@@ -130,6 +135,9 @@ interface OrgRow {
   businessHoursStart: number
   businessHoursEnd: number
   sendDays: number[]
+  businessName: string | null
+  postalAddress: string | null
+  allowCanadianRecipients: boolean
 }
 
 async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now: Date): Promise<Outcome> {
@@ -152,7 +160,7 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
     const message = await prisma.outboundMessage.findUnique({
       where: { id: messageId },
       include: {
-        lead: { select: { id: true, email: true, status: true } },
+        lead: { select: { id: true, email: true, status: true, phone: true, country: true, customFields: true } },
         draft: {
           select: {
             sequenceEnrollmentId: true,
@@ -167,7 +175,9 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
     // Last-moment safety: never email someone who replied, bounced or unsubscribed.
     const enrollment = message.draft?.sequenceEnrollment
     let cancelReason: string | null = null
+    const canadaReason = org.allowCanadianRecipients ? null : canadaExclusionReason(message.lead)
     if (TERMINAL_STATUSES.includes(message.lead.status)) cancelReason = `lead_${message.lead.status.toLowerCase()}`
+    else if (canadaReason) cancelReason = `excluded_canada: ${canadaReason}`
     else if (enrollment && enrollment.status === 'STOPPED') cancelReason = 'enrollment_stopped'
     else if (enrollment) {
       const stop = await checkEnrollmentStop({
@@ -299,6 +309,7 @@ async function sendOne(messageId: string, mailbox: MailboxRow, org: OrgRow, now:
         subject,
         body: message.body,
         listUnsubscribe: { url: unsubscribeUrl },
+        sender: { businessName: org.businessName, postalAddress: org.postalAddress ?? '' },
         ...(message.messageId && { messageId: message.messageId }),
         ...(replyToProviderMessageId && { replyToProviderMessageId }),
         customArgs: { outboundMessageId: messageId, leadId: message.leadId },

@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { enrollLead } from '@/features/sequences/server/enroll-lead'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
-import { LeadInTerminalStateError } from '@/features/leads/types'
+import { LeadInTerminalStateError, LeadExcludedCanadaError } from '@/features/leads/types'
 import { AlreadyEnrolledError, SequenceHasNoStepsError } from '@/features/sequences/types'
 
 export async function POST(
@@ -42,6 +42,8 @@ export async function POST(
     } catch (err) {
       if (err instanceof LeadInTerminalStateError) {
         results.push({ leadId, success: false, error: 'Lead is in terminal state' })
+      } else if (err instanceof LeadExcludedCanadaError) {
+        results.push({ leadId, success: false, error: `Excluded: Canada (CASL) — ${err.reason}` })
       } else if (err instanceof AlreadyEnrolledError) {
         results.push({ leadId, success: false, error: 'Already enrolled' })
       } else if (err instanceof SequenceHasNoStepsError) {

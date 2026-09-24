@@ -290,4 +290,24 @@ describe('processSendQueue', () => {
     await processSendQueue(NOW)
     expect(p.mailbox.findMany.mock.calls[0][0].where).toMatchObject({ organizationId: 'org-1', provider: 'MICROSOFT_GRAPH' })
   })
+
+  it('CAN-SPAM: only orgs with a postal address are processed, and the footer gets it', async () => {
+    p.organization.findMany.mockResolvedValue([{ ...org, businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY', allowCanadianRecipients: false }])
+    await processSendQueue(NOW)
+    const where = p.organization.findMany.mock.calls[0][0].where
+    expect(where.postalAddress).toEqual({ not: null })
+    expect(where.NOT).toEqual({ postalAddress: '' })
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ sender: { businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY' } })
+  })
+
+  it('CASL: a queued email to a Canadian lead is cancelled, never sent', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(queued({ lead: { id: 'lead-1', email: 'jane@acmepm.ca', status: 'CONTACTED' } }))
+    const res = await processSendQueue(NOW)
+    expect(res.cancelled).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { status: 'CANCELLED', processing: false, lastError: 'excluded_canada: email ends in .ca' },
+    })
+  })
 })
