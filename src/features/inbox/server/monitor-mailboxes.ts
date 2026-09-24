@@ -212,6 +212,12 @@ async function processInbound(
       trigger: 'auto:bounce',
       metadata: { outboundMessageId: original.id },
     })
+    // Deliverability 2A: a real bounce is the strongest verification result —
+    // mark the address INVALID so it is never enrolled and emailed again.
+    await prisma.lead.updateMany({
+      where: { id: original.leadId },
+      data: { emailCheck: 'INVALID', emailCheckResult: 'bounced', emailCheckedAt: new Date() },
+    })
     // evaluateMailboxBreaker is best-effort — a breaker failure must never
     // block bounce processing. try/catch (not `.catch` on the call result)
     // because it must not assume the awaited value is always a real Promise.
