@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
+import { verifyPendingLeads, VERIFY_BUDGET_MS, type VerifyRunResult } from '@/features/verification/server/verify-leads'
 
 export const maxDuration = 60
 
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
   const now = new Date()
   const results: { enrollmentId: string; result: string }[] = []
   let outOfBudget = false
+  let verification: VerifyRunResult | { error: string } | null = null
 
   try {
     // 1. Recover stale locks
@@ -31,6 +33,16 @@ export async function GET(request: Request) {
       },
       data: { processing: false, processingStartedAt: null },
     })
+
+    // 1b. Verify pending lead emails first (up to 10 s of the 25 s budget) so a
+    //     lead verified now can get its first email in this same tick. Never
+    //     let a verification failure stop step processing.
+    try {
+      verification = await verifyPendingLeads(VERIFY_BUDGET_MS)
+    } catch (err) {
+      console.error('[sequence-runner] verification failed', err)
+      verification = { error: err instanceof Error ? err.message : String(err) }
+    }
 
     // 2. Query due enrollments
     const dueEnrollments = await prisma.sequenceEnrollment.findMany({
@@ -85,6 +97,7 @@ export async function GET(request: Request) {
     processed: results.length,
     results,
     staleLockRecovery: true,
+    verification,
     ...(outOfBudget && { outOfBudget }),
   })
 }
