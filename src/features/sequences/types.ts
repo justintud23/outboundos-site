@@ -74,7 +74,7 @@ export interface EnrollmentDTO {
 
 // ─── Step execution result ──────────────────────────────────
 
-export type StepResult = 'DRAFT_GENERATED' | 'COMPLETED' | 'STOPPED' | 'SKIPPED' | 'ERROR'
+export type StepResult = 'DRAFT_GENERATED' | 'QUEUED' | 'DEFERRED' | 'COMPLETED' | 'STOPPED' | 'SKIPPED' | 'ERROR'
 
 // ─── Errors ─────────────────────────────────────────────────
 
