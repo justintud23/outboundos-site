@@ -128,3 +128,14 @@ export class DomainNotHealthyError extends Error {
     Object.setPrototypeOf(this, DomainNotHealthyError.prototype)
   }
 }
+
+// Deliverability 2A: a lead's first email waits for (or is refused by) email
+// verification. `wait` = being verified, try again shortly; `stop` = invalid or
+// risky-and-blocked.
+export class EmailNotVerifiedError extends Error {
+  constructor(public readonly state: 'wait' | 'stop', message: string) {
+    super(message)
+    this.name = 'EmailNotVerifiedError'
+    Object.setPrototypeOf(this, EmailNotVerifiedError.prototype)
+  }
+}

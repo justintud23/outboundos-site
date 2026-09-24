@@ -12,6 +12,7 @@ import {
   DraftOnSendQueueError,
   MissingPostalAddressError,
   DomainNotHealthyError,
+  EmailNotVerifiedError,
 } from '../types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
@@ -24,6 +25,9 @@ import { isDomainUsable } from '@/features/deliverability/readiness'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
+import { verificationGate } from '@/features/verification/gate'
+import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
+import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
 
 interface SendDraftInput {
   organizationId: string
@@ -39,7 +43,21 @@ export async function sendDraft({
   // 1. Fetch draft (org-scoped)
   const draft = await prisma.draft.findFirst({
     where: { id: draftId, organizationId },
-    include: { lead: { select: { id: true, email: true, status: true, phone: true, country: true, customFields: true } } },
+    include: {
+      lead: {
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          phone: true,
+          country: true,
+          customFields: true,
+          emailCheck: true,
+          emailCheckResult: true,
+          emailCheckedAt: true,
+        },
+      },
+    },
   })
 
   if (!draft) {
@@ -68,7 +86,13 @@ export async function sendDraft({
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { msTenantId: true, businessName: true, postalAddress: true, allowCanadianRecipients: true },
+    select: {
+      msTenantId: true,
+      businessName: true,
+      postalAddress: true,
+      allowCanadianRecipients: true,
+      blockRiskyEmails: true,
+    },
   })
 
   // 2d. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
@@ -79,6 +103,22 @@ export async function sendDraft({
   if (!org.allowCanadianRecipients) {
     const canadaReason = canadaExclusionReason(draft.lead)
     if (canadaReason) throw new LeadExcludedCanadaError(draft.leadId, canadaReason)
+  }
+
+  // 2e. Email verification (first email to this lead only).
+  if (isVerificationConfigured()) {
+    const emailedBefore = await prisma.outboundMessage.findFirst({
+      where: { organizationId, leadId: draft.leadId, sentAt: { not: null } },
+      select: { id: true },
+    })
+    if (!emailedBefore) {
+      const decision = verificationGate(draft.lead, { blockRiskyEmails: org.blockRiskyEmails }, true)
+      if (decision.action === 'stop') throw new EmailNotVerifiedError('stop', decision.reason)
+      if (decision.action === 'wait') {
+        await queueLeadForVerification(prisma, draft.leadId)
+        throw new EmailNotVerifiedError('wait', "This lead's email address is being verified. Try again in a few minutes.")
+      }
+    }
   }
 
   // THREADING (RFC 5322): every send gets its own Message-ID. For a follow-up in

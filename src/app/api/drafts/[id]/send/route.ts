@@ -11,6 +11,7 @@ import {
   DraftOnSendQueueError,
   MissingPostalAddressError,
   DomainNotHealthyError,
+  EmailNotVerifiedError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
@@ -82,6 +83,9 @@ export async function POST(
     }
     if (err instanceof DomainNotHealthyError) {
       return NextResponse.json({ code: 'DOMAIN_NOT_HEALTHY', error: err.message, domain: err.domain }, { status: 422 })
+    }
+    if (err instanceof EmailNotVerifiedError) {
+      return NextResponse.json({ code: 'EMAIL_NOT_VERIFIED', error: err.message, state: err.state }, { status: 422 })
     }
     if (err instanceof LeadInTerminalStateError) {
       return NextResponse.json(

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
@@ -10,9 +10,11 @@ vi.mock('@/lib/db/prisma', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
+    lead: { updateMany: vi.fn() },
     domainHealth: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -52,6 +54,7 @@ import {
   DraftOnSendQueueError,
   MissingPostalAddressError,
   DomainNotHealthyError,
+  EmailNotVerifiedError,
 } from '@/features/messages/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
@@ -62,7 +65,8 @@ const mockPrisma = prisma as unknown as {
   organization: { findUnique: Fn }
   mailbox: { findMany: Fn; findFirst: Fn; updateMany: Fn }
   sequenceEnrollment: { findFirst: Fn }
-  outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; update: Fn; delete: Fn }
+  outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; findFirst: Fn; update: Fn; delete: Fn }
+  lead: { updateMany: Fn }
   domainHealth: { findMany: Fn }
   $transaction: Fn
 }
@@ -877,5 +881,42 @@ describe('sendDraft — domain health enforcement (Task 6)', () => {
       ([args]) => typeof (args as UpdateManyArgs).where.sentToday?.lt === 'number',
     )
     expect((reserveCall?.[0] as UpdateManyArgs).where.sentToday?.lt).toBe(10)
+  })
+})
+
+describe('sendDraft — email verification gate (first email to a lead)', () => {
+  beforeEach(() => { process.env.MILLIONVERIFIER_API_KEY = 'test-key' })
+  afterEach(() => { delete process.env.MILLIONVERIFIER_API_KEY })
+
+  function setupFirstEmail(lead: Record<string, unknown>, org: Record<string, unknown> = {}) {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, lead: { ...fakeDraft.lead, ...lead } })
+    mockPrisma.outboundMessage.findUnique.mockResolvedValue(null)
+    mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false, blockRiskyEmails: false, ...org })
+    mockPrisma.outboundMessage.findFirst.mockResolvedValue(null) // never emailed before
+    ;(prisma as unknown as { lead: { updateMany: Fn } }).lead.updateMany.mockResolvedValue({ count: 1 })
+  }
+
+  it('refuses a first email to an unverified lead and queues it', async () => {
+    setupFirstEmail({ emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null })
+    const err = await sendDraft(INPUT).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(EmailNotVerifiedError)
+    expect((err as EmailNotVerifiedError).state).toBe('wait')
+    expect((prisma as unknown as { lead: { updateMany: Fn } }).lead.updateMany).toHaveBeenCalledWith({
+      where: { id: 'lead-1', emailCheck: { not: 'PENDING' } },
+      data: { emailCheck: 'PENDING', emailCheckAttempts: 0 },
+    })
+    expect(mockPrisma.mailbox.findMany).not.toHaveBeenCalled()
+  })
+
+  it('refuses an INVALID lead with the reason', async () => {
+    setupFirstEmail({ emailCheck: 'INVALID', emailCheckResult: 'invalid', emailCheckedAt: new Date() })
+    await expect(sendDraft(INPUT)).rejects.toThrow('Email failed verification (invalid)')
+  })
+
+  it('does not gate a lead that was emailed before (follow-up)', async () => {
+    setupFirstEmail({ emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null })
+    mockPrisma.outboundMessage.findFirst.mockResolvedValue({ id: 'om-old' })
+    const err = await sendDraft(INPUT).catch((e: unknown) => e)
+    expect(err).not.toBeInstanceOf(EmailNotVerifiedError)
   })
 })
