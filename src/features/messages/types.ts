@@ -114,3 +114,17 @@ export class MissingPostalAddressError extends Error {
     Object.setPrototypeOf(this, MissingPostalAddressError.prototype)
   }
 }
+
+// Sending from a mailbox whose domain fails SPF/DKIM/MX (or was never checked)
+// would land in spam or lose replies, so it is refused until the domain passes.
+export class DomainNotHealthyError extends Error {
+  constructor(public readonly domain: string, public readonly status: string) {
+    super(
+      status === 'UNVERIFIED'
+        ? `Sending from ${domain} is on hold: the domain hasn't been verified yet. Open Deliverability and click "Check now".`
+        : `Sending from ${domain} is on hold: its DNS records (SPF, DKIM or MX) aren't set up correctly. Open Deliverability for the exact fix.`,
+    )
+    this.name = 'DomainNotHealthyError'
+    Object.setPrototypeOf(this, DomainNotHealthyError.prototype)
+  }
+}

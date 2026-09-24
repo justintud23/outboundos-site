@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { setMailboxWarmup } from '@/features/mailboxes/server/set-mailbox-warmup'
 import { resumeMailbox } from '@/features/mailboxes/server/resume-mailbox'
+import { setMailboxRampPreset, restartMailboxRamp } from '@/features/mailboxes/server/set-mailbox-ramp'
 import { MailboxNotFoundError } from '@/features/mailboxes/types'
 
 export async function PATCH(
@@ -16,7 +17,7 @@ export async function PATCH(
 
   const { id } = await params
 
-  let body: { warmupEnabled?: unknown; resume?: unknown }
+  let body: { warmupEnabled?: unknown; resume?: unknown; rampPreset?: unknown; restartRamp?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -25,6 +26,19 @@ export async function PATCH(
 
   try {
     const org = await resolveOrganization(orgId)
+
+    // Restart the ramp from day 1.
+    if (body.restartRamp === true) {
+      return NextResponse.json(await restartMailboxRamp({ organizationId: org.id, mailboxId: id }))
+    }
+
+    // Change the ramp preset schedule.
+    if (body.rampPreset !== undefined) {
+      if (body.rampPreset !== 'CONSERVATIVE' && body.rampPreset !== 'STANDARD' && body.rampPreset !== 'AGGRESSIVE') {
+        return NextResponse.json({ error: 'rampPreset must be CONSERVATIVE, STANDARD or AGGRESSIVE' }, { status: 400 })
+      }
+      return NextResponse.json(await setMailboxRampPreset({ organizationId: org.id, mailboxId: id, rampPreset: body.rampPreset }))
+    }
 
     // Resume: clear a circuit-breaker auto-pause (human-only; there is no auto-resume).
     if (body.resume === true) {
@@ -42,7 +56,7 @@ export async function PATCH(
     }
 
     return NextResponse.json(
-      { error: 'Provide warmupEnabled (boolean) or resume: true' },
+      { error: 'Provide warmupEnabled (boolean), resume: true, restartRamp: true, or rampPreset (CONSERVATIVE, STANDARD, AGGRESSIVE)' },
       { status: 400 },
     )
   } catch (err) {

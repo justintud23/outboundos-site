@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Kanban,
   Zap,
+  ShieldCheck,
 } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { useSidebar } from './sidebar-context'
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: '/inbox', icon: Inbox, label: 'Inbox' },
   { href: '/replies', icon: MessageSquare, label: 'Replies' },
   { href: '/analytics', icon: BarChart2, label: 'Analytics' },
+  { href: '/deliverability', icon: ShieldCheck, label: 'Deliverability' },
   { href: '/templates', icon: FileText, label: 'Templates' },
 ] as const
 

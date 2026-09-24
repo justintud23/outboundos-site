@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
+import { ensureDomainRows, checkDomain } from '@/features/deliverability/server/domain-health'
 
 export const DEFAULT_GRAPH_DAILY_LIMIT = 30
 export const CONNECT_STATE_COOKIE = 'ms_connect_state'
@@ -68,5 +69,24 @@ export async function importGraphMailboxes(
     })),
     skipDuplicates: true,
   })
+  // New sending domains are checked right away so they aren't blocked (as
+  // UNVERIFIED) until the next daily run. Best-effort: mailboxes are already
+  // committed above, so nothing here — a DNS lookup failure or an outage in
+  // the domain-health checks themselves — may fail the import. The daily
+  // refresh re-creates/checks these rows regardless.
+  try {
+    const fresh = await ensureDomainRows(organizationId)
+    await Promise.all(
+      fresh.map(async (row) => {
+        try {
+          await checkDomain(row.id)
+        } catch (err) {
+          console.error(`[importGraphMailboxes] check ${row.domain} failed`, err)
+        }
+      }),
+    )
+  } catch (err) {
+    console.error('[importGraphMailboxes] domain check failed', err)
+  }
   return { created: res.count }
 }

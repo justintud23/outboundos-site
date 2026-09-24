@@ -5,6 +5,7 @@ interface BadgeProps {
   children: React.ReactNode
   variant?: 'default' | 'success' | 'warning' | 'danger' | 'muted'
   showIcon?: boolean
+  'aria-label'?: string
 }
 
 const VARIANT_ICONS = {
@@ -15,11 +16,12 @@ const VARIANT_ICONS = {
   muted: Minus,
 }
 
-export function Badge({ children, variant = 'default', showIcon = false }: BadgeProps) {
+export function Badge({ children, variant = 'default', showIcon = false, 'aria-label': ariaLabel }: BadgeProps) {
   const Icon = showIcon ? VARIANT_ICONS[variant] : null
 
   return (
     <span
+      aria-label={ariaLabel}
       className={clsx(
         `inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-badge)] text-xs font-medium`,
         {
