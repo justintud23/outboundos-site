@@ -78,4 +78,22 @@ describe('POST /api/deliverability/domains/[id]/recheck', () => {
     expect(await res.json()).toEqual({ status: 'HEALTHY', lastError: null })
     expect(checkDomain).toHaveBeenCalledWith('dh-1')
   })
+
+  it('500 if checkDomain rejects', async () => {
+    ;(auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ orgId: 'clerk-org', userId: 'u1' })
+    ;(prisma.domainHealth.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'dh-1',
+      lastAttemptAt: null,
+    })
+    ;(checkDomain as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'))
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(new Request('http://x', { method: 'POST' }), ctx)
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'Internal server error' })
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[POST /api/deliverability/domains/[id]/recheck]', expect.any(Error))
+
+    consoleErrorSpy.mockRestore()
+  })
 })

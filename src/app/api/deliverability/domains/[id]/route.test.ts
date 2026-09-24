@@ -89,4 +89,31 @@ describe('PATCH /api/deliverability/domains/[id]', () => {
     })
     expect((await PATCH(req, ctx)).status).toBe(404)
   })
+
+  it('400 for invalid calendar date (Feb 30)', async () => {
+    ;(auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ orgId: 'clerk-org', userId: 'u1' })
+    const req = new Request('http://x', {
+      method: 'PATCH',
+      body: JSON.stringify({ registeredAt: '2026-02-30' }),
+    })
+    expect((await PATCH(req, ctx)).status).toBe(400)
+  })
+
+  it('500 if updateMany rejects', async () => {
+    ;(auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ orgId: 'clerk-org', userId: 'u1' })
+    ;(prisma.domainHealth.updateMany as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Database error'))
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const req = new Request('http://x', {
+      method: 'PATCH',
+      body: JSON.stringify({ registeredAt: '2026-08-01' }),
+    })
+    const res = await PATCH(req, ctx)
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'Internal server error' })
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[PATCH /api/deliverability/domains/[id]]', expect.any(Error))
+
+    consoleErrorSpy.mockRestore()
+  })
 })
