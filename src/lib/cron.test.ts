@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('@/lib/db/prisma', () => ({ prisma: { cronHeartbeat: { upsert: vi.fn(), findMany: vi.fn() } } }))
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: { cronHeartbeat: { upsert: vi.fn(), findMany: vi.fn() }, organization: { findMany: vi.fn() } },
+}))
 
 import { prisma } from '@/lib/db/prisma'
-import { isAuthorizedCron, recordHeartbeat, getStaleJobs } from './cron'
+import { isAuthorizedCron, recordHeartbeat, getStaleJobs, getAuthPausedOrgIds } from './cron'
 
 type Fn = ReturnType<typeof vi.fn>
 const hb = prisma.cronHeartbeat as unknown as { upsert: Fn; findMany: Fn }
@@ -35,5 +37,14 @@ describe('cron helpers', () => {
       { job: 'inbox-monitor', lastRunAt: new Date('2026-09-23T14:00:00Z') },
     ])
     expect(await getStaleJobs(now)).toEqual(['sequence-runner', 'inbox-monitor'])
+  })
+  it('lists orgs auto-paused by a Microsoft 365 auth failure (not manual pauses)', async () => {
+    const orgFindMany = (prisma as unknown as { organization: { findMany: Fn } }).organization.findMany
+    orgFindMany.mockResolvedValue([{ id: 'org-1' }])
+    expect(await getAuthPausedOrgIds()).toEqual(['org-1'])
+    expect(orgFindMany).toHaveBeenCalledWith({
+      where: { msTenantId: { not: null }, sendingPaused: true, pausedReason: { startsWith: 'Microsoft 365' } },
+      select: { id: true },
+    })
   })
 })

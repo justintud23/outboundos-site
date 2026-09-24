@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
-import { getStaleJobs, isAuthorizedCron } from '@/lib/cron'
+import { getAuthPausedOrgIds, getStaleJobs, isAuthorizedCron } from '@/lib/cron'
 import { sendOrgAlert } from '@/features/replies/server/notify'
 
 // Daily Vercel cron. The 5-minute jobs are driven by cron-job.org; if that
@@ -8,8 +8,10 @@ import { sendOrgAlert } from '@/features/replies/server/notify'
 export async function GET(request: Request) {
   if (!isAuthorizedCron(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const stale = await getStaleJobs()
-  if (stale.length === 0) return NextResponse.json({ stale, alerted: 0 })
+  // Orgs paused by a Microsoft 365 auth failure are reported too (their alert
+  // email can't be delivered through the rejected credentials).
+  const [stale, authPaused] = await Promise.all([getStaleJobs(), getAuthPausedOrgIds()])
+  if (stale.length === 0) return NextResponse.json({ stale, alerted: 0, authPaused })
 
   const orgs = await prisma.organization.findMany({ where: { escalationEmail: { not: null } }, select: { id: true } })
   let alerted = 0
@@ -21,5 +23,5 @@ export async function GET(request: Request) {
     )
     if (ok) alerted++
   }
-  return NextResponse.json({ stale, alerted })
+  return NextResponse.json({ stale, alerted, authPaused })
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
+import { getAuthPausedOrgIds, isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
 import { processSendQueue, type SendQueueResult } from '@/features/messages/server/process-send-queue'
 
 export const maxDuration = 60
@@ -20,6 +20,14 @@ export async function GET(request: Request) {
     // Record the heartbeat even on failure, so a broken tick shows up as
     // "ran but errored" rather than silently going stale.
     await recordHeartbeat('send-queue', result)
+  }
+
+  // A Microsoft 365 auth pause can't alert by email (the alert would use the
+  // rejected credentials), so fail the request: cron-job.org's "notify on
+  // failure" emails the operator independently of Microsoft 365.
+  if (status === 200) {
+    const authPaused = await getAuthPausedOrgIds()
+    if (authPaused.length > 0) return NextResponse.json({ ...result, authPaused }, { status: 503 })
   }
 
   return NextResponse.json(result, { status })

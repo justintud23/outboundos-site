@@ -6,6 +6,25 @@ export type CronJob = 'sequence-runner' | 'send-queue' | 'inbox-monitor'
 export const CRON_JOBS: CronJob[] = ['sequence-runner', 'send-queue', 'inbox-monitor']
 export const STALE_AFTER_MS = 30 * 60 * 1000
 
+// Every automatic pause caused by Microsoft 365 rejecting our credentials
+// (send queue or inbox monitor) has a pausedReason starting with this.
+export const MS_AUTH_PAUSE_PREFIX = 'Microsoft 365'
+
+/**
+ * Orgs whose sending is paused because Microsoft 365 rejected our access
+ * (expired secret, revoked consent, …). The alert email for that pause goes
+ * out through the same rejected credentials, so the cron endpoints report it
+ * as an HTTP failure too — cron-job.org's failure notification then reaches
+ * the operator independently of Microsoft 365.
+ */
+export async function getAuthPausedOrgIds(): Promise<string[]> {
+  const rows = await prisma.organization.findMany({
+    where: { msTenantId: { not: null }, sendingPaused: true, pausedReason: { startsWith: MS_AUTH_PAUSE_PREFIX } },
+    select: { id: true },
+  })
+  return rows.map((r) => r.id)
+}
+
 export function isAuthorizedCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false

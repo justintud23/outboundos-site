@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
+import { MS_AUTH_PAUSE_PREFIX } from '@/lib/cron'
 import { getEmailProvider } from '@/lib/email'
 import { getMessageState, sendDraftMessage } from '@/lib/email/graph/mail'
 import { GraphAuthError, GraphThrottledError } from '@/lib/email/graph/client'
@@ -43,7 +44,7 @@ export async function pauseOrgSending(organizationId: string, reason: string): P
   }
 }
 
-export async function processSendQueue(now: Date = new Date(), budgetMs = 45_000): Promise<SendQueueResult> {
+export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000): Promise<SendQueueResult> {
   const startedAt = Date.now()
   const result: SendQueueResult = { sent: 0, cancelled: 0, deferred: 0, failed: 0, reconciled: 0 }
 
@@ -422,7 +423,7 @@ async function handleSendError(
     })
     await pauseOrgSending(
       organizationId,
-      `Microsoft 365 rejected OutboundOS (HTTP ${err.status}: ${err.message}). Check the app registration's admin consent, client secret expiry, and the Sending Mailboxes access policy.`,
+      `${MS_AUTH_PAUSE_PREFIX} rejected OutboundOS (HTTP ${err.status}: ${err.message}). Check the app registration's admin consent, client secret expiry, and the Sending Mailboxes access policy.`,
     )
     return 'failed'
   }

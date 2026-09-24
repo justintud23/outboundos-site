@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
+import { MS_AUTH_PAUSE_PREFIX } from '@/lib/cron'
 import { fetchFolderDelta, type GraphMessage } from '@/lib/email/graph/mail'
 import { GraphAuthError, GraphError, GraphThrottledError } from '@/lib/email/graph/client'
 import { classifyInboundMessage, extractBouncedRecipients, type InboundMessage } from '../classify-inbound'
@@ -34,7 +35,7 @@ type MailboxWithOrg = {
   organization: { msTenantId: string | null; mailboxes: { email: string }[] }
 }
 
-export async function monitorMailboxes(now: Date = new Date(), budgetMs = 45_000): Promise<MonitorResult> {
+export async function monitorMailboxes(now: Date = new Date(), budgetMs = 25_000): Promise<MonitorResult> {
   const startedAt = Date.now()
   const result: MonitorResult = {
     mailboxes: 0, replies: 0, unmatched: 0, bounces: 0, autoReplies: 0, handled: 0, notified: 0,
@@ -59,7 +60,7 @@ export async function monitorMailboxes(now: Date = new Date(), budgetMs = 45_000
       if (err instanceof GraphAuthError) {
         await pauseOrgSending(
           mailbox.organizationId,
-          `Microsoft 365 denied OutboundOS access to ${mailbox.email} (HTTP ${err.status}: ${err.message}). Check admin consent and the Sending Mailboxes access policy.`,
+          `${MS_AUTH_PAUSE_PREFIX} denied OutboundOS access to ${mailbox.email} (HTTP ${err.status}: ${err.message}). Check admin consent and the Sending Mailboxes access policy.`,
         )
       } else if (err instanceof GraphError && err.status === 410) {
         await prisma.mailbox.update({ where: { id: mailbox.id }, data: { inboxDeltaLink: null, sentDeltaLink: null } })
