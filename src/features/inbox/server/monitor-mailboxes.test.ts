@@ -119,11 +119,56 @@ describe('monitorMailboxes', () => {
     expect(notifyReply).not.toHaveBeenCalled()
   })
 
-  it('unsubscribe request: recorded, no notification', async () => {
+  it('recordReply throws a non-dedupe error: the sequence is still stopped and queued mail still cancelled before the failure, the delta link is not saved, and the failure is surfaced on the result (Review Focus #1)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    inboxThenSent([human])
+    p.outboundMessage.findFirst.mockResolvedValue({ id: 'om-1', leadId: 'lead-1' })
+    ;(recordReply as Fn).mockRejectedValue(new Error('classification service unavailable'))
+    const res = await monitorMailboxes(NOW)
+    expect(p.sequenceEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'ACTIVE' },
+      data: { status: 'STOPPED', stoppedAt: expect.any(Date), stoppedReason: 'reply_received' },
+    })
+    expect(p.outboundMessage.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'QUEUED', processing: false },
+      data: { status: 'CANCELLED', lastError: 'reply_received' },
+    })
+    expect(p.mailbox.update).not.toHaveBeenCalled()
+    expect(res.errors).toBe(1)
+    expect(res.failedMailboxes).toEqual(['mike@getacmesnow.com'])
+    errorSpy.mockRestore()
+  })
+
+  it('dedupe path (message already recorded on an earlier tick) repairs the stop/cancel without re-recording or re-notifying (Review Focus #1)', async () => {
+    inboxThenSent([human])
+    p.outboundMessage.findFirst.mockResolvedValue({ id: 'om-1', leadId: 'lead-1' })
+    p.inboundReply.findUnique.mockResolvedValue({ id: 'r1' })
+    await monitorMailboxes(NOW)
+    expect(p.sequenceEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'ACTIVE' },
+      data: { status: 'STOPPED', stoppedAt: expect.any(Date), stoppedReason: 'reply_received' },
+    })
+    expect(p.outboundMessage.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'QUEUED', processing: false },
+      data: { status: 'CANCELLED', lastError: 'reply_received' },
+    })
+    expect(recordReply).not.toHaveBeenCalled()
+    expect(notifyReply).not.toHaveBeenCalled()
+  })
+
+  it('unsubscribe request: recorded, sequence still stopped and queued mail still cancelled, no notification', async () => {
     inboxThenSent([human])
     p.outboundMessage.findFirst.mockResolvedValue({ id: 'om-1', leadId: 'lead-1' })
     ;(recordReply as Fn).mockResolvedValue({ id: 'r1', classification: 'UNSUBSCRIBE_REQUEST' })
     await monitorMailboxes(NOW)
+    expect(p.sequenceEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'ACTIVE' },
+      data: { status: 'STOPPED', stoppedAt: expect.any(Date), stoppedReason: 'reply_received' },
+    })
+    expect(p.outboundMessage.updateMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', organizationId: 'org-1', status: 'QUEUED', processing: false },
+      data: { status: 'CANCELLED', lastError: 'reply_received' },
+    })
     expect(notifyReply).not.toHaveBeenCalled()
   })
 
@@ -153,6 +198,21 @@ describe('monitorMailboxes', () => {
     expect(evaluateMailboxBreaker).toHaveBeenCalledWith('mb-1')
     expect(recordReply).not.toHaveBeenCalled()
     expect(res.bounces).toBe(1)
+  })
+
+  it('bounce whose MessageEvent already exists (P2002): still marks the message BOUNCED and transitions the lead, but does not double-count (Review Focus #1)', async () => {
+    inboxThenSent([{
+      id: 'gm-2', conversationId: 'c2', subject: 'Undeliverable: Snow plan',
+      from: { emailAddress: { address: 'postmaster@getacmesnow.com' } },
+      body: { contentType: 'text', content: "Your message to bob@nowhere.example couldn't be delivered." },
+    }])
+    p.outboundMessage.findFirst.mockResolvedValue({ id: 'om-9', leadId: 'lead-9' })
+    p.messageEvent.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '7' }))
+    const res = await monitorMailboxes(NOW)
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({ where: { id: 'om-9' }, data: { status: 'BOUNCED' } })
+    expect(transitionLeadStatus).toHaveBeenCalledWith(expect.objectContaining({ leadId: 'lead-9', newStatus: 'BOUNCED' }))
+    expect(evaluateMailboxBreaker).toHaveBeenCalledWith('mb-1')
+    expect(res.bounces).toBe(0)
   })
 
   it('auto-reply: audit-logged only, sequence untouched', async () => {

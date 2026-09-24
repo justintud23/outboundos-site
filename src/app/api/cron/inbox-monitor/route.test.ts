@@ -17,7 +17,10 @@ describe('GET /api/cron/inbox-monitor', () => {
   })
   it('runs the monitor and records a heartbeat', async () => {
     ;(isAuthorizedCron as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    const result = { mailboxes: 3, replies: 1, unmatched: 0, bounces: 0, autoReplies: 0, handled: 0, notified: 1 }
+    const result = {
+      mailboxes: 3, replies: 1, unmatched: 0, bounces: 0, autoReplies: 0, handled: 0, notified: 1,
+      errors: 0, failedMailboxes: [],
+    }
     ;(monitorMailboxes as ReturnType<typeof vi.fn>).mockResolvedValue(result)
     const res = await GET(new Request('http://x'))
     expect(await res.json()).toEqual(result)

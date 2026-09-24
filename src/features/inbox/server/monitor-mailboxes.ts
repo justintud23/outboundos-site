@@ -21,6 +21,8 @@ export interface MonitorResult {
   autoReplies: number
   handled: number
   notified: number
+  errors: number
+  failedMailboxes: string[]
 }
 
 type MailboxWithOrg = {
@@ -34,7 +36,10 @@ type MailboxWithOrg = {
 
 export async function monitorMailboxes(now: Date = new Date(), budgetMs = 45_000): Promise<MonitorResult> {
   const startedAt = Date.now()
-  const result: MonitorResult = { mailboxes: 0, replies: 0, unmatched: 0, bounces: 0, autoReplies: 0, handled: 0, notified: 0 }
+  const result: MonitorResult = {
+    mailboxes: 0, replies: 0, unmatched: 0, bounces: 0, autoReplies: 0, handled: 0, notified: 0,
+    errors: 0, failedMailboxes: [],
+  }
 
   const mailboxes = (await prisma.mailbox.findMany({
     where: { provider: 'MICROSOFT_GRAPH', organization: { msTenantId: { not: null } } },
@@ -59,30 +64,42 @@ export async function monitorMailboxes(now: Date = new Date(), budgetMs = 45_000
       } else if (err instanceof GraphError && err.status === 410) {
         await prisma.mailbox.update({ where: { id: mailbox.id }, data: { inboxDeltaLink: null, sentDeltaLink: null } })
       } else if (!(err instanceof GraphThrottledError)) {
+        // Anything else is an unexpected failure mid-poll: the delta link was
+        // deliberately not saved above, so the next tick retries this
+        // mailbox from the same point. Surface it in the result so a run of
+        // silent failures shows up instead of just going quiet.
         console.error(`[inbox-monitor] mailbox ${mailbox.email} failed`, err)
+        result.errors++
+        result.failedMailboxes.push(mailbox.email)
       }
     }
   }
 
-  // Re-sweep notifications that failed on an earlier tick.
-  const since = new Date(now.getTime() - RESWEEP_WINDOW_MS)
-  const pending = await prisma.inboundReply.findMany({
-    where: {
-      notifiedAt: null,
-      graphMessageId: { not: null },
-      createdAt: { gte: since },
-      classification: { notIn: ['UNSUBSCRIBE_REQUEST', 'OUT_OF_OFFICE'] },
-    },
-    select: { id: true },
-    take: 20,
-  })
-  for (const r of pending) if (await notifyReply(r.id)) result.notified++
-  const pendingUnmatched = await prisma.unmatchedReply.findMany({
-    where: { notifiedAt: null, createdAt: { gte: since } },
-    select: { id: true },
-    take: 20,
-  })
-  for (const u of pendingUnmatched) if (await notifyUnmatchedReply(u.id)) result.notified++
+  // Re-sweep notifications that failed on an earlier tick. Best-effort: a
+  // throwing notifier here must never turn a tick that otherwise succeeded
+  // into a 500.
+  try {
+    const since = new Date(now.getTime() - RESWEEP_WINDOW_MS)
+    const pending = await prisma.inboundReply.findMany({
+      where: {
+        notifiedAt: null,
+        graphMessageId: { not: null },
+        createdAt: { gte: since },
+        classification: { notIn: ['UNSUBSCRIBE_REQUEST', 'OUT_OF_OFFICE'] },
+      },
+      select: { id: true },
+      take: 20,
+    })
+    for (const r of pending) if (await notifyReply(r.id)) result.notified++
+    const pendingUnmatched = await prisma.unmatchedReply.findMany({
+      where: { notifiedAt: null, createdAt: { gte: since } },
+      select: { id: true },
+      take: 20,
+    })
+    for (const u of pendingUnmatched) if (await notifyUnmatchedReply(u.id)) result.notified++
+  } catch (err) {
+    console.error('[inbox-monitor] re-sweep', err)
+  }
 
   return result
 }
@@ -161,6 +178,11 @@ async function processInbound(
       select: { id: true, leadId: true },
     })
     if (!original) return
+    // A P2002 here means a previous attempt already recorded this NDR (and
+    // may have crashed before finishing the update/transition/breaker below
+    // — those are all idempotent, so re-run them instead of bailing out;
+    // only the double count is skipped.
+    let alreadyRecorded = false
     try {
       await prisma.messageEvent.create({
         data: {
@@ -175,8 +197,11 @@ async function processInbound(
         },
       })
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return
-      throw err
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        alreadyRecorded = true
+      } else {
+        throw err
+      }
     }
     await prisma.outboundMessage.update({ where: { id: original.id }, data: { status: 'BOUNCED' } })
     await transitionLeadStatus({
@@ -194,13 +219,12 @@ async function processInbound(
     } catch (err) {
       console.error('[inbox-monitor] breaker', err)
     }
-    result.bounces++
+    if (!alreadyRecorded) result.bounces++
     return
   }
 
-  // HUMAN
-  if (await prisma.inboundReply.findUnique({ where: { graphMessageId: msg.id }, select: { id: true } })) return
-
+  // HUMAN. Resolve the lead first (before the dedupe check) so that both the
+  // dedupe path and the normal path can stop/cancel for it.
   const fromEmail = inbound.fromAddress.toLowerCase()
   const byConversation = msg.conversationId
     ? await prisma.outboundMessage.findFirst({
@@ -235,6 +259,24 @@ async function processInbound(
     return
   }
 
+  // Dedupe: a previous attempt may already have recorded this message and
+  // then crashed before stopping the sequence / cancelling queued mail (see
+  // the ordering note below) — repair that here instead of just bailing out.
+  // Notification is intentionally skipped on this path; the re-sweep above
+  // picks up anything whose notifiedAt is still null.
+  const existing = await prisma.inboundReply.findUnique({ where: { graphMessageId: msg.id }, select: { id: true } })
+  if (existing) {
+    await stopEnrollmentsAndCancelQueued(leadId, orgId)
+    return
+  }
+
+  // Stop everything for this lead BEFORE recording the reply — not after.
+  // recordReply persists the InboundReply row and then calls
+  // transitionLeadStatus itself; if anything after the row is saved throws,
+  // a retry would hit the dedupe branch above and return early, so the stop
+  // must not depend on recordReply having returned successfully.
+  await stopEnrollmentsAndCancelQueued(leadId, orgId)
+
   let reply: { id: string; classification: string }
   try {
     reply = await recordReply({
@@ -250,22 +292,23 @@ async function processInbound(
       subject: inbound.subject,
     })
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return // processed concurrently
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return // processed concurrently; already stopped above
     throw err
   }
 
-  // Stop everything for this lead right now — don't wait for the next runner tick.
+  result.replies++
+  if (!NO_NOTIFY.has(reply.classification)) await notifyReply(reply.id)
+}
+
+async function stopEnrollmentsAndCancelQueued(leadId: string, organizationId: string): Promise<void> {
   await prisma.sequenceEnrollment.updateMany({
-    where: { leadId, organizationId: orgId, status: 'ACTIVE' },
+    where: { leadId, organizationId, status: 'ACTIVE' },
     data: { status: 'STOPPED', stoppedAt: new Date(), stoppedReason: 'reply_received' },
   })
   await prisma.outboundMessage.updateMany({
-    where: { leadId, organizationId: orgId, status: 'QUEUED', processing: false },
+    where: { leadId, organizationId, status: 'QUEUED', processing: false },
     data: { status: 'CANCELLED', lastError: 'reply_received' },
   })
-
-  result.replies++
-  if (!NO_NOTIFY.has(reply.classification)) await notifyReply(reply.id)
 }
 
 async function processSent(mailbox: MailboxWithOrg, messages: GraphMessage[], result: MonitorResult): Promise<void> {
