@@ -22,12 +22,14 @@ const DRAFT_STATUS_VARIANT: Record<DraftStatus, 'warning' | 'success' | 'danger'
   PENDING_REVIEW: 'warning',
   APPROVED:       'success',
   REJECTED:       'danger',
+  BLOCKED:        'danger',
 }
 
 const DRAFT_STATUS_LABEL: Record<DraftStatus, string> = {
   PENDING_REVIEW: 'Pending Review',
   APPROVED:       'Approved',
   REJECTED:       'Rejected',
+  BLOCKED:        'Blocked',
 }
 
 const REPLY_VARIANT: Record<ReplyClassification, 'success' | 'muted' | 'danger' | 'warning' | 'default'> = {
