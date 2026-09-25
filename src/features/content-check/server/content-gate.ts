@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/db/prisma'
 import { evaluateItems, stepItems, variantItem, type ContentItem } from '../campaign-content'
-import { ContentHighRiskError } from '../types'
+import { ContentHighRiskError, ContentOverrideValidationError, type ContentStatusDTO } from '../types'
 
 export interface LoadedContent {
   campaignId: string
@@ -91,4 +91,41 @@ export async function assertContentAllowed(input: {
   if (evaluation.level !== 'HIGH') return
   if (loaded.override && loaded.override.hash === contentHash(items)) return
   throw new ContentHighRiskError(evaluation.items.filter((i) => i.level === 'HIGH'))
+}
+
+export async function getCampaignContentStatus(organizationId: string, campaignId: string): Promise<ContentStatusDTO | null> {
+  const loaded = await loadCampaignContent(organizationId, campaignId)
+  if (!loaded) return null
+  const evaluation = evaluateItems(loaded.items, loaded.blockedPhrases, loaded.allowedWords)
+  return {
+    level: evaluation.level,
+    items: evaluation.items,
+    override: loaded.override
+      ? { reason: loaded.override.reason, by: loaded.override.by, at: loaded.override.at ? loaded.override.at.toISOString() : null, valid: loaded.override.hash === contentHash(loaded.items) }
+      : null,
+  }
+}
+
+export async function recordContentOverride(input: {
+  organizationId: string
+  campaignId: string
+  clerkUserId: string
+  reason: string
+}): Promise<ContentStatusDTO | null> {
+  const reason = input.reason.trim()
+  if (reason.length < 10 || reason.length > 500) {
+    throw new ContentOverrideValidationError('Give a reason of 10–500 characters.')
+  }
+  const loaded = await loadCampaignContent(input.organizationId, input.campaignId)
+  if (!loaded) return null
+  await prisma.campaign.update({
+    where: { id: loaded.campaignId },
+    data: {
+      contentOverrideReason: reason,
+      contentOverrideBy: input.clerkUserId,
+      contentOverrideAt: new Date(),
+      contentOverrideHash: contentHash(loaded.items),
+    },
+  })
+  return getCampaignContentStatus(input.organizationId, input.campaignId)
 }

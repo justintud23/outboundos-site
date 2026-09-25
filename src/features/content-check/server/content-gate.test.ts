@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/db/prisma', () => ({ prisma: { campaign: { findFirst: vi.fn() } } }))
+vi.mock('@/lib/db/prisma', () => ({ prisma: { campaign: { findFirst: vi.fn(), update: vi.fn() } } }))
 
 import { prisma } from '@/lib/db/prisma'
-import { assertContentAllowed, contentHash, loadCampaignContent } from './content-gate'
-import { ContentHighRiskError } from '../types'
+import { assertContentAllowed, contentHash, loadCampaignContent, recordContentOverride, getCampaignContentStatus } from './content-gate'
+import { ContentHighRiskError, ContentOverrideValidationError } from '../types'
 import { stepItems } from '../campaign-content'
 
 type Fn = ReturnType<typeof vi.fn>
-const find = (prisma as unknown as { campaign: { findFirst: Fn } }).campaign.findFirst
+const find = (prisma as unknown as { campaign: { findFirst: Fn; update: Fn } }).campaign.findFirst
 
 const GOOD = 'Hi {firstName|there},\n\n{personalization}\n\nWe handle plowing, salting and sealcoating for commercial lots across Buffalo. Would a quick quote for next season help?\n\nThanks'
 const campaign = (o: Record<string, unknown> = {}) => ({
@@ -84,5 +84,38 @@ describe('assertContentAllowed', () => {
     expect(contentHash(a)).toBe(contentHash([...a].reverse()))
     expect(contentHash(a)).not.toBe(contentHash(a.map((i) => ({ ...i, body: `${i.body}!` }))))
     expect(contentHash(a)).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe('recordContentOverride', () => {
+  const update = () => (prisma as unknown as { campaign: { update: Fn } }).campaign.update
+
+  it.each(['short', '   ', 'x'.repeat(501)])('rejects reason %j', async (reason) => {
+    find.mockResolvedValue(campaign())
+    await expect(recordContentOverride({ organizationId: 'org-1', campaignId: 'camp-1', clerkUserId: 'user_1', reason })).rejects.toBeInstanceOf(ContentOverrideValidationError)
+  })
+
+  it('stores the trimmed reason, user, time and current content hash', async () => {
+    find.mockResolvedValue(campaign())
+    update().mockResolvedValue({})
+    await recordContentOverride({ organizationId: 'org-1', campaignId: 'camp-1', clerkUserId: 'user_1', reason: '  Reviewed with legal; keep the wording.  ' })
+    const data = update().mock.calls[0]![0].data
+    expect(data).toMatchObject({ contentOverrideReason: 'Reviewed with legal; keep the wording.', contentOverrideBy: 'user_1', contentOverrideAt: expect.any(Date) })
+    expect(data.contentOverrideHash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('returns null for a missing campaign', async () => {
+    find.mockResolvedValue(null)
+    expect(await recordContentOverride({ organizationId: 'org-1', campaignId: 'x', clerkUserId: 'u', reason: 'long enough reason' })).toBeNull()
+  })
+})
+
+describe('getCampaignContentStatus', () => {
+  it('reports the level, items and whether the override still matches', async () => {
+    find.mockResolvedValue(campaign({ contentOverrideHash: 'stale', contentOverrideReason: 'Old reason here', contentOverrideAt: new Date('2026-09-20T00:00:00Z'), contentOverrideBy: 'user_1' }))
+    const status = await getCampaignContentStatus('org-1', 'camp-1')
+    expect(status!.level).toBe('LOW')
+    expect(status!.items).toHaveLength(2)
+    expect(status!.override).toEqual({ reason: 'Old reason here', by: 'user_1', at: '2026-09-20T00:00:00.000Z', valid: false })
   })
 })

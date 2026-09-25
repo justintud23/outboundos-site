@@ -22,5 +22,5 @@ export class ContentOverrideValidationError extends Error {
 export interface ContentStatusDTO {
   level: Severity
   items: ItemResult[]
-  override: { reason: string; by: string | null; at: string; valid: boolean } | null
+  override: { reason: string; by: string | null; at: string | null; valid: boolean } | null
 }

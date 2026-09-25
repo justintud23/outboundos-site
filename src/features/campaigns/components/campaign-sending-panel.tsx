@@ -38,7 +38,8 @@ export function CampaignSendingPanel({ campaignId, autoSend: initialAutoSend, sa
         body: JSON.stringify({ autoSend: !autoSend }),
       })
       if (!res.ok) {
-        setError('Could not update auto-send.')
+        const data = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(data?.error ?? 'Could not update auto-send.')
         return
       }
       setAutoSend(!autoSend)
