@@ -17,6 +17,7 @@ interface PlacementTestResult {
   requested: number
   sent: number
   failed: { to: string; error: string }[]
+  personalizationSkipped: boolean
 }
 
 // Split on newlines, commas, or any other whitespace, dropping empties.
@@ -145,6 +146,11 @@ export function PlacementTestCard({ campaignId, sequences, mailboxes, leads = []
               <p className="text-[var(--status-success)] text-sm">
                 Sent to {result.sent} of {result.requested} seed addresses from {result.mailbox}. Check the results on your tester&apos;s page.
               </p>
+              {result.personalizationSkipped && (
+                <p className="text-[var(--text-muted)] text-xs">
+                  Note: the AI personalization line couldn&apos;t be generated, so this test email is missing it — real sends would be held for review in that case.
+                </p>
+              )}
               {result.failed.length > 0 && (
                 <ul className="text-[var(--text-muted)] text-xs list-disc list-inside">
                   {result.failed.map((f) => (

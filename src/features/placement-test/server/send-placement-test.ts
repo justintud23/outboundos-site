@@ -25,6 +25,12 @@ export interface PlacementTestResult {
   requested: number
   sent: number
   failed: { to: string; error: string }[]
+  // True only when the step had a personalization prompt + token AND the AI
+  // call failed, so the sent test email is missing its {personalization} line.
+  // A real send would instead be held for review (see run-sequence-step's
+  // aiFailed → AI_FAILED guardrail flag); a placement test keeps sending so the
+  // tester still gets a placement reading, but flags the gap.
+  personalizationSkipped: boolean
 }
 
 export const MAX_SEEDS = 30
@@ -171,6 +177,7 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
   // 6. Render, the same way run-sequence-step builds a first-step draft.
   const subject = renderTemplate(step.subject, lead)
   let personalization: string | null = null
+  let personalizationSkipped = false
   if (step.personalizationPrompt && step.body.includes(PERSONALIZATION_TOKEN)) {
     try {
       personalization = await getAIProvider().personalize(
@@ -179,7 +186,11 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
       )
     } catch {
       // On AI failure, insert nothing — mirrors run-sequence-step's aiFailed path.
+      // Unlike a real send (which would be held for review), a placement test
+      // keeps going so the tester still gets a placement reading, but the
+      // result flags that the line is missing.
       personalization = null
+      personalizationSkipped = true
     }
   }
   const body = renderTemplate(insertPersonalization(step.body, personalization), lead)
@@ -204,15 +215,32 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
   const startOfToday = startOfDay(now)
   const limit = effectiveDailyLimit(mailbox, now, domainRow)
 
+  // Release a previously-reserved slot without letting a release failure abort
+  // whatever the caller is doing next (rollback, or the remaining sends).
+  async function releaseSlotSafely(context: string): Promise<void> {
+    await releaseMailboxSlot(mailboxId).catch((relErr: unknown) => {
+      console.error(`[sendPlacementTest] Failed to release mailbox slot ${mailboxId} ${context}:`, relErr)
+    })
+  }
+
   let reservedCount = 0
-  for (let i = 0; i < seeds.length; i++) {
-    const ok = await reserveMailboxSlot(mailboxId, limit, startOfToday)
-    if (!ok) break
-    reservedCount++
+  try {
+    for (let i = 0; i < seeds.length; i++) {
+      const ok = await reserveMailboxSlot(mailboxId, limit, startOfToday)
+      if (!ok) break
+      reservedCount++
+    }
+  } catch (err) {
+    // A throw mid-loop (not just a false return) still leaves reservedCount
+    // slots claimed — release them before propagating the error.
+    for (let i = 0; i < reservedCount; i++) {
+      await releaseSlotSafely('after a reservation error')
+    }
+    throw err
   }
   if (reservedCount < seeds.length) {
     for (let i = 0; i < reservedCount; i++) {
-      await releaseMailboxSlot(mailboxId)
+      await releaseSlotSafely('after NO_CAPACITY')
     }
     throw new PlacementTestError(
       'NO_CAPACITY',
@@ -245,21 +273,27 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
       sent++
     } catch (err) {
       failed.push({ to: seed, error: err instanceof Error ? err.message : 'Send failed' })
-      await releaseMailboxSlot(mailboxId)
+      await releaseSlotSafely(`after a send error for ${seed}`)
     }
   }
 
   // 9. Record — no Draft, OutboundMessage or Lead rows; one audit row, seeds omitted.
-  await prisma.auditLog.create({
-    data: {
-      organizationId,
-      actorClerkId: clerkUserId,
-      action: 'campaign.placement_test_sent',
-      entityType: 'Campaign',
-      entityId: campaignId,
-      metadata: { mailboxId, sequenceId, requested: seeds.length, sent, failed: failed.length },
-    },
-  })
+  // An audit-log failure must not turn a completed send into a 500 — the emails
+  // are already out, so the result below is still returned either way.
+  try {
+    await prisma.auditLog.create({
+      data: {
+        organizationId,
+        actorClerkId: clerkUserId,
+        action: 'campaign.placement_test_sent',
+        entityType: 'Campaign',
+        entityId: campaignId,
+        metadata: { mailboxId, sequenceId, requested: seeds.length, sent, failed: failed.length },
+      },
+    })
+  } catch (err) {
+    console.error(`[sendPlacementTest] Failed to write audit log for campaign ${campaignId}:`, err)
+  }
 
-  return { mailbox: mailbox.email, requested: seeds.length, sent, failed }
+  return { mailbox: mailbox.email, requested: seeds.length, sent, failed, personalizationSkipped }
 }

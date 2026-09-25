@@ -276,6 +276,34 @@ describe('sendPlacementTest — capacity', () => {
     expect(mockReleaseMailboxSlot).toHaveBeenCalledTimes(1)
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
+
+  it('a releaseMailboxSlot failure during the NO_CAPACITY rollback does not stop the error from being reported', async () => {
+    mockReserveMailboxSlot.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    mockReleaseMailboxSlot.mockRejectedValueOnce(new Error('release failed'))
+
+    const err = await sendPlacementTest({ ...INPUT, seeds: ['a@tester.com', 'b@tester.com'] }).catch((e: unknown) => e)
+
+    expect(err).toBeInstanceOf(PlacementTestError)
+    expect((err as PlacementTestError).code).toBe('NO_CAPACITY')
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('reserveMailboxSlot throwing mid-loop releases the slots already taken, then rethrows (nothing sent)', async () => {
+    mockReserveMailboxSlot
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error('DB down'))
+
+    const err = await sendPlacementTest({ ...INPUT, seeds: ['a@tester.com', 'b@tester.com', 'c@tester.com'] }).catch(
+      (e: unknown) => e,
+    )
+
+    expect(err).toBeInstanceOf(Error)
+    expect(err).not.toBeInstanceOf(PlacementTestError)
+    expect((err as Error).message).toBe('DB down')
+    expect(mockReleaseMailboxSlot).toHaveBeenCalledTimes(2)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
 })
 
 describe('sendPlacementTest — happy path', () => {
@@ -287,6 +315,7 @@ describe('sendPlacementTest — happy path', () => {
       requested: 2,
       sent: 2,
       failed: [],
+      personalizationSkipped: false,
     })
     expect(mockSendEmail).toHaveBeenCalledTimes(2)
     expect(mockSendEmail).toHaveBeenCalledWith(
@@ -366,6 +395,19 @@ describe('sendPlacementTest — per-seed failures', () => {
     expect(mockReleaseMailboxSlot).toHaveBeenCalledTimes(1)
     expect(mockSendEmail).toHaveBeenCalledTimes(2)
   })
+
+  it('a releaseMailboxSlot failure after a send error does not stop later seeds from sending', async () => {
+    mockSendEmail
+      .mockRejectedValueOnce(new Error('Graph 503'))
+      .mockResolvedValueOnce({ sgMessageId: 'sg-2' })
+    mockReleaseMailboxSlot.mockRejectedValueOnce(new Error('release failed'))
+
+    const result = await sendPlacementTest({ ...INPUT, seeds: ['bad@tester.com', 'good@tester.com'] })
+
+    expect(result.sent).toBe(1)
+    expect(result.failed).toEqual([{ to: 'bad@tester.com', error: 'Graph 503' }])
+    expect(mockSendEmail).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('sendPlacementTest — AI personalization', () => {
@@ -374,12 +416,13 @@ describe('sendPlacementTest — AI personalization', () => {
       ...fakeSequence,
       steps: [{ ...fakeStep, body: 'Hello {firstName|there}. {personalization}', personalizationPrompt: 'Mention their industry' }],
     })
-    await sendPlacementTest(INPUT)
+    const result = await sendPlacementTest(INPUT)
     expect(mockPersonalize).toHaveBeenCalledTimes(1)
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ body: 'Hello Jane. a personalized line' }))
+    expect(result.personalizationSkipped).toBe(false)
   })
 
-  it('on AI failure, inserts nothing rather than failing the whole test', async () => {
+  it('on AI failure, inserts nothing rather than failing the whole test, and flags personalizationSkipped', async () => {
     mockPersonalize.mockRejectedValue(new Error('AI down'))
     mockPrisma.sequence.findFirst.mockResolvedValue({
       ...fakeSequence,
@@ -388,5 +431,20 @@ describe('sendPlacementTest — AI personalization', () => {
     const result = await sendPlacementTest(INPUT)
     expect(result.sent).toBe(1)
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ body: 'Hello Jane.' }))
+    expect(result.personalizationSkipped).toBe(true)
+  })
+
+  it('personalizationSkipped stays false when the step has no personalization prompt/token at all', async () => {
+    const result = await sendPlacementTest(INPUT)
+    expect(result.personalizationSkipped).toBe(false)
+  })
+})
+
+describe('sendPlacementTest — audit log resilience', () => {
+  it('an audit log write failure does not fail a completed send', async () => {
+    mockPrisma.auditLog.create.mockRejectedValue(new Error('audit db down'))
+    const result = await sendPlacementTest(INPUT)
+    expect(result.sent).toBe(1)
+    expect(result).toMatchObject({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [] })
   })
 })

@@ -30,7 +30,7 @@ describe('PlacementTestCard', () => {
   })
 
   it('posts the right body, including parsed seeds, and shows the success summary', async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ mailbox: 'rep@company.com', requested: 2, sent: 2, failed: [] }), { status: 200 }))
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ mailbox: 'rep@company.com', requested: 2, sent: 2, failed: [], personalizationSkipped: false }), { status: 200 }))
     render(<PlacementTestCard campaignId="camp-1" sequences={SEQUENCES} mailboxes={MAILBOXES} leads={LEADS} msConnected />)
 
     fireEvent.change(screen.getByLabelText(/seed addresses/i), { target: { value: 'a@tester.com, b@tester.com\nb@tester.com' } })
@@ -46,6 +46,21 @@ describe('PlacementTestCard', () => {
       ),
     )
     expect(await screen.findByText(/sent to 2 of 2 seed addresses from rep@company\.com/i)).toBeInTheDocument()
+    expect(screen.queryByText(/ai personalization line/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a note when the AI personalization line could not be generated', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: true }), { status: 200 }),
+    )
+    render(<PlacementTestCard campaignId="camp-1" sequences={SEQUENCES} mailboxes={MAILBOXES} leads={LEADS} msConnected />)
+    fireEvent.change(screen.getByLabelText(/seed addresses/i), { target: { value: 'a@tester.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /send test/i }))
+    expect(
+      await screen.findByText(
+        /the ai personalization line couldn't be generated, so this test email is missing it — real sends would be held for review in that case\./i,
+      ),
+    ).toBeInTheDocument()
   })
 
   it('shows a failure list alongside the success summary', async () => {

@@ -67,10 +67,10 @@ describe('POST /api/campaigns/[id]/placement-test', () => {
   })
 
   it('200 on success, passing the parsed body through org-scoped', async () => {
-    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [] })
+    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: false })
     const res = await call({ ...VALID_BODY, leadId: 'lead-1' })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [] })
+    expect(await res.json()).toEqual({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: false })
     expect(sendPlacementTest).toHaveBeenCalledWith({
       organizationId: 'org-1',
       campaignId: 'camp-1',
@@ -83,8 +83,14 @@ describe('POST /api/campaigns/[id]/placement-test', () => {
   })
 
   it('defaults leadId to null when omitted', async () => {
-    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [] })
+    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: false })
     await call(VALID_BODY)
     expect(sendPlacementTest).toHaveBeenCalledWith(expect.objectContaining({ leadId: null }))
+  })
+
+  it('passes personalizationSkipped through to the client when the AI line failed', async () => {
+    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: true })
+    const res = await call(VALID_BODY)
+    expect(await res.json()).toMatchObject({ personalizationSkipped: true })
   })
 })
