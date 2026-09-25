@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import type { SequenceDetailDTO, CreateSequenceInput } from '../types'
+import { assertContentAllowed } from '@/features/content-check/server/content-gate'
+import { stepItems } from '@/features/content-check/campaign-content'
 
 export async function createSequence(input: CreateSequenceInput): Promise<SequenceDetailDTO> {
   const { organizationId, campaignId, name, steps } = input
@@ -17,6 +19,12 @@ export async function createSequence(input: CreateSequenceInput): Promise<Sequen
   if (steps.length === 0) {
     throw new Error('Sequence must have at least one step')
   }
+
+  await assertContentAllowed({
+    organizationId,
+    campaignId,
+    apply: (items) => [...items, ...stepItems('new', name, steps)],
+  })
 
   // Create sequence + steps in transaction
   const sequence = await prisma.$transaction(async (tx) => {

@@ -13,6 +13,7 @@ vi.mock('@/lib/db/prisma', () => ({
     $transaction: vi.fn(),
   },
 }))
+vi.mock('@/features/content-check/server/content-gate', () => ({ assertContentAllowed: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
 import {
@@ -64,6 +65,7 @@ describe('createSubjectVariant', () => {
 
 describe('updateSubjectVariant', () => {
   it('updates an org-scoped variant subject', async () => {
+    mockVariantFindFirst.mockResolvedValue({ sequenceStep: { sequence: { id: 'seq-1', campaignId: 'camp-1' } } })
     mockVariantUpdateMany.mockResolvedValue({ count: 1 })
     mockVariantFindUniqueOrThrow.mockResolvedValue({ id: 'v1', subject: 'A2', isArchived: false })
     const result = await updateSubjectVariant({ organizationId: 'org-1', variantId: 'v1', subject: 'A2' })
@@ -71,10 +73,19 @@ describe('updateSubjectVariant', () => {
   })
 
   it('throws when the variant is not in the org', async () => {
+    mockVariantFindFirst.mockResolvedValue({ sequenceStep: { sequence: { id: 'seq-1', campaignId: 'camp-1' } } })
     mockVariantUpdateMany.mockResolvedValue({ count: 0 })
     await expect(
       updateSubjectVariant({ organizationId: 'org-1', variantId: 'v1', subject: 'A2' }),
     ).rejects.toBeInstanceOf(SubjectVariantNotFoundError)
+  })
+
+  it('throws when the variant does not exist for the content-gate lookup', async () => {
+    mockVariantFindFirst.mockResolvedValue(null)
+    await expect(
+      updateSubjectVariant({ organizationId: 'org-1', variantId: 'v1', subject: 'A2' }),
+    ).rejects.toBeInstanceOf(SubjectVariantNotFoundError)
+    expect(mockVariantUpdateMany).not.toHaveBeenCalled()
   })
 })
 

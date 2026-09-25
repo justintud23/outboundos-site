@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { createSequence } from '@/features/sequences/server/create-sequence'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { ContentHighRiskError } from '@/features/content-check/types'
 
 export async function POST(request: Request) {
   const { orgId, userId } = await auth()
@@ -33,6 +34,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof Error && err.message.includes('not found')) {
       return NextResponse.json({ error: err.message }, { status: 404 })
+    }
+    if (err instanceof ContentHighRiskError) {
+      return NextResponse.json({ code: 'CONTENT_HIGH_RISK', error: err.message, findings: err.items }, { status: 422 })
     }
     throw err
   }

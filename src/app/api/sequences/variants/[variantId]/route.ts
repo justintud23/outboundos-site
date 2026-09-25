@@ -6,6 +6,7 @@ import {
   archiveSubjectVariant,
 } from '@/features/sequences/server/manage-subject-variants'
 import { SubjectVariantNotFoundError } from '@/features/sequences/types'
+import { ContentHighRiskError } from '@/features/content-check/types'
 
 // PATCH — edit a variant's subject text.
 export async function PATCH(
@@ -36,6 +37,9 @@ export async function PATCH(
   } catch (err) {
     if (err instanceof SubjectVariantNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 404 })
+    }
+    if (err instanceof ContentHighRiskError) {
+      return NextResponse.json({ code: 'CONTENT_HIGH_RISK', error: err.message, findings: err.items }, { status: 422 })
     }
     throw err
   }

@@ -5,6 +5,8 @@ import {
   SubjectVariantNotFirstStepError,
   SubjectVariantNotFoundError,
 } from '../types'
+import { assertContentAllowed } from '@/features/content-check/server/content-gate'
+import { variantItem } from '@/features/content-check/campaign-content'
 
 function toDTO(v: { id: string; subject: string; isArchived: boolean }): SubjectVariantDTO {
   return { id: v.id, subject: v.subject, isArchived: v.isArchived }
@@ -13,7 +15,7 @@ function toDTO(v: { id: string; subject: string; isArchived: boolean }): Subject
 async function resolveOrgStep(organizationId: string, sequenceStepId: string) {
   const step = await prisma.sequenceStep.findFirst({
     where: { id: sequenceStepId, sequence: { organizationId } },
-    select: { id: true, stepNumber: true, sequence: { select: { organizationId: true } } },
+    select: { id: true, stepNumber: true, body: true, sequence: { select: { id: true, name: true, organizationId: true, campaignId: true } } },
   })
   if (!step) throw new SubjectVariantStepNotFoundError(sequenceStepId)
   return step
@@ -36,6 +38,12 @@ export async function createSubjectVariant({
   const step = await resolveOrgStep(organizationId, sequenceStepId)
   if (step.stepNumber !== 1) throw new SubjectVariantNotFirstStepError(sequenceStepId)
 
+  await assertContentAllowed({
+    organizationId,
+    campaignId: step.sequence.campaignId,
+    apply: (items) => [...items, variantItem(step.sequence.id, step.sequence.name, 'new', subject, step.body)],
+  })
+
   const created = await prisma.subjectVariant.create({
     data: { organizationId, sequenceStepId, subject },
     select: { id: true, subject: true, isArchived: true },
@@ -53,6 +61,18 @@ export async function updateSubjectVariant({
   variantId: string
   subject: string
 }): Promise<SubjectVariantDTO> {
+  const existing = await prisma.subjectVariant.findFirst({
+    where: { id: variantId, organizationId },
+    select: { sequenceStep: { select: { sequence: { select: { id: true, campaignId: true } } } } },
+  })
+  if (!existing) throw new SubjectVariantNotFoundError(variantId)
+  const seq = existing.sequenceStep.sequence
+  await assertContentAllowed({
+    organizationId,
+    campaignId: seq.campaignId,
+    apply: (items) => items.map((i) => (i.key === `variant:${seq.id}:${variantId}` ? { ...i, subject } : i)),
+  })
+
   const result = await prisma.subjectVariant.updateMany({
     where: { id: variantId, organizationId },
     data: { subject },

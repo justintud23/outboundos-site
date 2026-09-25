@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
+import { assertContentAllowed } from '@/features/content-check/server/content-gate'
 
 export class CampaignNotFoundError extends Error {
   constructor() {
@@ -32,6 +33,10 @@ export async function updateCampaignSending(input: {
     select: { id: true },
   })
   if (!campaign) throw new CampaignNotFoundError()
+
+  if (input.autoSend === true) {
+    await assertContentAllowed({ organizationId: input.organizationId, campaignId: campaign.id, enablingAutoSend: true })
+  }
 
   return prisma.campaign.update({
     where: { id: campaign.id },

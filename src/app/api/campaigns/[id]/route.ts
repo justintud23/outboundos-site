@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { updateCampaignSending, CampaignNotFoundError } from '@/features/campaigns/server/campaign-sending'
+import { ContentHighRiskError } from '@/features/content-check/types'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { orgId } = await auth()
@@ -28,6 +29,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(updated)
   } catch (err) {
     if (err instanceof CampaignNotFoundError) return NextResponse.json({ error: err.message }, { status: 404 })
+    if (err instanceof ContentHighRiskError) {
+      return NextResponse.json({ code: 'CONTENT_HIGH_RISK', error: err.message, findings: err.items }, { status: 422 })
+    }
     throw err
   }
 }
