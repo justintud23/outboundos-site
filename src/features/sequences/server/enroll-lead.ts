@@ -5,6 +5,9 @@ import { canadaExclusionReason } from '@/features/leads/canada'
 import type { EnrollLeadInput } from '../types'
 import { SequenceHasNoStepsError, AlreadyEnrolledError } from '../types'
 import type { SequenceEnrollment } from '@prisma/client'
+import { isFreshResult } from '@/features/verification/gate'
+import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
+import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
 
 export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnrollment> {
   const { organizationId, sequenceId, leadId, actorClerkId } = input
@@ -14,6 +17,7 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
     where: { id: leadId, organizationId },
     select: {
       id: true, status: true, email: true, phone: true, country: true, customFields: true,
+      emailCheck: true, emailCheckResult: true, emailCheckedAt: true,
       organization: { select: { allowCanadianRecipients: true } },
     },
   })
@@ -87,6 +91,13 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
         metadata: { sequenceId, leadId },
       },
     })
+
+    // Deliverability 2A: verify the address before the first email, unless a
+    // result from the last 90 days already exists. Only when verification is
+    // configured — otherwise the lead would show "Verifying" forever.
+    if (isVerificationConfigured() && !isFreshResult(lead, now)) {
+      await queueLeadForVerification(tx, leadId)
+    }
 
     return created
   })

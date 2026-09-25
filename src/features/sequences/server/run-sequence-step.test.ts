@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     sequenceEnrollment: { findFirst: vi.fn(), update: vi.fn() },
     draft: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
+    lead: { updateMany: vi.fn() },
     auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -47,8 +48,8 @@ function makeEnrollment(overrides: Record<string, unknown> = {}) {
         { id: 'step-2', stepNumber: 2, subject: 'Follow up', body: 'Just checking', delayDays: 3, personalizationPrompt: null },
       ],
     },
-    lead: { id: 'lead-1', status: 'NEW', email: 'jane@acmepm.com', phone: null, country: null, firstName: 'Jane', lastName: null, company: 'Acme', title: null, customFields: null },
-    organization: { sendingPaused: false, guardrailBlockedPhrases: [], guardrailAllowedWords: [], allowCanadianRecipients: false },
+    lead: { id: 'lead-1', status: 'NEW', email: 'jane@acmepm.com', phone: null, country: null, firstName: 'Jane', lastName: null, company: 'Acme', title: null, customFields: null, emailCheck: 'OK', emailCheckResult: 'ok', emailCheckedAt: new Date() },
+    organization: { sendingPaused: false, guardrailBlockedPhrases: [], guardrailAllowedWords: [], allowCanadianRecipients: false, blockRiskyEmails: false },
     ...overrides,
   }
 }
@@ -386,5 +387,74 @@ describe('runSequenceStep — CASL', () => {
     expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('STOPPED')
     expect(update.mock.calls[0][0].data).toMatchObject({ status: 'STOPPED', stoppedReason: 'excluded_canada: province is Ontario' })
     expect(mockCheckStop).not.toHaveBeenCalled()
+  })
+})
+
+describe('runSequenceStep — email verification gate (first step only)', () => {
+  const mockLeadUpdateMany = prisma.lead.updateMany as ReturnType<typeof vi.fn>
+  const mockEnrollmentUpdate = prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    process.env.MILLIONVERIFIER_API_KEY = 'test-key'
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+    mockEnrollmentUpdate.mockResolvedValue({})
+    mockLeadUpdateMany.mockResolvedValue({ count: 1 })
+  })
+  afterEach(() => { delete process.env.MILLIONVERIFIER_API_KEY })
+
+  it('defers step 1 by 10 minutes while the lead is PENDING, without drafting', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ lead: { ...makeEnrollment().lead, emailCheck: 'PENDING', emailCheckedAt: null } }))
+    const { draftCreate } = txFake()
+    const before = Date.now()
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
+    const next = (mockEnrollmentUpdate.mock.calls[0]![0] as { data: { nextDueAt: Date } }).data.nextDueAt.getTime()
+    expect(next - before).toBeGreaterThanOrEqual(10 * 60 * 1000)
+    expect(next - before).toBeLessThan(11 * 60 * 1000)
+    expect(draftCreate).not.toHaveBeenCalled()
+    expect(personalize).not.toHaveBeenCalled()
+  })
+
+  it('queues an UNCHECKED lead (enrolled before verification existed) and waits (Review Focus #2)', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ lead: { ...makeEnrollment().lead, emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null } }))
+    txFake()
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DEFERRED')
+    expect(mockLeadUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'lead-1', emailCheck: { not: 'PENDING' } },
+      data: { emailCheck: 'PENDING', emailCheckAttempts: 0 },
+    })
+  })
+
+  it('stops the enrollment on an INVALID address', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ lead: { ...makeEnrollment().lead, emailCheck: 'INVALID', emailCheckResult: 'invalid' } }))
+    const { draftCreate } = txFake()
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('STOPPED')
+    expect(mockEnrollmentUpdate).toHaveBeenCalledWith({
+      where: { id: 'enroll-1' },
+      data: expect.objectContaining({ status: 'STOPPED', stoppedReason: 'Email failed verification (invalid)', processing: false }),
+    })
+    expect(draftCreate).not.toHaveBeenCalled()
+  })
+
+  it('stops a RISKY address when the org blocks risky emails', async () => {
+    const e = makeEnrollment()
+    mockEnrollmentFind.mockResolvedValue({ ...e, lead: { ...e.lead, emailCheck: 'RISKY', emailCheckResult: 'catch_all' }, organization: { ...e.organization, blockRiskyEmails: true } })
+    txFake()
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('STOPPED')
+  })
+
+  it('does not gate follow-up steps', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ currentStepNumber: 1, lead: { ...makeEnrollment().lead, emailCheck: 'PENDING', emailCheckedAt: null } }))
+    const { draftCreate } = txFake()
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).not.toBe('DEFERRED')
+    expect(draftCreate).toHaveBeenCalled()
+  })
+
+  it('is a no-op when verification is not configured', async () => {
+    delete process.env.MILLIONVERIFIER_API_KEY
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ lead: { ...makeEnrollment().lead, emailCheck: 'UNCHECKED', emailCheckedAt: null } }))
+    const { draftCreate } = txFake()
+    await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(draftCreate).toHaveBeenCalled()
   })
 })

@@ -5,6 +5,9 @@ import { Header } from '@/components/layout/header'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { getDeliverabilityOverview } from '@/features/deliverability/server/get-overview'
 import { DeliverabilityClient } from '@/features/deliverability/components/deliverability-client'
+import { getVerificationSummary } from '@/features/verification/server/get-verification-summary'
+import type { DeliverabilityOverview } from '@/features/deliverability/types'
+import type { VerificationSummaryDTO } from '@/features/verification/types'
 
 export default async function DeliverabilityPage() {
   const { orgId } = await auth()
@@ -29,9 +32,10 @@ export default async function DeliverabilityPage() {
     )
   }
 
-  let overview
+  let overview: DeliverabilityOverview
+  let verification: VerificationSummaryDTO
   try {
-    overview = await getDeliverabilityOverview(org.id)
+    ;[overview, verification] = await Promise.all([getDeliverabilityOverview(org.id), getVerificationSummary(org.id)])
   } catch (err) {
     console.error('[deliverability page]', err)
     return (
@@ -47,7 +51,7 @@ export default async function DeliverabilityPage() {
     <>
       <Header title="Deliverability" />
       <div className="flex-1 p-6 lg:p-8">
-        <DeliverabilityClient overview={overview} />
+        <DeliverabilityClient overview={overview} verification={verification} />
       </div>
     </>
   )

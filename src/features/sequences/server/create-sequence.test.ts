@@ -6,6 +6,7 @@ vi.mock('@/lib/db/prisma', () => ({
     $transaction: vi.fn(),
   },
 }))
+vi.mock('@/features/content-check/server/content-gate', () => ({ assertContentAllowed: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
 import { createSequence } from './create-sequence'

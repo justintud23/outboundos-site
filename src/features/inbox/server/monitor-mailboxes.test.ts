@@ -5,7 +5,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     mailbox: { findMany: vi.fn(), update: vi.fn() },
     outboundMessage: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    lead: { findFirst: vi.fn() },
+    lead: { findFirst: vi.fn(), updateMany: vi.fn() },
     inboundReply: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     unmatchedReply: { upsert: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     messageEvent: { create: vi.fn() },
@@ -198,6 +198,10 @@ describe('monitorMailboxes', () => {
     expect(evaluateMailboxBreaker).toHaveBeenCalledWith('mb-1')
     expect(recordReply).not.toHaveBeenCalled()
     expect(res.bounces).toBe(1)
+    expect(p.lead.updateMany).toHaveBeenCalledWith({
+      where: { id: 'lead-9' },
+      data: { emailCheck: 'INVALID', emailCheckResult: 'bounced', emailCheckedAt: expect.any(Date) },
+    })
   })
 
   it('bounce whose MessageEvent already exists (P2002): still marks the message BOUNCED and transitions the lead, but does not double-count (Review Focus #1)', async () => {

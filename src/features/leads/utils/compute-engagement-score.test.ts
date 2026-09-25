@@ -9,6 +9,7 @@ function makeLead(overrides: Partial<LeadDetailDTO> = {}): LeadDetailDTO {
     status: 'NEW', score: null, scoreReason: null, scoredAt: null,
     customFields: null, createdAt: new Date(), updatedAt: new Date(),
     lastActivityAt: new Date(),
+    emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null,
     ...overrides,
   }
 }

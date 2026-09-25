@@ -7,7 +7,7 @@ vi.mock('@/features/messages/server/send-draft', () => ({ sendDraft: vi.fn() }))
 import { auth } from '@clerk/nextjs/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { sendDraft } from '@/features/messages/server/send-draft'
-import { DraftOnSendQueueError, DomainNotHealthyError } from '@/features/messages/types'
+import { DraftOnSendQueueError, DomainNotHealthyError, EmailNotVerifiedError } from '@/features/messages/types'
 import { POST } from './route'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -42,5 +42,11 @@ describe('POST /api/drafts/[id]/send', () => {
     const res = await call()
     expect(res.status).toBe(422)
     expect(await res.json()).toMatchObject({ code: 'DOMAIN_NOT_HEALTHY', domain: 'bad.com' })
+  })
+  it('422 EMAIL_NOT_VERIFIED when the lead\'s first email is not cleared', async () => {
+    ;(sendDraft as Fn).mockRejectedValue(new EmailNotVerifiedError('stop', 'Email failed verification (invalid)'))
+    const res = await call()
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED', state: 'stop' })
   })
 })

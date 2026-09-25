@@ -30,6 +30,9 @@ export async function getLead({
       customFields: true,
       createdAt: true,
       updatedAt: true,
+      emailCheck: true,
+      emailCheckResult: true,
+      emailCheckedAt: true,
     },
   })
 

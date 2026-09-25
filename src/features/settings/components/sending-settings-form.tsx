@@ -59,6 +59,7 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
   const [businessName, setBusinessName] = useState(initial.businessName ?? '')
   const [postalAddress, setPostalAddress] = useState(initial.postalAddress ?? '')
   const [allowCanadian, setAllowCanadian] = useState(initial.allowCanadianRecipients)
+  const [blockRisky, setBlockRisky] = useState(initial.blockRiskyEmails)
 
   const [saving, setSaving] = useState(false)
   const [pausing, setPausing] = useState(false)
@@ -96,6 +97,7 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
       businessName: businessName.trim() || null,
       postalAddress: postalAddress.trim() || null,
       allowCanadianRecipients: allowCanadian,
+      blockRiskyEmails: blockRisky,
     })
 
     setSaving(false)
@@ -296,6 +298,19 @@ export function SendingSettingsForm({ initial }: SendingSettingsFormProps) {
           <span>
             Allow Canadian recipients. Leave off for cold outreach: Canada&apos;s anti-spam law (CASL) requires consent, so
             Canadian leads are never emailed unless you have documented consent and turn this on.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+          <input
+            type="checkbox"
+            checked={blockRisky}
+            onChange={(e) => setBlockRisky(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Block risky emails (catch-all / unknown). Off by default: these addresses can&apos;t be confirmed, so some
+            will bounce. Turn this on if your bounce rate climbs.
           </span>
         </label>
 

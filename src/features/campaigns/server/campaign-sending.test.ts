@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db/prisma', () => ({
   prisma: { campaign: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() }, $transaction: vi.fn() },
 }))
+vi.mock('@/features/content-check/server/content-gate', () => ({ assertContentAllowed: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
+import { assertContentAllowed } from '@/features/content-check/server/content-gate'
 import { approveCampaignSample, updateCampaignSending, createCampaign, CampaignNotFoundError } from './campaign-sending'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -94,6 +96,16 @@ describe('updateCampaignSending', () => {
       data: { autoSend: true, sampleSize: 50 },
       select: { id: true, autoSend: true, sampleSize: true, sampleApprovedAt: true },
     })
+  })
+
+  it('checks content when auto-send is being turned on, not when turned off', async () => {
+    p.campaign.findFirst.mockResolvedValue({ id: 'camp-1' })
+    p.campaign.update.mockResolvedValue({ id: 'camp-1', autoSend: true, sampleSize: 10, sampleApprovedAt: null })
+    await updateCampaignSending({ organizationId: 'org-1', campaignId: 'camp-1', autoSend: true })
+    expect(assertContentAllowed).toHaveBeenCalledWith({ organizationId: 'org-1', campaignId: 'camp-1', enablingAutoSend: true })
+    vi.mocked(assertContentAllowed).mockClear()
+    await updateCampaignSending({ organizationId: 'org-1', campaignId: 'camp-1', autoSend: false })
+    expect(assertContentAllowed).not.toHaveBeenCalled()
   })
 })
 

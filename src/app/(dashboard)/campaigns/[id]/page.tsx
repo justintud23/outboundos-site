@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
 import { getCampaignDetail } from '@/features/campaigns/server/get-campaign-detail'
 import { CampaignSendingPanel } from '@/features/campaigns/components/campaign-sending-panel'
+import { getCampaignContentStatus } from '@/features/content-check/server/content-gate'
+import { CampaignContentPanel } from '@/features/content-check/components/campaign-content-panel'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { formatEnumLabel } from '@/lib/format'
 import type { CampaignStatus, DraftStatus, ReplyClassification } from '@prisma/client'
@@ -163,6 +165,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const org = await resolveOrganization(orgId)
   const campaign = await getCampaignDetail({ organizationId: org.id, campaignId })
   if (!campaign) notFound()
+  const contentStatus = await getCampaignContentStatus(org.id, campaign.id)
 
   const positiveRate = campaign.replyCount > 0 ? `${((campaign.positiveReplyCount / campaign.replyCount) * 100).toFixed(0)}% positive` : null
 
@@ -210,6 +213,8 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           msConnected={!!org.msTenantId}
           hasPostalAddress={!!org.postalAddress?.trim()}
         />
+
+        {contentStatus && <CampaignContentPanel campaignId={campaign.id} status={contentStatus} />}
 
         <DraftsSection drafts={campaign.drafts} draftTotal={campaign.draftTotal} />
         <RepliesSection replies={campaign.replies} replyCount={campaign.replyCount} />

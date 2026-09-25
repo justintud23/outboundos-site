@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db/prisma'
 import type { SequenceDetailDTO } from '../types'
 import { SequenceNotFoundError, SequenceHasActiveEnrollmentsError } from '../types'
 import { getSequence } from './get-sequence'
+import { assertContentAllowed } from '@/features/content-check/server/content-gate'
+import { stepItems } from '@/features/content-check/campaign-content'
 
 interface UpdateSequenceInput {
   organizationId: string
@@ -32,6 +34,17 @@ export async function updateSequence({
 
   if (hasActiveEnrollments && newSteps && newSteps.length > 0) {
     throw new SequenceHasActiveEnrollmentsError(sequenceId)
+  }
+
+  if (newSteps && newSteps.length > 0 && !hasActiveEnrollments) {
+    await assertContentAllowed({
+      organizationId,
+      campaignId: sequence.campaignId,
+      apply: (items) => [
+        ...items.filter((i) => !i.key.startsWith(`step:${sequenceId}:`) && !i.key.startsWith(`variant:${sequenceId}:`)),
+        ...stepItems(sequenceId, name ?? sequence.name, newSteps),
+      ],
+    })
   }
 
   await prisma.$transaction(async (tx) => {

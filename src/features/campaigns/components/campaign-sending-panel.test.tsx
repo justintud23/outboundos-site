@@ -39,6 +39,15 @@ describe('CampaignSendingPanel', () => {
     )
   })
 
+  it('shows the server error message when the PATCH is rejected (422)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'High spam risk in Fall — step 1. Fix the flagged content, or record an override on the campaign page.' }), { status: 422 }),
+    )
+    render(<CampaignSendingPanel campaignId="c1" autoSend={false} sampleSize={10} sampleApprovedAt={null} sampleCount={0} msConnected hasPostalAddress />)
+    fireEvent.click(screen.getByRole('switch', { name: /send automatically/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('High spam risk in Fall — step 1.')
+  })
+
   it('explains that queued emails are held while auto-send is off (I6)', () => {
     render(<CampaignSendingPanel campaignId="c1" autoSend={false} sampleSize={10} sampleApprovedAt={new Date('2026-09-20')} sampleCount={10} msConnected hasPostalAddress />)
     expect(screen.getByText(/queued for this campaign are held/i)).toBeInTheDocument()

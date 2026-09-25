@@ -17,6 +17,7 @@ const initial: SendingSettingsDTO = {
   businessName: 'Acme Snow',
   postalAddress: '1 Main St, Buffalo, NY 14201',
   allowCanadianRecipients: false,
+  blockRiskyEmails: false,
   msConnected: false,
 }
 
@@ -79,5 +80,16 @@ describe('SendingSettingsForm', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body).toMatchObject({ businessName: 'Acme Snow', postalAddress: 'PO Box 9\nBuffalo, NY 14201', allowCanadianRecipients: true })
+  })
+
+  it('saves the block-risky-emails toggle', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...initial, blockRiskyEmails: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SendingSettingsForm initial={initial} />)
+    fireEvent.click(screen.getByLabelText(/Block risky emails/))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toMatchObject({ blockRiskyEmails: true })
   })
 })

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
 import type { LeadDetailDTO } from '../types'
 import type { EngagementScore } from '../utils/compute-engagement-score'
@@ -60,13 +61,14 @@ export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps
       {/* Main header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-[var(--text-primary)] text-xl font-semibold truncate">
               {name}
             </h1>
             <Badge variant={STATUS_VARIANT[statusOverride ?? lead.status]}>
               {formatEnumLabel(statusOverride ?? lead.status)}
             </Badge>
+            <EmailCheckBadge check={lead.emailCheck} result={lead.emailCheckResult} checkedAt={lead.emailCheckedAt} />
             {lead.score !== null && (
               <Badge
                 variant={

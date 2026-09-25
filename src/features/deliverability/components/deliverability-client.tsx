@@ -11,6 +11,8 @@ import {
   LazyResponsiveContainer, LazyLineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
 } from '@/components/charts/recharts-wrapper'
 import { relativeTime, formatEnumLabel } from '@/lib/format'
+import { VerificationCard } from '@/features/verification/components/verification-card'
+import type { VerificationSummaryDTO } from '@/features/verification/types'
 import type { DeliverabilityOverview, DomainRowDTO, MailboxRowDTO } from '../types'
 import type { CheckResult } from '../evaluate-domain'
 import type { DomainStatusName, MailboxState } from '../readiness'
@@ -61,9 +63,10 @@ function formatRegisteredAt(iso: string): string {
 
 interface Props {
   overview: DeliverabilityOverview
+  verification?: VerificationSummaryDTO
 }
 
-export function DeliverabilityClient({ overview }: Props) {
+export function DeliverabilityClient({ overview, verification }: Props) {
   const router = useRouter()
   const { summary, domains, mailboxes, trend, trendByMailbox } = overview
 
@@ -187,6 +190,8 @@ export function DeliverabilityClient({ overview }: Props) {
           sub={`${summary.sent14} sent · ${pct(summary.bounceRate14)} bounce, ${pct(summary.replyRate14)} reply`}
         />
       </div>
+
+      {verification && <VerificationCard summary={verification} />}
 
       {/* Domains table */}
       <section>

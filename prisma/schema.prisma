@@ -121,6 +121,14 @@ enum DomainStatus {
   FAILING
 }
 
+enum EmailCheck {
+  UNCHECKED
+  PENDING
+  OK
+  RISKY
+  INVALID
+}
+
 // ─── ORGANIZATION ──────────────────────────────────────────────
 
 model Organization {
@@ -150,6 +158,12 @@ model Organization {
   // CASL: Canadian recipients need consent, so cold email to them is blocked
   // unless the org explicitly allows it (only with documented consent).
   allowCanadianRecipients Boolean @default(false)
+  // Deliverability 2A: send to catch-all/unknown addresses unless this is on.
+  blockRiskyEmails         Boolean   @default(false)
+  // Set when a verification outage (no credits / bad key) was alerted; cleared
+  // after the next successful check. The reason is shown on Deliverability.
+  verificationAlertedAt    DateTime?
+  verificationPausedReason String?
 
   members          OrgMember[]
   leads            Lead[]
@@ -213,6 +227,12 @@ model Lead {
   // Normalized from the import's country column ('CA', 'US', or raw).
   country      String?
 
+  // Deliverability 2A: mailbox verification of `email` (MillionVerifier).
+  emailCheck         EmailCheck @default(UNCHECKED)
+  emailCheckResult   String?
+  emailCheckedAt     DateTime?
+  emailCheckAttempts Int        @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -228,6 +248,7 @@ model Lead {
   @@index([organizationId, score])
   @@index([organizationId, scoredAt])
   @@index([importBatchId])
+  @@index([emailCheck])
   @@map("leads")
 }
 
@@ -294,6 +315,13 @@ model Campaign {
   autoSend         Boolean   @default(false)
   sampleSize       Int       @default(10)
   sampleApprovedAt DateTime?
+
+  // Deliverability 2A: a recorded override of a High content-risk score,
+  // valid only while contentOverrideHash matches the current content.
+  contentOverrideReason String?
+  contentOverrideBy     String?
+  contentOverrideAt     DateTime?
+  contentOverrideHash   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

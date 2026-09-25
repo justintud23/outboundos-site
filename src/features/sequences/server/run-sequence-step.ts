@@ -8,6 +8,9 @@ import { assignEnrollmentMailbox } from './assign-mailbox'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '../render-template'
 import { checkGuardrails, type GuardrailFlag } from '@/features/drafts/guardrails'
 import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
+import { verificationGate } from '@/features/verification/gate'
+import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
+import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
 import type { StepResult } from '../types'
 
 interface RunStepInput {
@@ -17,6 +20,7 @@ interface RunStepInput {
 export const MAX_AI_FAILURES = 3
 const DEFER_MS = 60 * 60 * 1000 // gate not open yet (sample pending, paused, no mailbox)
 const AI_RETRY_MS = 15 * 60 * 1000
+export const VERIFY_WAIT_MS = 10 * 60 * 1000
 
 async function defer(enrollmentId: string, ms = DEFER_MS): Promise<'DEFERRED'> {
   // Pushing nextDueAt keeps deferred enrollments from starving the runner's
@@ -66,10 +70,13 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
         },
       },
       lead: {
-        select: { id: true, status: true, email: true, phone: true, country: true, firstName: true, lastName: true, company: true, title: true, customFields: true },
+        select: {
+          id: true, status: true, email: true, phone: true, country: true, firstName: true, lastName: true, company: true, title: true, customFields: true,
+          emailCheck: true, emailCheckResult: true, emailCheckedAt: true,
+        },
       },
       organization: {
-        select: { sendingPaused: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true, allowCanadianRecipients: true },
+        select: { sendingPaused: true, guardrailBlockedPhrases: true, guardrailAllowedWords: true, allowCanadianRecipients: true, blockRiskyEmails: true },
       },
     },
   })
@@ -119,6 +126,26 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
       })
     })
     return 'COMPLETED'
+  }
+
+  // 3b. Email verification gate — FIRST email only, before any AI spend.
+  //     `wait` pushes nextDueAt so waiting enrollments don't fill the
+  //     runner's oldest-first batch and starve due follow-ups.
+  if (nextStepNumber === 1) {
+    const decision = verificationGate(enrollment.lead, enrollment.organization, isVerificationConfigured())
+    if (decision.action === 'stop') {
+      await prisma.sequenceEnrollment.update({
+        where: { id: enrollmentId },
+        data: { status: 'STOPPED', stoppedAt: new Date(), stoppedReason: decision.reason, processing: false },
+      })
+      return 'STOPPED'
+    }
+    if (decision.action === 'wait') {
+      if (enrollment.lead.emailCheck !== 'PENDING') {
+        await queueLeadForVerification(prisma, enrollment.lead.id)
+      }
+      return defer(enrollmentId, VERIFY_WAIT_MS)
+    }
   }
 
   const campaign = enrollment.sequence.campaign

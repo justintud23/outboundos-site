@@ -7,6 +7,7 @@ import {
   SubjectVariantStepNotFoundError,
   SubjectVariantNotFirstStepError,
 } from '@/features/sequences/types'
+import { ContentHighRiskError } from '@/features/content-check/types'
 
 // GET — per-variant A/B test results for this step (derived stats).
 export async function GET(
@@ -55,6 +56,9 @@ export async function POST(
     }
     if (err instanceof SubjectVariantNotFirstStepError) {
       return NextResponse.json({ error: err.message }, { status: 400 })
+    }
+    if (err instanceof ContentHighRiskError) {
+      return NextResponse.json({ code: 'CONTENT_HIGH_RISK', error: err.message, findings: err.items }, { status: 422 })
     }
     throw err
   }

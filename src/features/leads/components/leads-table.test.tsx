@@ -6,6 +6,7 @@ import type { LeadDTO } from '../types'
 const base: LeadDTO = {
   id: 'lead-1', email: 'jane@acmepm.com', firstName: 'Jane', lastName: 'Doe', company: 'Acme PM', title: null,
   source: 'CSV', status: 'NEW', score: null, scoreReason: null, scoredAt: null, createdAt: new Date('2026-09-01'),
+  emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null,
 }
 
 describe('LeadsTable — CASL', () => {

@@ -15,8 +15,14 @@ vi.mock('@/features/sequences/server/run-sequence-step', () => ({
   runSequenceStep: vi.fn(),
 }))
 
+vi.mock('@/features/verification/server/verify-leads', () => ({
+  verifyPendingLeads: vi.fn(),
+  VERIFY_BUDGET_MS: 10_000,
+}))
+
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
+import { verifyPendingLeads } from '@/features/verification/server/verify-leads'
 import { GET, maxDuration } from './route'
 
 const mockUpdateMany = prisma.sequenceEnrollment.updateMany as ReturnType<typeof vi.fn>
@@ -24,6 +30,7 @@ const mockFindMany = prisma.sequenceEnrollment.findMany as ReturnType<typeof vi.
 const mockUpdate = prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>
 const mockRunSequenceStep = runSequenceStep as ReturnType<typeof vi.fn>
 const mockHeartbeat = prisma.cronHeartbeat.upsert as ReturnType<typeof vi.fn>
+const mockVerify = verifyPendingLeads as ReturnType<typeof vi.fn>
 
 const CRON_SECRET = 'test-cron-secret'
 
@@ -37,6 +44,7 @@ function makeRequest(authHeader?: string): Request {
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.CRON_SECRET = CRON_SECRET
+  mockVerify.mockResolvedValue({ checked: 0, retried: 0, accountError: null, skipped: true })
 })
 
 afterEach(() => {
@@ -95,6 +103,7 @@ describe('GET /api/cron/sequence-runner', () => {
         { enrollmentId: 'enroll-2', result: 'COMPLETED' },
       ],
       staleLockRecovery: true,
+      verification: { checked: 0, retried: 0, accountError: null, skipped: true },
     })
 
     // stale-lock recovery query ran
@@ -158,5 +167,27 @@ describe('GET /api/cron/sequence-runner', () => {
 
     await expect(GET(makeRequest(`Bearer ${CRON_SECRET}`))).rejects.toThrow('db down')
     expect(mockHeartbeat).toHaveBeenCalledWith(expect.objectContaining({ where: { job: 'sequence-runner' } }))
+  })
+
+  it('verifies pending leads with a 10 s budget before querying due enrollments', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+    const order: string[] = []
+    mockVerify.mockImplementation(async () => { order.push('verify'); return { checked: 2, retried: 0, accountError: null, skipped: false } })
+    mockFindMany.mockImplementation(async () => { order.push('due'); return [] })
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+    expect(mockVerify).toHaveBeenCalledWith(10_000)
+    expect(order).toEqual(['verify', 'due'])
+    expect((await res.json()).verification).toMatchObject({ checked: 2 })
+  })
+
+  it('still processes enrollments when verification throws', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockFindMany.mockResolvedValue([{ id: 'e1' }])
+    mockRunSequenceStep.mockResolvedValue('DRAFT_GENERATED')
+    mockVerify.mockRejectedValue(new Error('db down'))
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+    expect(res.status).toBe(200)
+    expect(mockRunSequenceStep).toHaveBeenCalledWith({ enrollmentId: 'e1' })
   })
 })

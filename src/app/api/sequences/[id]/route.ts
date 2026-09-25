@@ -4,6 +4,7 @@ import { getSequence } from '@/features/sequences/server/get-sequence'
 import { updateSequence } from '@/features/sequences/server/update-sequence'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { SequenceNotFoundError, SequenceHasActiveEnrollmentsError } from '@/features/sequences/types'
+import { ContentHighRiskError } from '@/features/content-check/types'
 
 export async function GET(
   _request: Request,
@@ -61,6 +62,9 @@ export async function PATCH(
     }
     if (err instanceof SequenceHasActiveEnrollmentsError) {
       return NextResponse.json({ error: err.message }, { status: 409 })
+    }
+    if (err instanceof ContentHighRiskError) {
+      return NextResponse.json({ code: 'CONTENT_HIGH_RISK', error: err.message, findings: err.items }, { status: 422 })
     }
     throw err
   }
