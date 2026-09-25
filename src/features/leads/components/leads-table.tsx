@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Users, FileUp } from 'lucide-react'
 import { formatEnumLabel } from '@/lib/format'
+import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
 import type { LeadDTO } from '../types'
 
 interface LeadsTableProps {
@@ -98,6 +99,7 @@ export function LeadsTable({
                 <td className="py-3 px-4">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <StatusBadge status={lead.status} />
+                    <EmailCheckBadge check={lead.emailCheck} result={lead.emailCheckResult} checkedAt={lead.emailCheckedAt} />
                     {lead.canadaExclusion && (
                       <span title={`Not emailed: ${lead.canadaExclusion}. Canada's anti-spam law (CASL) requires consent.`}>
                         <Badge variant="danger">Excluded: Canada (CASL)</Badge>

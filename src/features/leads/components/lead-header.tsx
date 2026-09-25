@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
 import type { LeadDetailDTO } from '../types'
 import type { EngagementScore } from '../utils/compute-engagement-score'
@@ -67,6 +68,7 @@ export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps
             <Badge variant={STATUS_VARIANT[statusOverride ?? lead.status]}>
               {formatEnumLabel(statusOverride ?? lead.status)}
             </Badge>
+            <EmailCheckBadge check={lead.emailCheck} result={lead.emailCheckResult} checkedAt={lead.emailCheckedAt} />
             {lead.score !== null && (
               <Badge
                 variant={

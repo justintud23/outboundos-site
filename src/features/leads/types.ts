@@ -15,6 +15,9 @@ export type LeadDTO = Pick<
   | 'scoreReason'
   | 'scoredAt'
   | 'createdAt'
+  | 'emailCheck'
+  | 'emailCheckResult'
+  | 'emailCheckedAt'
 > & {
   // CASL: why this lead is excluded as Canadian (null/absent when it isn't,
   // or when the org allows Canadian recipients). Set by list queries.
@@ -111,6 +114,9 @@ export type LeadDetailDTO = Pick<
   | 'customFields'
   | 'createdAt'
   | 'updatedAt'
+  | 'emailCheck'
+  | 'emailCheckResult'
+  | 'emailCheckedAt'
 > & {
   lastActivityAt: Date
 }
