@@ -8,9 +8,11 @@ import type { SequenceDTO } from '@/features/sequences/types'
 interface SequencesClientProps {
   initialSequences: SequenceDTO[]
   campaigns: { id: string; name: string }[]
+  blockedPhrases: string[]
+  allowedWords: string[]
 }
 
-export function SequencesClient({ initialSequences, campaigns }: SequencesClientProps) {
+export function SequencesClient({ initialSequences, campaigns, blockedPhrases, allowedWords }: SequencesClientProps) {
   const [sequences] = useState(initialSequences)
   const [showCreate, setShowCreate] = useState(false)
 
@@ -36,7 +38,7 @@ export function SequencesClient({ initialSequences, campaigns }: SequencesClient
       {showCreate && campaigns.length > 0 && (
         <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-5 shadow-[var(--shadow-card)]">
           <h3 className="text-[var(--text-primary)] text-sm font-medium mb-4">New Sequence</h3>
-          <CreateSequenceForm campaigns={campaigns} onCreated={handleCreated} />
+          <CreateSequenceForm campaigns={campaigns} onCreated={handleCreated} blockedPhrases={blockedPhrases} allowedWords={allowedWords} />
         </div>
       )}
 

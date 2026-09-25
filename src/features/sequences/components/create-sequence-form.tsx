@@ -5,6 +5,8 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { checkContent } from '@/features/content-check/check-content'
+import { ContentRisk } from '@/features/content-check/components/content-risk'
 
 interface StepForm {
   subject: string
@@ -16,9 +18,11 @@ interface StepForm {
 interface CreateSequenceFormProps {
   campaigns: { id: string; name: string }[]
   onCreated: () => void
+  blockedPhrases?: string[]
+  allowedWords?: string[]
 }
 
-export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormProps) {
+export function CreateSequenceForm({ campaigns, onCreated, blockedPhrases = [], allowedWords = [] }: CreateSequenceFormProps) {
   const [name, setName] = useState('')
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? '')
   const [steps, setSteps] = useState<StepForm[]>([{ subject: '', body: '', delayDays: 0, personalizationPrompt: '' }])
@@ -132,6 +136,10 @@ export function CreateSequenceForm({ campaigns, onCreated }: CreateSequenceFormP
               required
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] rounded-[var(--radius-btn)] px-3 py-2 text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] resize-none"
             />
+            {(step.subject || step.body) && (() => {
+              const risk = checkContent({ subject: step.subject, body: step.body, isFirstStep: i === 0, blockedPhrases, allowedWords })
+              return <ContentRisk level={risk.level} findings={risk.findings} />
+            })()}
             <Input
               placeholder='AI line guidance (optional) — e.g. "Mention their property type and city"'
               value={step.personalizationPrompt}
