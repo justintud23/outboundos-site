@@ -305,6 +305,28 @@ Outbound mail is queued until your domains pass verification. Checks run on impo
 
 You receive one email when a domain **starts failing** checks and one email when it **recovers**. Alerts are sent from `MS_NOTIFY_MAILBOX` to the organization's escalation email.
 
+### Email Verification
+
+MillionVerifier validates each lead's email address when they're enrolled, catching invalid and risky addresses before they enter your sequence.
+
+- **Setup:** Set `MILLIONVERIFIER_API_KEY` in Vercel (Production, and Preview if wanted). Without it, verification is off and sending works as before. Imports cost nothing.
+- **Results per address:**
+  - **Verified** → sends normally.
+  - **Risky** (catch-all or unknown) → sends unless **Block risky emails** is on in Settings.
+  - **Invalid** or **disposable** → enrollment is stopped.
+  - Real bounces also mark an address Invalid.
+- **Timing:** Checks run every 5 minutes inside the sequence runner. Results are cached for 90 days. The first email waits for verification to complete; manual **Send** returns "This lead's email address is being verified. Try again in a few minutes."
+- **Alerts:** If credits run out or the key is rejected, first emails wait. You get one alert email, and the Deliverability page shows "Verification paused".
+
+### Content Check
+
+Every email step and subject variant gets a **Low / Medium / High** risk score, shown live in the sequence editor and campaign page.
+
+- **High-risk rules:** fake `Re:`/`Fwd:` on the first email, link shorteners, 3+ links in a single message, or blocked words and price amounts.
+- **Auto-send gate:** Campaigns with **High** content cannot enable auto-send (and live campaigns cannot be edited to High) until the content is fixed or a team member records an override reason (10–500 characters) on the campaign page.
+- **Override behavior:** An override stops applying when the email content changes, requiring re-approval.
+- **Personalization:** AI-inserted personalization lines (`{personalization}`) are still governed by per-email guardrails.
+
 ### What We Don't Do
 
 OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means careful real sending: a slow volume ramp on correctly authenticated domains, with bounce and complaint monitoring.
