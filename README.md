@@ -328,6 +328,16 @@ Every email step and subject variant gets a **Low / Medium / High** risk score, 
 - **Override behavior:** An override stops applying when the email content changes, requiring re-approval.
 - **Personalization:** AI-inserted personalization lines (`{personalization}`) are still governed by per-email guardrails.
 
+### Placement tests and blocklist alerts
+
+The **Placement test** card on a campaign's page (once Microsoft 365 is connected) sends the campaign's real first email, from a mailbox you choose, to seed addresses from a free placement tester — [unspam.email](https://unspam.email) or [EmailConsul](https://www.emailconsul.com) both work. Paste the seed addresses the tester gives you, pick a sequence, mailbox, and optionally a real enrolled lead (or use the built-in sample), and send. Read the inbox-placement results on the tester's own site — OutboundOS doesn't store or poll them.
+
+- Test sends count toward that mailbox's daily limit, exactly like a real send, so they respect warmup ramps and domain health.
+- Run a test before each new campaign goes live, and weekly while a domain is still ramping.
+- No results, no draft, and no lead record is created by a placement test — only an audit log entry (without the seed addresses).
+
+**Blocklist alerts (free):** add each sending domain to [HetrixTools' free Blacklist Monitor](https://hetrixtools.com/blacklist-monitor/) (up to 32 monitors on the free plan) with email alerts sent to your escalation address. Microsoft 365 sends from shared IPs, so monitor your **domains**, not IP addresses.
+
 ### What We Don't Do
 
 OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means careful real sending: a slow volume ramp on correctly authenticated domains, with bounce and complaint monitoring.

@@ -8,6 +8,8 @@ import { getCampaignDetail } from '@/features/campaigns/server/get-campaign-deta
 import { CampaignSendingPanel } from '@/features/campaigns/components/campaign-sending-panel'
 import { getCampaignContentStatus } from '@/features/content-check/server/content-gate'
 import { CampaignContentPanel } from '@/features/content-check/components/campaign-content-panel'
+import { getPlacementTestOptions } from '@/features/placement-test/server/get-placement-test-options'
+import { PlacementTestCard } from '@/features/placement-test/components/placement-test-card'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { formatEnumLabel } from '@/lib/format'
 import type { CampaignStatus, DraftStatus, ReplyClassification } from '@prisma/client'
@@ -166,6 +168,11 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const campaign = await getCampaignDetail({ organizationId: org.id, campaignId })
   if (!campaign) notFound()
   const contentStatus = await getCampaignContentStatus(org.id, campaign.id)
+  const placementTestOptions = await getPlacementTestOptions({
+    organizationId: org.id,
+    campaignId: campaign.id,
+    hasMsTenant: !!org.msTenantId,
+  })
 
   const positiveRate = campaign.replyCount > 0 ? `${((campaign.positiveReplyCount / campaign.replyCount) * 100).toFixed(0)}% positive` : null
 
@@ -215,6 +222,14 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         />
 
         {contentStatus && <CampaignContentPanel campaignId={campaign.id} status={contentStatus} />}
+
+        <PlacementTestCard
+          campaignId={campaign.id}
+          sequences={placementTestOptions.sequences}
+          mailboxes={placementTestOptions.mailboxes}
+          leads={placementTestOptions.leads}
+          msConnected={!!org.msTenantId}
+        />
 
         <DraftsSection drafts={campaign.drafts} draftTotal={campaign.draftTotal} />
         <RepliesSection replies={campaign.replies} replyCount={campaign.replyCount} />
