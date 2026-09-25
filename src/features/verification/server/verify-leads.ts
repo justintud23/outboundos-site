@@ -86,7 +86,10 @@ export async function verifyPendingLeads(budgetMs = VERIFY_BUDGET_MS, deps: Deps
 
   if (succeededOrgs.size > 0) {
     await prisma.organization.updateMany({
-      where: { id: { in: [...succeededOrgs] }, verificationAlertedAt: { not: null } },
+      where: {
+        id: { in: [...succeededOrgs] },
+        OR: [{ verificationAlertedAt: { not: null } }, { verificationPausedReason: { not: null } }],
+      },
       data: { verificationAlertedAt: null, verificationPausedReason: null },
     })
   }

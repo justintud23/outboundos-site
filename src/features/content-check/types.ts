@@ -2,9 +2,14 @@ import type { ItemResult } from './campaign-content'
 import type { Severity } from './check-content'
 
 export class ContentHighRiskError extends Error {
-  constructor(public readonly items: ItemResult[]) {
+  constructor(
+    public readonly items: ItemResult[],
+    public readonly context: 'enable' | 'edit' = 'enable',
+  ) {
     super(
-      `High spam risk in ${items.map((i) => i.label).join(', ')}. Fix the flagged content, or record an override on the campaign page.`,
+      context === 'edit'
+        ? `High spam risk in ${items.map((i) => i.label).join(', ')}. This campaign is sending automatically: fix the flagged content, or pause automatic sending, save, then record an override on the campaign page.`
+        : `High spam risk in ${items.map((i) => i.label).join(', ')}. Fix the flagged content, or record an override on the campaign page.`,
     )
     this.name = 'ContentHighRiskError'
     Object.setPrototypeOf(this, ContentHighRiskError.prototype)

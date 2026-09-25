@@ -21,6 +21,18 @@ describe('checkContent', () => {
     expect(rules({ body: `${CLEAN_BODY}\nhttps://bit.ly/abc` })).toContain('shortener:HIGH')
   })
 
+  it('flags a shortener link with no path (host followed by /, ?, # or end)', () => {
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://bit.ly` })).toContain('shortener:HIGH')
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://bit.ly?x=1` })).toContain('shortener:HIGH')
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://bit.ly#frag` })).toContain('shortener:HIGH')
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://t.co` })).toContain('shortener:HIGH')
+  })
+
+  it('does not flag domains that merely start with a shortener name', () => {
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://bit.lyrics.com` })).not.toContain('shortener:HIGH')
+    expect(rules({ body: `${CLEAN_BODY}\nhttps://mybit.ly.com` })).not.toContain('shortener:HIGH')
+  })
+
   it('grades link counts: 1 ok, 2 MEDIUM, 3+ HIGH', () => {
     expect(rules({ body: `${CLEAN_BODY}\nhttps://acme.com` })).toEqual([])
     expect(rules({ body: `${CLEAN_BODY}\nhttps://acme.com www.acme.com/snow` })).toContain('two-links:MEDIUM')

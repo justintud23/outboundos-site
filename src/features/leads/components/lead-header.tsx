@@ -61,7 +61,7 @@ export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps
       {/* Main header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-[var(--text-primary)] text-xl font-semibold truncate">
               {name}
             </h1>

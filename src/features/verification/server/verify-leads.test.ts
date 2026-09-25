@@ -123,7 +123,34 @@ describe('verifyPendingLeads', () => {
     p.lead.findMany.mockResolvedValueOnce([lead('a')])
     await verifyPendingLeads(10_000, { verifier: verifier(() => ({ kind: 'result', result: 'ok' })), now: () => T0 })
     expect(p.organization.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['org-1'] }, verificationAlertedAt: { not: null } },
+      where: {
+        id: { in: ['org-1'] },
+        OR: [{ verificationAlertedAt: { not: null } }, { verificationPausedReason: { not: null } }],
+      },
+      data: { verificationAlertedAt: null, verificationPausedReason: null },
+    })
+  })
+
+  it('clears verificationPausedReason on a later successful run even when the alert send failed and left the reason set (I-1)', async () => {
+    // Run 1: account error, alert send fails -> claim released but verificationPausedReason stays set.
+    p.lead.findMany.mockResolvedValueOnce([lead('a')]).mockResolvedValueOnce([{ organizationId: 'org-1' }])
+    alert.mockResolvedValueOnce(false)
+    await verifyPendingLeads(10_000, { verifier: verifier(() => ({ kind: 'account', reason: 'bad_key' })), now: () => T0 })
+    expect(p.organization.update).toHaveBeenCalledWith({ where: { id: 'org-1' }, data: { verificationAlertedAt: null } })
+
+    vi.clearAllMocks()
+    p.lead.updateMany.mockResolvedValue({ count: 1 })
+    p.organization.updateMany.mockResolvedValue({ count: 1 })
+
+    // Run 2: a successful result for org-1 must still clear verificationPausedReason,
+    // even though verificationAlertedAt is already null.
+    p.lead.findMany.mockResolvedValueOnce([lead('a')])
+    await verifyPendingLeads(10_000, { verifier: verifier(() => ({ kind: 'result', result: 'ok' })), now: () => T0 })
+    expect(p.organization.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['org-1'] },
+        OR: [{ verificationAlertedAt: { not: null } }, { verificationPausedReason: { not: null } }],
+      },
       data: { verificationAlertedAt: null, verificationPausedReason: null },
     })
   })

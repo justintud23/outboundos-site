@@ -26,6 +26,7 @@ describe('CampaignContentPanel', () => {
     expect(screen.getAllByText('High risk').length).toBeGreaterThan(0)
     expect(screen.getByText('Fall — step 1')).toBeInTheDocument()
     expect(screen.getByText(/Remove "Re:"/)).toBeInTheDocument()
+    expect(screen.getByText(/Automatic sending can't be turned on, and live edits are refused, while any email is High risk\./)).toBeInTheDocument()
   })
 
   it('records an override with a reason', async () => {

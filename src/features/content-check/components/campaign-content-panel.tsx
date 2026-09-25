@@ -67,7 +67,7 @@ export function CampaignContentPanel({ campaignId, status }: { campaignId: strin
       {status.level === 'HIGH' && !overrideValid && (
         <div className="space-y-2">
           <p className="text-[var(--text-secondary)] text-xs">
-            Automatic sending is blocked while any email is High risk. Fix the issues above, or record why this wording is intended.
+            Automatic sending can&apos;t be turned on, and live edits are refused, while any email is High risk. Fix the issues above, or record why this wording is intended.
           </p>
           <label className="block text-xs text-[var(--text-secondary)]" htmlFor={`override-${campaignId}`}>
             Override reason

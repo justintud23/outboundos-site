@@ -90,7 +90,10 @@ export async function assertContentAllowed(input: {
   const evaluation = evaluateItems(items, loaded.blockedPhrases, loaded.allowedWords)
   if (evaluation.level !== 'HIGH') return
   if (loaded.override && loaded.override.hash === contentHash(items)) return
-  throw new ContentHighRiskError(evaluation.items.filter((i) => i.level === 'HIGH'))
+  throw new ContentHighRiskError(
+    evaluation.items.filter((i) => i.level === 'HIGH'),
+    input.enablingAutoSend ? 'enable' : 'edit',
+  )
 }
 
 export async function getCampaignContentStatus(organizationId: string, campaignId: string): Promise<ContentStatusDTO | null> {

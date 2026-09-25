@@ -24,6 +24,12 @@ describe('VerificationCard', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
+  it('labels the invalid count "Invalid" (M-8)', () => {
+    render(<VerificationCard summary={{ configured: true, pending: 0, risky: 0, invalid: 1, pausedReason: null }} />)
+    expect(screen.getByText('Invalid')).toBeInTheDocument()
+    expect(screen.queryByText('Invalid (not emailed)')).not.toBeInTheDocument()
+  })
+
   it('explains when verification is not configured', () => {
     render(<VerificationCard summary={{ configured: false, pending: 0, risky: 0, invalid: 0, pausedReason: null }} />)
     expect(screen.getByText(/Verification not configured/)).toBeInTheDocument()

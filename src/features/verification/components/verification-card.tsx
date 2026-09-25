@@ -19,7 +19,7 @@ export function VerificationCard({ summary }: { summary: VerificationSummaryDTO 
             {([
               ['Waiting for verification', summary.pending],
               ['Risky (catch-all / unknown)', summary.risky],
-              ['Invalid (not emailed)', summary.invalid],
+              ['Invalid', summary.invalid],
             ] as const).map(([label, value]) => (
               <div key={label} className="rounded-[var(--radius-btn)] border border-[var(--border-default)] p-3">
                 <dt className="text-[var(--text-muted)] text-xs">{label}</dt>

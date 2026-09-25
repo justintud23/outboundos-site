@@ -310,6 +310,7 @@ You receive one email when a domain **starts failing** checks and one email when
 MillionVerifier validates each lead's email address when they're enrolled, catching invalid and risky addresses before they enter your sequence.
 
 - **Setup:** Set `MILLIONVERIFIER_API_KEY` in Vercel (Production, and Preview if wanted). Without it, verification is off and sending works as before. Imports cost nothing.
+- **Turning it on:** drafts already waiting for review or in an unapproved sample batch when you first set the key are not re-checked — approve or reject them before adding the key.
 - **Results per address:**
   - **Verified** → sends normally.
   - **Risky** (catch-all or unknown) → sends unless **Block risky emails** is on in Settings.

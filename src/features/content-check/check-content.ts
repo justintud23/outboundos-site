@@ -73,7 +73,11 @@ export function checkContent(input: ContentInput): ContentResult {
   }
 
   const links = body.match(LINK) ?? []
-  const shortened = links.find((l) => SHORTENERS.some((s) => l.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').startsWith(`${s}/`)))
+  const shortened = links.find((l) => {
+    const stripped = l.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '')
+    const host = stripped.match(/^[^/?#]+/)?.[0] ?? stripped
+    return SHORTENERS.includes(host)
+  })
   if (shortened) add('shortener', 'HIGH', shortened, 'Use the full link to your own site; shortened links are a strong spam signal.')
   if (links.length >= 3) add('too-many-links', 'HIGH', `${links.length} links`, 'Keep cold emails to one link at most (the unsubscribe footer is added for you).')
   else if (links.length === 2) add('two-links', 'MEDIUM', '2 links', 'Cut to one link, or none — ask for a reply instead.')

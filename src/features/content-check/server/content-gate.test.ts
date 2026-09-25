@@ -70,13 +70,25 @@ describe('assertContentAllowed', () => {
     await expect(assertContentAllowed({ organizationId: 'org-1', campaignId: 'camp-1', apply })).rejects.toBeInstanceOf(ContentHighRiskError)
   })
 
-  it('honors an override whose hash matches the content being saved, and rejects it after a further change', async () => {
+  it('honors an override recorded on the saved content, and refuses a further HIGH edit with the edit-context message (I-2)', async () => {
     const high = campaign({ sequences: [{ id: 'seq-1', name: 'Fall', steps: [{ id: 'st-1', stepNumber: 1, subject: 'Re: your lot', body: GOOD, subjectVariants: [] }] }] })
-    const items = (await (async () => { find.mockResolvedValueOnce(high); return (await loadCampaignContent('org-1', 'camp-1'))!.items })())
-    find.mockResolvedValue({ ...high, contentOverrideHash: contentHash(items), contentOverrideReason: 'Existing customer thread' })
+    find.mockResolvedValueOnce(high)
+    const saved = (await loadCampaignContent('org-1', 'camp-1'))!.items
+    // The override hash is computed from the SAVED content only, exactly as recordContentOverride does it.
+    const overrideHash = contentHash(saved)
+    find.mockResolvedValue({ ...high, contentOverrideHash: overrideHash, contentOverrideReason: 'Existing customer thread' })
+
+    // (a) enabling auto-send against the unchanged saved HIGH content, with a matching override, resolves.
     await expect(assertContentAllowed({ organizationId: 'org-1', campaignId: 'camp-1', enablingAutoSend: true })).resolves.toBeUndefined()
-    const apply = (xs: typeof items) => xs.map((i) => ({ ...i, subject: 'RE: your lot!!' }))
-    await expect(assertContentAllowed({ organizationId: 'org-1', campaignId: 'camp-1', apply })).rejects.toBeInstanceOf(ContentHighRiskError)
+
+    // (b) a further HIGH edit no longer matches the recorded override hash and is refused with the 'edit' message.
+    const apply = (xs: typeof saved) => xs.map((i) => ({ ...i, subject: 'RE: your lot!!' }))
+    const err = await assertContentAllowed({ organizationId: 'org-1', campaignId: 'camp-1', apply }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ContentHighRiskError)
+    expect((err as ContentHighRiskError).context).toBe('edit')
+    expect((err as ContentHighRiskError).message).toBe(
+      'High spam risk in Fall — step 1. This campaign is sending automatically: fix the flagged content, or pause automatic sending, save, then record an override on the campaign page.',
+    )
   })
 
   it('contentHash is order-independent and content-sensitive', () => {
@@ -117,5 +129,29 @@ describe('getCampaignContentStatus', () => {
     expect(status!.level).toBe('LOW')
     expect(status!.items).toHaveLength(2)
     expect(status!.override).toEqual({ reason: 'Old reason here', by: 'user_1', at: '2026-09-20T00:00:00.000Z', valid: false })
+  })
+})
+
+describe('ContentHighRiskError messages (I-2)', () => {
+  const items = stepItems('seq-1', 'Fall', [{ stepNumber: 1, subject: 'Re: your lot', body: GOOD }]).map((i) => ({ ...i, level: 'HIGH' as const, findings: [] }))
+
+  it('defaults to the enable-context message', () => {
+    const err = new ContentHighRiskError(items)
+    expect(err.context).toBe('enable')
+    expect(err.message).toBe('High spam risk in Fall — step 1. Fix the flagged content, or record an override on the campaign page.')
+  })
+
+  it('uses the enable-context message when context is "enable"', () => {
+    const err = new ContentHighRiskError(items, 'enable')
+    expect(err.context).toBe('enable')
+    expect(err.message).toBe('High spam risk in Fall — step 1. Fix the flagged content, or record an override on the campaign page.')
+  })
+
+  it('uses the edit-context message when context is "edit"', () => {
+    const err = new ContentHighRiskError(items, 'edit')
+    expect(err.context).toBe('edit')
+    expect(err.message).toBe(
+      'High spam risk in Fall — step 1. This campaign is sending automatically: fix the flagged content, or pause automatic sending, save, then record an override on the campaign page.',
+    )
   })
 })
