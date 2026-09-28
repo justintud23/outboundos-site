@@ -4,7 +4,9 @@ import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { setMailboxWarmup } from '@/features/mailboxes/server/set-mailbox-warmup'
 import { resumeMailbox } from '@/features/mailboxes/server/resume-mailbox'
 import { setMailboxRampPreset, restartMailboxRamp } from '@/features/mailboxes/server/set-mailbox-ramp'
-import { MailboxNotFoundError } from '@/features/mailboxes/types'
+import { MailboxNotFoundError, toMailboxDTO } from '@/features/mailboxes/types'
+import { assignOwner, InvalidOwnerError } from '@/features/team/server/assign-owner'
+import { prisma } from '@/lib/db/prisma'
 
 export async function PATCH(
   request: Request,
@@ -20,7 +22,7 @@ export async function PATCH(
 
   const { id } = await params
 
-  let body: { warmupEnabled?: unknown; resume?: unknown; rampPreset?: unknown; restartRamp?: unknown }
+  let body: { warmupEnabled?: unknown; resume?: unknown; rampPreset?: unknown; restartRamp?: unknown; ownerId?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -56,11 +58,27 @@ export async function PATCH(
       return NextResponse.json(mailbox)
     }
 
+    // Assign (or clear) the mailbox's owner.
+    if (body.ownerId !== undefined) {
+      if (body.ownerId !== null && typeof body.ownerId !== 'string') {
+        return NextResponse.json({ error: 'ownerId must be a string or null' }, { status: 400 })
+      }
+      const found = await assignOwner(ctx.org.id, 'mailbox', id, body.ownerId)
+      if (!found) {
+        return NextResponse.json({ error: 'Mailbox not found.' }, { status: 404 })
+      }
+      const updated = await prisma.mailbox.findUniqueOrThrow({ where: { id } })
+      return NextResponse.json(toMailboxDTO(updated))
+    }
+
     return NextResponse.json(
-      { error: 'Provide warmupEnabled (boolean), resume: true, restartRamp: true, or rampPreset (CONSERVATIVE, STANDARD, AGGRESSIVE)' },
+      { error: 'Provide warmupEnabled (boolean), resume: true, restartRamp: true, rampPreset (CONSERVATIVE, STANDARD, AGGRESSIVE), or ownerId (string or null)' },
       { status: 400 },
     )
   } catch (err) {
+    if (err instanceof InvalidOwnerError) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
+    }
     if (err instanceof MailboxNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 404 })
     }

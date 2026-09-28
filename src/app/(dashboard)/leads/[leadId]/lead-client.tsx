@@ -19,6 +19,7 @@ import {
 import type { LeadDetailDTO, TimelineItem, LeadSequenceDTO } from '@/features/leads/types'
 import type { ThreadMessageDTO } from '@/features/inbox/types'
 import type { NextAction, ActionType } from '@/features/actions/types'
+import type { MemberSummary } from '@/features/team/server/assign-owner'
 import type { LeadStatus } from '@prisma/client'
 
 const SHORTCUT_MAP: Record<string, ActionType> = {
@@ -37,6 +38,8 @@ interface LeadCommandCenterProps {
   messages: ThreadMessageDTO[]
   sequence: LeadSequenceDTO | null
   actions: NextAction[]
+  isAdmin: boolean
+  members: MemberSummary[]
 }
 
 export function LeadCommandCenter({
@@ -45,6 +48,8 @@ export function LeadCommandCenter({
   messages,
   sequence,
   actions,
+  isAdmin,
+  members,
 }: LeadCommandCenterProps) {
   const [activeTab, setActiveTab] = useState<Tab>('timeline')
   const router = useRouter()
@@ -204,7 +209,7 @@ export function LeadCommandCenter({
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Lead Header */}
-      <LeadHeader lead={lead} statusOverride={optimisticStatus} engagement={engagement} />
+      <LeadHeader lead={lead} statusOverride={optimisticStatus} engagement={engagement} isAdmin={isAdmin} members={members} />
 
       {/* Main 2-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

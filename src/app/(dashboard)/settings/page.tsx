@@ -1,24 +1,25 @@
-import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { SettingsClient } from './settings-client'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 import { getSendingSettings } from '@/features/settings/server/sending-settings'
 import { getBusinessProfile } from '@/features/business-profile/server/profile'
+import { listMembers } from '@/features/team/server/assign-owner'
 
 export default async function SettingsPage() {
-  const { orgId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId) {
+  if (!ctx) {
     redirect('/dashboard')
   }
 
-  const org = await resolveOrganization(orgId)
-  const [mailboxes, sendingSettings, businessProfile] = await Promise.all([
+  const { org, isAdmin } = ctx
+  const [mailboxes, sendingSettings, businessProfile, members] = await Promise.all([
     getMailboxes(org.id),
     getSendingSettings(org.id),
     getBusinessProfile(org.id),
+    isAdmin ? listMembers(org.id) : Promise.resolve([]),
   ])
 
   return (
@@ -29,6 +30,8 @@ export default async function SettingsPage() {
           initialMailboxes={mailboxes}
           sendingSettings={sendingSettings}
           businessProfile={businessProfile}
+          isAdmin={isAdmin}
+          members={members}
         />
       </div>
     </>

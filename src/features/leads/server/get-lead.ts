@@ -34,6 +34,8 @@ export async function getLead({
       emailCheckResult: true,
       emailCheckedAt: true,
       scoreBreakdown: true,
+      ownerId: true,
+      owner: { select: { name: true, email: true } },
     },
   })
 
@@ -60,5 +62,6 @@ export async function getLead({
   if (latestInbound?.receivedAt) dates.push(latestInbound.receivedAt)
   const lastActivityAt = new Date(Math.max(...dates.map((d) => d.getTime())))
 
-  return { ...lead, lastActivityAt }
+  const { owner, ...rest } = lead
+  return { ...rest, lastActivityAt, ownerName: owner?.name ?? owner?.email ?? null }
 }

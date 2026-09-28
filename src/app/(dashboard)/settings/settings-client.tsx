@@ -9,15 +9,19 @@ import type { SendingSettingsDTO } from '@/features/settings/server/sending-sett
 import { MicrosoftCard } from '@/features/settings/components/microsoft-card'
 import { SendingSettingsForm } from '@/features/settings/components/sending-settings-form'
 import { BusinessProfileSection } from '@/features/business-profile/components/business-profile-section'
+import { OwnerSelect } from '@/features/team/components/owner-select'
 import type { BusinessProfileDTO } from '@/features/business-profile/types'
+import type { MemberSummary } from '@/features/team/server/assign-owner'
 
 interface SettingsClientProps {
   initialMailboxes: MailboxDTO[]
   sendingSettings: SendingSettingsDTO
   businessProfile: BusinessProfileDTO | null
+  isAdmin: boolean
+  members: MemberSummary[]
 }
 
-export function SettingsClient({ initialMailboxes, sendingSettings, businessProfile }: SettingsClientProps) {
+export function SettingsClient({ initialMailboxes, sendingSettings, businessProfile, isAdmin, members }: SettingsClientProps) {
   const [mailboxes, setMailboxes] = useState<MailboxDTO[]>(initialMailboxes)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -135,6 +139,11 @@ export function SettingsClient({ initialMailboxes, sendingSettings, businessProf
                     </span>
                   ) : null}
                 </div>
+                {isAdmin && (
+                  <div className="w-44">
+                    <OwnerSelect endpoint={`/api/mailboxes/${mb.id}`} members={members} value={mb.ownerId} />
+                  </div>
+                )}
                 {mb.autoPaused ? (
                   <button
                     type="button"

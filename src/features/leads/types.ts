@@ -122,6 +122,9 @@ export type LeadDetailDTO = Pick<
   | 'scoreBreakdown'
 > & {
   lastActivityAt: Date
+  // Rep ownership: owner.name ?? owner.email, or null when unowned.
+  ownerId: string | null
+  ownerName: string | null
 }
 
 // ─── Timeline ───────────────────────────────────────────────
