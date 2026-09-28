@@ -25,6 +25,7 @@ import { isDomainUsable } from '@/features/deliverability/readiness'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 import { verificationGate } from '@/features/verification/gate'
 import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
 import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
@@ -55,6 +56,7 @@ export async function sendDraft({
           emailCheck: true,
           emailCheckResult: true,
           emailCheckedAt: true,
+          ownerId: true,
         },
       },
     },
@@ -199,8 +201,15 @@ export async function sendDraft({
     }
     mailboxes = [pinned]
   } else {
+    const ownerFilter = await mailboxOwnerFilter(organizationId, draft.lead.ownerId ?? null)
     mailboxes = await prisma.mailbox.findMany({
-      where: { organizationId, isActive: true, autoPaused: false, ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }) },
+      where: {
+        organizationId,
+        isActive: true,
+        autoPaused: false,
+        ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }),
+        ...ownerFilter,
+      },
     })
     if (mailboxes.length === 0) {
       throw new NoActiveMailboxError()

@@ -4,7 +4,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     draft: { findFirst: vi.fn() },
     organization: { findUnique: vi.fn() },
-    mailbox: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    mailbox: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     sequenceEnrollment: { findFirst: vi.fn() },
     outboundMessage: {
       create: vi.fn(),
@@ -63,7 +63,7 @@ type Fn = ReturnType<typeof vi.fn>
 const mockPrisma = prisma as unknown as {
   draft: { findFirst: Fn }
   organization: { findUnique: Fn }
-  mailbox: { findMany: Fn; findFirst: Fn; updateMany: Fn }
+  mailbox: { findMany: Fn; findFirst: Fn; updateMany: Fn; count: Fn }
   sequenceEnrollment: { findFirst: Fn }
   outboundMessage: { create: Fn; findUnique: Fn; findMany: Fn; findFirst: Fn; update: Fn; delete: Fn }
   lead: { updateMany: Fn }
@@ -203,6 +203,7 @@ beforeEach(() => {
     return m && m.organizationId === where.organizationId ? { ...m } : null
   })
   mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-1' })
+  mockPrisma.mailbox.count.mockResolvedValue(0)
 
   // Atomic conditional updateMany simulator: reset / reserve / release.
   mockPrisma.mailbox.updateMany.mockImplementation(async ({ where, data }: UpdateManyArgs) => {
@@ -795,7 +796,7 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
     mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1', businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
     await sendDraft(INPUT)
     expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
-      organizationId: 'org-1', isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH',
+      organizationId: 'org-1', isActive: true, autoPaused: false, provider: 'MICROSOFT_GRAPH', ownerId: null,
     })
   })
 
@@ -803,7 +804,7 @@ describe('sendDraft — sequence mailbox pinning (I2) and provider filter (I3)',
     mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
     await sendDraft(INPUT)
     expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
-      organizationId: 'org-1', isActive: true, autoPaused: false,
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: null,
     })
   })
 
@@ -881,6 +882,49 @@ describe('sendDraft — domain health enforcement (Task 6)', () => {
       ([args]) => typeof (args as UpdateManyArgs).where.sentToday?.lt === 'number',
     )
     expect((reserveCall?.[0] as UpdateManyArgs).where.sentToday?.lt).toBe(10)
+  })
+})
+
+describe('sendDraft — mailbox choice by owner, non-sequence rotation (Task 6)', () => {
+  it('a lead owned by a rep who owns mailboxes: the rotation query is scoped to that owner', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, lead: { ...fakeDraft.lead, ownerId: 'm-rep' } })
+    mockPrisma.mailbox.count.mockResolvedValue(1)
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm-rep' } })
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: 'm-rep',
+    })
+  })
+
+  it('a lead with no owner: the rotation query falls back to shared mailboxes (ownerId: null)', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, lead: { ...fakeDraft.lead, ownerId: null } })
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.count).not.toHaveBeenCalled()
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: null,
+    })
+  })
+
+  it('a lead owned by a rep who owns NO mailboxes: falls back to shared mailboxes', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({ ...fakeDraft, lead: { ...fakeDraft.lead, ownerId: 'm-rep' } })
+    mockPrisma.mailbox.count.mockResolvedValue(0)
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: null,
+    })
+  })
+
+  it('pinned-enrollment branch is unchanged: no mailbox.count call, no ownerId in the pinned lookup', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      sequenceEnrollmentId: 'enr-1',
+      lead: { ...fakeDraft.lead, ownerId: 'm-rep' },
+    })
+    mockPrisma.sequenceEnrollment.findFirst.mockResolvedValue({ mailboxId: 'mb-1' })
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.count).not.toHaveBeenCalled()
+    expect(mockPrisma.mailbox.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.mailbox.findFirst).toHaveBeenCalledWith({ where: { id: 'mb-1', organizationId: 'org-1' } })
   })
 })
 
