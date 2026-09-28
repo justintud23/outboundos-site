@@ -1,29 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
-vi.mock('@/lib/auth/resolve-organization', () => ({ resolveOrganization: vi.fn(async () => ({ id: 'org-1' })) }))
+vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
+vi.mock('@/features/team/server/owners', () => ({ getCampaignOwnerId: vi.fn() }))
 vi.mock('@/features/placement-test/server/send-placement-test', async (importOriginal) => {
   const actual = await importOriginal() as Record<string, unknown>
   return { ...actual, sendPlacementTest: vi.fn() }
 })
 
-import { auth } from '@clerk/nextjs/server'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getCampaignOwnerId } from '@/features/team/server/owners'
 import { sendPlacementTest, PlacementTestError } from '@/features/placement-test/server/send-placement-test'
 import { POST } from './route'
+
+const rep = { org: { id: 'org-1' }, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
+const admin = { org: { id: 'org-1' }, member: { id: 'm-admin', clerkUserId: 'user_admin' }, isAdmin: true }
 
 const call = (body: unknown) =>
   POST(new Request('http://x', { method: 'POST', body: JSON.stringify(body) }), { params: Promise.resolve({ id: 'camp-1' }) })
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(auth).mockResolvedValue({ orgId: 'clerk-org', userId: 'user_1' } as never)
+  vi.mocked(resolveMember).mockResolvedValue(rep as never)
+  vi.mocked(getCampaignOwnerId).mockResolvedValue('m-rep')
 })
 
 const VALID_BODY = { sequenceId: 'seq-1', mailboxId: 'mb-1', seeds: ['a@tester.com'] }
 
 describe('POST /api/campaigns/[id]/placement-test', () => {
   it('403 without an org', async () => {
-    vi.mocked(auth).mockResolvedValue({ orgId: null, userId: null } as never)
+    vi.mocked(resolveMember).mockResolvedValue(null)
     expect((await call(VALID_BODY)).status).toBe(403)
     expect(sendPlacementTest).not.toHaveBeenCalled()
   })
@@ -78,7 +83,7 @@ describe('POST /api/campaigns/[id]/placement-test', () => {
       mailboxId: 'mb-1',
       leadId: 'lead-1',
       seeds: ['a@tester.com'],
-      clerkUserId: 'user_1',
+      clerkUserId: 'user_rep',
     })
   })
 
@@ -92,5 +97,22 @@ describe('POST /api/campaigns/[id]/placement-test', () => {
     vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: true })
     const res = await call(VALID_BODY)
     expect(await res.json()).toMatchObject({ personalizationSkipped: true })
+  })
+
+  it.each([
+    ["another rep's campaign", rep, 'm-other', 403],
+    ['an unassigned campaign', rep, null, 403],
+    ['their own campaign', rep, 'm-rep', 200],
+    ['any campaign as admin', admin, 'm-other', 200],
+  ])('member acting on %s → %i', async (_label, ctx, ownerId, status) => {
+    vi.mocked(resolveMember).mockResolvedValue(ctx as never)
+    vi.mocked(getCampaignOwnerId).mockResolvedValue(ownerId as string | null)
+    vi.mocked(sendPlacementTest).mockResolvedValue({ mailbox: 'rep@company.com', requested: 1, sent: 1, failed: [], personalizationSkipped: false })
+    const res = await call(VALID_BODY)
+    expect(res.status).toBe(status)
+    if (status === 403) {
+      expect((await res.json()).code).toBe('NOT_OWNER')
+      expect(sendPlacementTest).not.toHaveBeenCalled()
+    }
   })
 })

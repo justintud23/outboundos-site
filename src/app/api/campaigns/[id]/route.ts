@@ -1,13 +1,17 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getCampaignOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { updateCampaignSending, CampaignNotFoundError } from '@/features/campaigns/server/campaign-sending'
 import { ContentHighRiskError } from '@/features/content-check/types'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
   const { id } = await params
+
+  const denied = denyUnlessCanAct(ctx, await getCampaignOwnerId(ctx.org.id, id))
+  if (denied) return denied
 
   const body = (await request.json().catch(() => null)) as { autoSend?: unknown; sampleSize?: unknown } | null
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
@@ -19,9 +23,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   try {
-    const org = await resolveOrganization(orgId)
     const updated = await updateCampaignSending({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       campaignId: id,
       autoSend: body.autoSend as boolean | undefined,
       sampleSize: body.sampleSize as number | undefined,

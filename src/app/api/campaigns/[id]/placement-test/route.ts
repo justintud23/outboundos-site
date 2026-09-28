@@ -1,6 +1,7 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getCampaignOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { sendPlacementTest, PlacementTestError } from '@/features/placement-test/server/send-placement-test'
 
 export const maxDuration = 60
@@ -13,12 +14,16 @@ interface PlacementTestBody {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'No active organization. Select an organization to continue.' }, { status: 403 })
   }
 
   const { id: campaignId } = await params
+
+  const denied = denyUnlessCanAct(ctx, await getCampaignOwnerId(ctx.org.id, campaignId))
+  if (denied) return denied
+
   const body = (await request.json().catch(() => null)) as PlacementTestBody | null
 
   if (
@@ -33,15 +38,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const org = await resolveOrganization(orgId)
     const result = await sendPlacementTest({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       campaignId,
       sequenceId: body.sequenceId,
       mailboxId: body.mailboxId,
       leadId: (body.leadId as string | null | undefined) ?? null,
       seeds: body.seeds as string[],
-      clerkUserId: userId,
+      clerkUserId: ctx.member.clerkUserId,
     })
     return NextResponse.json(result)
   } catch (err) {
