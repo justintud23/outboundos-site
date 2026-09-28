@@ -20,6 +20,9 @@ vi.mock('./assign-mailbox', () => ({ assignEnrollmentMailbox: vi.fn() }))
 const { personalize } = vi.hoisted(() => ({ personalize: vi.fn() }))
 vi.mock('@/lib/ai', () => ({ getAIProvider: () => ({ personalize }) }))
 
+const { getLeadContext } = vi.hoisted(() => ({ getLeadContext: vi.fn() }))
+vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadContext }))
+
 import { prisma } from '@/lib/db/prisma'
 import { checkEnrollmentStop } from './check-enrollment-stop'
 import { assignEnrollmentMailbox } from './assign-mailbox'
@@ -28,6 +31,8 @@ import { runSequenceStep } from './run-sequence-step'
 const mockEnrollmentFind = prisma.sequenceEnrollment.findFirst as ReturnType<typeof vi.fn>
 const mockCheckStop = checkEnrollmentStop as ReturnType<typeof vi.fn>
 const mockTransaction = prisma.$transaction as ReturnType<typeof vi.fn>
+
+const NO_PROFILE_FACTS = { zip: null, city: null, state: null, propertyType: null, sites: null, acres: null, relationship: null }
 
 function makeEnrollment(overrides: Record<string, unknown> = {}) {
   return {
@@ -79,6 +84,7 @@ const autoCampaign = (sampleApprovedAt: Date | null) => ({
 
 beforeEach(() => {
   vi.resetAllMocks()
+  getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
 })
 
 describe('runSequenceStep', () => {
@@ -376,6 +382,45 @@ describe('runSequenceStep — auto-send pipeline', () => {
       expect(draftCreate).toHaveBeenCalledTimes(1)
       expect(mockDraftFind()).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('runSequenceStep — business-profile context (Task 11)', () => {
+  beforeEach(() => {
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+    ;(assignEnrollmentMailbox as ReturnType<typeof vi.fn>).mockResolvedValue('mb-1')
+    personalize.mockResolvedValue('Saw Acme runs several plazas.')
+  })
+
+  it('with a profile context: personalize receives profile and facts, and {city|fallback} renders the derived city', async () => {
+    const profile = { companySummary: 'We plow commercial lots.', services: ['Snow removal'] }
+    const facts = { zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null }
+    getLeadContext.mockResolvedValue({ profile, facts, distanceMiles: 8 })
+
+    const seq = autoCampaign(new Date())
+    seq.steps[0].body = 'Hi {firstName|there},\n\n{personalization}\n\nWe cover {city|your area}.'
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({
+      sequence: seq,
+      lead: { ...makeEnrollment().lead, customFields: { property_city: 'Amherst' } },
+    }))
+    const { draftCreate } = txFake()
+
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('QUEUED')
+    expect(personalize).toHaveBeenCalledWith(
+      expect.objectContaining({ profile, facts: { ...facts, distanceMiles: 8 } }),
+      'Mention their company.',
+    )
+    expect(draftCreate.mock.calls[0]![0].data.body).toContain('We cover Amherst.')
+  })
+
+  it('with profile: null, personalize receives exactly the old five keys (no profile/facts) (Review Focus #5)', async () => {
+    getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment({ sequence: autoCampaign(new Date()) }))
+    txFake()
+
+    await runSequenceStep({ enrollmentId: 'enroll-1' })
+    const input = personalize.mock.calls[0]![0] as Record<string, unknown>
+    expect(Object.keys(input).sort()).toEqual(['company', 'customFields', 'firstName', 'lastName', 'title'].sort())
   })
 })
 

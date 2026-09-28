@@ -221,6 +221,36 @@ describe('OpenAIProvider.personalize', () => {
     expect(args.messages[1].content).toMatch(/<<lead:/)
   })
 
+  it('includes sender and facts in the fenced lead data, and the system prompt mentions connecting the sender to the lead, when profile/facts are given', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":"Saw you run 4 plazas near our Buffalo yard."}' } }] })
+    await provider.personalize(
+      {
+        firstName: 'Jane',
+        company: 'Acme PM',
+        customFields: { city: 'Amherst' },
+        profile: { companySummary: 'We plow commercial lots.', services: ['Snow removal', 'Salting'] },
+        facts: { zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null, distanceMiles: 8 },
+      },
+      'Mention their city.',
+    )
+    const args = mockCreate.mock.calls.at(-1)![0]
+    expect(args.messages[0].content).toContain("connect the lead's property")
+    // Fenced content is `<<lead:token>>\n<json>\n<</lead:token>>` — the JSON is
+    // the single middle line (fenceUntrusted never inserts internal newlines).
+    const userJson = JSON.parse((args.messages[1].content as string).split('\n')[1]!)
+    expect(userJson.sender).toEqual({ companySummary: 'We plow commercial lots.', services: ['Snow removal', 'Salting'] })
+    expect(userJson.facts).toEqual({ zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null, distanceMiles: 8 })
+  })
+
+  it('omits sender and facts keys entirely when profile/facts are absent (Review Focus #5)', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":"A generic but natural line."}' } }] })
+    await provider.personalize({ firstName: 'Jane', company: 'Acme PM' }, 'Mention their city.')
+    const args = mockCreate.mock.calls.at(-1)![0]
+    const userJson = JSON.parse((args.messages[1].content as string).split('\n')[1]!)
+    expect(userJson).not.toHaveProperty('sender')
+    expect(userJson).not.toHaveProperty('facts')
+  })
+
   it('throws DraftGenerationError on an empty line', async () => {
     mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":""}' } }] })
     await expect(provider.personalize({}, 'x')).rejects.toBeInstanceOf(DraftGenerationError)

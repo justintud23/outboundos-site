@@ -36,6 +36,9 @@ vi.mock('@/features/mailboxes/server/mailbox-slots', () => ({
   releaseMailboxSlot: vi.fn(),
 }))
 
+const { getLeadContext } = vi.hoisted(() => ({ getLeadContext: vi.fn() }))
+vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadContext }))
+
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { getAIProvider } from '@/lib/ai'
@@ -62,6 +65,8 @@ const mockReleaseMailboxSlot = releaseMailboxSlot as unknown as Fn
 
 const mockSendEmail = vi.fn()
 const mockPersonalize = vi.fn()
+
+const NO_PROFILE_FACTS = { zip: null, city: null, state: null, propertyType: null, sites: null, acres: null, relationship: null }
 
 const INPUT = {
   organizationId: 'org-1',
@@ -136,6 +141,8 @@ beforeEach(() => {
 
   mockReserveMailboxSlot.mockResolvedValue(true)
   mockReleaseMailboxSlot.mockResolvedValue(undefined)
+
+  getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
 })
 
 describe('sendPlacementTest — seed validation', () => {
@@ -437,6 +444,23 @@ describe('sendPlacementTest — AI personalization', () => {
   it('personalizationSkipped stays false when the step has no personalization prompt/token at all', async () => {
     const result = await sendPlacementTest(INPUT)
     expect(result.personalizationSkipped).toBe(false)
+  })
+
+  it('passes the business-profile context to personalize when the org has one (Task 11)', async () => {
+    const profile = { companySummary: 'We plow commercial lots.', services: ['Snow removal'] }
+    const facts = { zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null }
+    getLeadContext.mockResolvedValue({ profile, facts, distanceMiles: 8 })
+    mockPrisma.sequence.findFirst.mockResolvedValue({
+      ...fakeSequence,
+      steps: [{ ...fakeStep, body: 'Hello {firstName|there}. {personalization}', personalizationPrompt: 'Mention their industry' }],
+    })
+
+    await sendPlacementTest(INPUT)
+
+    expect(mockPersonalize).toHaveBeenCalledWith(
+      expect.objectContaining({ profile, facts: { ...facts, distanceMiles: 8 } }),
+      'Mention their industry',
+    )
   })
 })
 

@@ -216,10 +216,14 @@ Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-
       company: input.company ?? null,
       title: input.title ?? null,
       details: input.customFields && typeof input.customFields === 'object' ? input.customFields : null,
+      ...(input.profile && { sender: input.profile }),
+      ...(input.facts && { facts: input.facts }),
     })
 
     const systemPrompt = `You write ONE personalized opening line for a short B2B cold email.
 Guidance from the sender: ${instructions}
+
+If sender details are present, connect the lead's property or situation to the sender's services; if facts are present, you may use the property type, town and size.
 
 Rules: 1–2 sentences, under 40 words, plain text, no greeting, no sign-off.
 Use ONLY facts present in the lead data; if nothing relevant is there, write a

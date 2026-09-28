@@ -35,6 +35,8 @@ export interface PersonalizeInput {
   company?: string | null
   title?: string | null
   customFields?: unknown
+  profile?: { companySummary: string; services: string[] }
+  facts?: LeadFacts & { distanceMiles: number | null }
 }
 
 export interface ReplyClassifyInput {

@@ -3,6 +3,8 @@ import { getEmailProvider } from '@/lib/email'
 import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 import { getAIProvider } from '@/lib/ai'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '@/features/sequences/render-template'
+import { getLeadContext } from '@/features/business-profile/server/lead-context'
+import { templateLeadWithFacts } from '@/features/business-profile/lead-facts'
 import { checkGuardrails } from '@/features/drafts/guardrails'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
@@ -175,13 +177,25 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
   }
 
   // 6. Render, the same way run-sequence-step builds a first-step draft.
-  const subject = renderTemplate(step.subject, lead)
+  const context = await getLeadContext(organizationId, lead.customFields)
+  const renderLead = templateLeadWithFacts(lead, context.facts)
+  const subject = renderTemplate(step.subject, renderLead)
   let personalization: string | null = null
   let personalizationSkipped = false
   if (step.personalizationPrompt && step.body.includes(PERSONALIZATION_TOKEN)) {
     try {
       personalization = await getAIProvider().personalize(
-        { firstName: lead.firstName, lastName: lead.lastName, company: lead.company, title: lead.title, customFields: lead.customFields },
+        {
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          company: lead.company,
+          title: lead.title,
+          customFields: lead.customFields,
+          ...(context.profile && {
+            profile: { companySummary: context.profile.companySummary, services: context.profile.services },
+            facts: { ...context.facts, distanceMiles: context.distanceMiles },
+          }),
+        },
         step.personalizationPrompt,
       )
     } catch {
@@ -193,7 +207,7 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
       personalizationSkipped = true
     }
   }
-  const body = renderTemplate(insertPersonalization(step.body, personalization), lead)
+  const body = renderTemplate(insertPersonalization(step.body, personalization), renderLead)
 
   const flags = checkGuardrails({
     subject,
