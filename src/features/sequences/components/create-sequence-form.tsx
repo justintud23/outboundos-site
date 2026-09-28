@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { checkContent } from '@/features/content-check/check-content'
 import { ContentRisk } from '@/features/content-check/components/content-risk'
+import type { StarterSequence } from '@/features/business-profile/starter-sequences'
 
 interface StepForm {
   subject: string
@@ -20,14 +21,32 @@ interface CreateSequenceFormProps {
   onCreated: () => void
   blockedPhrases?: string[]
   allowedWords?: string[]
+  starterSequences?: StarterSequence[]
 }
 
-export function CreateSequenceForm({ campaigns, onCreated, blockedPhrases = [], allowedWords = [] }: CreateSequenceFormProps) {
+const EMPTY_STEP: StepForm = { subject: '', body: '', delayDays: 0, personalizationPrompt: '' }
+const BLANK_TEMPLATE_VALUE = ''
+
+export function CreateSequenceForm({ campaigns, onCreated, blockedPhrases = [], allowedWords = [], starterSequences = [] }: CreateSequenceFormProps) {
   const [name, setName] = useState('')
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? '')
-  const [steps, setSteps] = useState<StepForm[]>([{ subject: '', body: '', delayDays: 0, personalizationPrompt: '' }])
+  const [steps, setSteps] = useState<StepForm[]>([{ ...EMPTY_STEP }])
+  const [templateId, setTemplateId] = useState(BLANK_TEMPLATE_VALUE)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function handleTemplateChange(id: string) {
+    setTemplateId(id)
+    if (id === BLANK_TEMPLATE_VALUE) {
+      setName('')
+      setSteps([{ ...EMPTY_STEP }])
+      return
+    }
+    const template = starterSequences.find((t) => t.id === id)
+    if (!template) return
+    setName(template.name)
+    setSteps(template.steps.map(({ subject, body, delayDays, personalizationPrompt }) => ({ subject, body, delayDays, personalizationPrompt })))
+  }
 
   function addStep() {
     setSteps((prev) => [...prev, { subject: '', body: '', delayDays: 3, personalizationPrompt: '' }])
@@ -78,6 +97,17 @@ export function CreateSequenceForm({ campaigns, onCreated, blockedPhrases = [], 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {starterSequences.length > 0 && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[var(--text-secondary)] text-xs font-medium uppercase tracking-wide">Start from template</span>
+          <Select value={templateId} onChange={(e) => handleTemplateChange(e.target.value)}>
+            <option value={BLANK_TEMPLATE_VALUE}>Blank sequence</option>
+            {starterSequences.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </Select>
+        </label>
+      )}
       <div className="flex gap-3">
         <Input
           placeholder="Sequence name"

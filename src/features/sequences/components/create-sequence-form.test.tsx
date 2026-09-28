@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 
 import { CreateSequenceForm } from './create-sequence-form'
+import { STARTER_SEQUENCES } from '@/features/business-profile/starter-sequences'
 
 const campaigns = [{ id: 'camp-1', name: 'Winter Lots' }]
 
@@ -38,5 +39,24 @@ describe('CreateSequenceForm — live content risk', () => {
     fireEvent.change(screen.getAllByPlaceholderText('Email body')[0]!, { target: { value: 'Hello there' } })
     fireEvent.click(screen.getByRole('button', { name: /create/i }))
     expect(await screen.findByText('High spam risk in New — step 1.')).toBeInTheDocument()
+  })
+})
+
+describe('CreateSequenceForm — starter templates', () => {
+  it('fills the name and steps when a template is chosen', () => {
+    const templates = STARTER_SEQUENCES.snow_paving
+    render(<CreateSequenceForm campaigns={campaigns} onCreated={vi.fn()} starterSequences={templates} />)
+    const select = screen.getByLabelText(/start from template/i)
+    fireEvent.change(select, { target: { value: templates[0]!.id } })
+    expect(screen.getByPlaceholderText(/sequence name/i)).toHaveValue(templates[0]!.name)
+    expect(screen.getAllByPlaceholderText('Email body')).toHaveLength(4)
+    const firstBody = screen.getAllByPlaceholderText('Email body')[0] as HTMLTextAreaElement
+    expect(firstBody.value).toBe(templates[0]!.steps[0]!.body)
+    expect(firstBody.value).toContain('{personalization}')
+  })
+
+  it('has no "Start from template" control when starterSequences is not passed', () => {
+    render(<CreateSequenceForm campaigns={campaigns} onCreated={vi.fn()} />)
+    expect(screen.queryByText(/start from template/i)).not.toBeInTheDocument()
   })
 })
