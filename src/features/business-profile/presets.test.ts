@@ -30,4 +30,10 @@ describe('PRESETS', () => {
       }
     }
   })
+
+  it('snow_paving Medical rule includes hospital', () => {
+    const medicalRule = PRESETS.snow_paving.propertyTypes.find((r) => r.label === 'Medical / healthcare')
+    expect(medicalRule).toBeDefined()
+    expect(medicalRule?.keywords).toContain('hospital')
+  })
 })
