@@ -180,6 +180,7 @@ model Organization {
   leadStatusChanges   LeadStatusChange[]
   sequenceEnrollments SequenceEnrollment[]
   domainHealth     DomainHealth[]
+  businessProfile  BusinessProfile?
 
   @@map("organizations")
 }
@@ -222,6 +223,8 @@ model Lead {
   score       Int?
   scoreReason String?
   scoredAt    DateTime?
+  // Per-signal explanation of `score` when a BusinessProfile is used.
+  scoreBreakdown Json?
 
   customFields Json?
   // Normalized from the import's country column ('CA', 'US', or raw).
@@ -793,4 +796,30 @@ model DomainHealth {
   @@unique([organizationId, domain])
   @@index([organizationId])
   @@map("domain_health")
+}
+
+// ─── BUSINESS PROFILE ──────────────────────────────────────────
+
+// Industry retargeting: what the org sells, where, and to whom. Drives fit
+// scoring, AI personalization context and starter sequences. One per org.
+model BusinessProfile {
+  id                    String       @id @default(cuid())
+  organizationId        String       @unique
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  preset                String
+  companySummary        String       @default("")
+  services              String[]
+  yards                 Json
+  alwaysZips            String[]
+  neverZips             String[]
+  propertyTypes         Json
+  decisionTitleKeywords String[]
+  downrankTitleKeywords String[]
+  bigSites              Int          @default(5)
+  bigAcres              Float?
+  columnMapping         Json
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@map("business_profiles")
 }
