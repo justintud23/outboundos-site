@@ -26,9 +26,19 @@ export interface ScoreBreakdown {
   aiReason: string | null
 }
 
-const TIER_ORDER: PropertyTier[] = ['no_go', 'great', 'good']
+const FIT_TIER_ORDER: Extract<PropertyTier, 'great' | 'good'>[] = ['great', 'good']
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 const fmt = (n: number) => String(Math.round(n * 10) / 10)
+
+// Case-insensitive keyword match, bounded by non-letter/non-digit characters
+// on both sides, with an optional plural suffix ('s' or 'es'). Prevents a short
+// keyword like 'intern' from matching inside an unrelated word like
+// "International" while still matching plurals like "Property Managers".
+export function matchesKeyword(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?:s|es)?(?![\\p{L}\\p{N}])`, 'iu')
+  return re.test(text)
+}
 
 export function scoreLeadByRules(
   input: { facts: LeadFacts; title: string | null },
@@ -65,23 +75,29 @@ export function scoreLeadByRules(
     }
   }
 
-  // Property type
+  // Property type — a great/good keyword match always wins (real-world values
+  // co-occur, e.g. "Residential Homeowners Association" contains both an HOA
+  // fit keyword and the no-go 'residential home' keyword). The no-go cap only
+  // applies when no great/good keyword matches (R-D).
   const typeText = facts.propertyType?.toLowerCase() ?? null
   if (!typeText) {
     parts.push({ signal: 'property', label: 'Property type unknown', points: W.property.unknown })
   } else {
     let matched = false
-    for (const tier of TIER_ORDER) {
-      const rule = profile.propertyTypes.find((r) => r.tier === tier && r.keywords.some((k) => typeText.includes(k)))
+    for (const tier of FIT_TIER_ORDER) {
+      const rule = profile.propertyTypes.find((r) => r.tier === tier && r.keywords.some((k) => matchesKeyword(typeText, k)))
       if (!rule) continue
       matched = true
-      if (tier === 'no_go') {
-        parts.push({ signal: 'property', label: `${rule.label} (not a fit)`, points: 0 })
-        caps.push(W.property.noGoCap)
-      } else {
-        parts.push({ signal: 'property', label: `${rule.label} (${tier} fit)`, points: W.property[tier] })
-      }
+      parts.push({ signal: 'property', label: `${rule.label} (${tier} fit)`, points: W.property[tier] })
       break
+    }
+    if (!matched) {
+      const noGoRule = profile.propertyTypes.find((r) => r.tier === 'no_go' && r.keywords.some((k) => matchesKeyword(typeText, k)))
+      if (noGoRule) {
+        parts.push({ signal: 'property', label: `${noGoRule.label} (not a fit)`, points: 0 })
+        caps.push(W.property.noGoCap)
+        matched = true
+      }
     }
     if (!matched) parts.push({ signal: 'property', label: `Property type "${facts.propertyType}" not recognized`, points: W.property.unknown })
   }
@@ -95,8 +111,8 @@ export function scoreLeadByRules(
   // Title
   const title = input.title?.toLowerCase().trim() ?? ''
   if (!title) parts.push({ signal: 'title', label: 'No title', points: W.title.other })
-  else if (profile.downrankTitleKeywords.some((k) => title.includes(k))) parts.push({ signal: 'title', label: 'Junior title', points: W.title.junior })
-  else if (profile.decisionTitleKeywords.some((k) => title.includes(k))) parts.push({ signal: 'title', label: 'Decision-maker title', points: W.title.decision })
+  else if (profile.downrankTitleKeywords.some((k) => matchesKeyword(title, k))) parts.push({ signal: 'title', label: 'Junior title', points: W.title.junior })
+  else if (profile.decisionTitleKeywords.some((k) => matchesKeyword(title, k))) parts.push({ signal: 'title', label: 'Decision-maker title', points: W.title.decision })
   else parts.push({ signal: 'title', label: 'Other title', points: W.title.other })
 
   // Relationship

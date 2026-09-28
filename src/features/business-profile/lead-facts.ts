@@ -46,7 +46,12 @@ function toZip(raw: string | null): string | null {
   if (!raw) return null
   const five = raw.match(/\b(\d{5})(?:-\d{4})?\b/)
   if (five) return five[1]!
-  // Excel strips leading zeros from New England ZIPs: 2108 → 02108.
+  // ZIP+4 with no separating dash: 142061234 → 14206.
+  if (/^\d{9}$/.test(raw)) return raw.slice(0, 5)
+  // Excel strips leading zeros from New England ZIPs: 2108 → 02108, including
+  // when followed by a ZIP+4 suffix: 2108-1234 → 02108.
+  const shortWithSuffix = raw.match(/^(\d{3,4})-\d{4}$/)
+  if (shortWithSuffix) return shortWithSuffix[1]!.padStart(5, '0')
   if (/^\d{3,4}$/.test(raw)) return raw.padStart(5, '0')
   return null
 }

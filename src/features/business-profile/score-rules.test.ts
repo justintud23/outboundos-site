@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scoreLeadByRules, summarizeProfile, SCORE_WEIGHTS } from './score-rules'
+import { scoreLeadByRules, summarizeProfile, matchesKeyword, SCORE_WEIGHTS } from './score-rules'
 import { PRESETS } from './presets'
 import type { LeadFacts } from './types'
 
@@ -38,6 +38,24 @@ describe('scoreLeadByRules', () => {
     expect(nogo.rulesScore).toBe(10)
   })
 
+  it('property keyword matching allows a plural suffix (I1 / R-E)', () => {
+    expect(score(facts({ propertyType: 'Office Parks' })).parts[1]).toMatchObject({ label: 'Office park (great fit)', points: 25 })
+  })
+
+  it('a matching great/good property keyword wins over a co-occurring no-go keyword (C1 / R-D)', () => {
+    const hoa1 = score(facts({ propertyType: 'Residential Homeowners Association' }))
+    expect(hoa1.parts[1]).toMatchObject({ label: 'HOA / community association (great fit)', points: 25 })
+    expect(hoa1.cap).toBeNull()
+
+    const hoa2 = score(facts({ propertyType: 'Single Family HOA' }))
+    expect(hoa2.parts[1]).toMatchObject({ label: 'HOA / community association (great fit)', points: 25 })
+    expect(hoa2.cap).toBeNull()
+
+    const singleFamily = score(facts({ propertyType: 'Single family home' }))
+    expect(singleFamily.cap).toBe(10)
+    expect(singleFamily.rulesScore).toBe(10)
+  })
+
   it('size: big by sites or acres, small, unknown', () => {
     expect(score(facts({ sites: 2 })).parts[2]).toMatchObject({ label: '2 sites', points: 5 })
     expect(score(facts({ sites: null, acres: 3 })).parts[2]).toMatchObject({ label: '3 acres', points: 15 })
@@ -50,6 +68,13 @@ describe('scoreLeadByRules', () => {
     expect(score(facts(), null).parts[3]).toMatchObject({ label: 'No title', points: 5 })
   })
 
+  it('title matching uses word boundaries, not substrings (I1 / R-E)', () => {
+    expect(score(facts(), 'Director of International Operations').parts[3]).not.toMatchObject({ label: 'Junior title' })
+    expect(score(facts(), 'Internal Facilities Manager').parts[3]).toMatchObject({ label: 'Decision-maker title', points: 15 })
+    expect(score(facts(), 'Intern').parts[3]).toMatchObject({ label: 'Junior title', points: -10 })
+    expect(score(facts(), 'Property Managers').parts[3]).toMatchObject({ label: 'Decision-maker title', points: 15 })
+  })
+
   it('relationship: lost quote, prospect adds nothing', () => {
     expect(score(facts({ relationship: 'lost_quote' })).parts.at(-1)).toMatchObject({ label: 'Lost quote', points: 10 })
     expect(score(facts({ relationship: 'prospect' })).parts.some((p) => p.signal === 'relationship')).toBe(false)
@@ -59,6 +84,22 @@ describe('scoreLeadByRules', () => {
     const r = score(facts({ zip: null, propertyType: null, sites: null }), 'Intern')
     expect(r.rulesScore).toBe(SCORE_WEIGHTS.area.unknown + SCORE_WEIGHTS.property.unknown + SCORE_WEIGHTS.title.junior)
     expect(score(facts()).distanceMiles).toBe(10)
+  })
+})
+
+describe('matchesKeyword', () => {
+  it('matches case-insensitively with an optional plural suffix, bounded by non-letters/digits', () => {
+    expect(matchesKeyword('Office Parks', 'office')).toBe(true)
+    expect(matchesKeyword('Property Managers', 'property manager')).toBe(true)
+    expect(matchesKeyword('Internal Facilities Manager', 'intern')).toBe(false)
+    expect(matchesKeyword('Director of International Operations', 'intern')).toBe(false)
+    expect(matchesKeyword('Intern', 'intern')).toBe(true)
+    expect(matchesKeyword('Shoal Creek', 'hoa')).toBe(false)
+    expect(matchesKeyword('HOA', 'hoa')).toBe(true)
+  })
+
+  it('escapes regex metacharacters in the keyword', () => {
+    expect(matchesKeyword('c++ developer', 'c++')).toBe(true)
   })
 })
 

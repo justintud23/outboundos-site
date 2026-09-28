@@ -15,6 +15,11 @@ describe('readLeadFacts', () => {
     expect(readLeadFacts({ zip: 'n/a' }).zip).toBeNull()
   })
 
+  it('normalizes a 9-digit ZIP+4 with no dash and a dash-form ZIP+4 missing its leading zero (ZIP minor)', () => {
+    expect(readLeadFacts({ zip: '142061234' }).zip).toBe('14206')
+    expect(readLeadFacts({ zip: '2108-1234' }).zip).toBe('02108')
+  })
+
   it('falls back to a ZIP inside an address column', () => {
     expect(readLeadFacts({ property_address: '123 Main St, Amherst, NY 14221-0001' }).zip).toBe('14221')
   })
