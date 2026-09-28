@@ -231,6 +231,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
     setSaving(true)
     setError(null)
     setSaveMessage(null)
+    setRescoreMessage(null)
     try {
       const res = await fetch('/api/settings/business-profile', {
         method: 'PUT',
@@ -255,11 +256,13 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
   async function handleRescore() {
     setRescoring(true)
     setError(null)
+    setSaveMessage(null)
     setRescoreMessage(null)
     try {
       let since: string | undefined
       let remaining = 1
       let total = 0
+      let previousRemaining: number | undefined
       while (remaining > 0) {
         const res = await fetch('/api/settings/business-profile/rescore', {
           method: 'POST',
@@ -273,8 +276,15 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
           setError(data?.error ?? 'Failed to rescore leads.')
           return
         }
-        total += data.rescored ?? 0
-        remaining = data.remaining ?? 0
+        const rescoredCount = data.rescored ?? 0
+        const newRemaining = data.remaining ?? 0
+        if (rescoredCount === 0 && previousRemaining !== undefined && newRemaining === previousRemaining) {
+          setError('Rescore stopped making progress — try again later.')
+          return
+        }
+        total += rescoredCount
+        previousRemaining = newRemaining
+        remaining = newRemaining
         since = data.since
         setRescoreMessage(`Rescored ${total} leads…`)
       }
@@ -342,7 +352,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
               <div key={i} className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[120px]">
                   <label className={LABEL_CLASS} htmlFor={`yard-label-${i}`}>
-                    Yard name
+                    Yard name<span className="sr-only"> (yard {i + 1})</span>
                   </label>
                   <Input
                     id={`yard-label-${i}`}
@@ -352,7 +362,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
                 </div>
                 <div className="flex-1 min-w-[100px]">
                   <label className={LABEL_CLASS} htmlFor={`yard-zip-${i}`}>
-                    ZIP
+                    ZIP<span className="sr-only"> (yard {i + 1})</span>
                   </label>
                   <Input
                     id={`yard-zip-${i}`}
@@ -362,7 +372,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
                 </div>
                 <div className="flex-1 min-w-[120px]">
                   <label className={LABEL_CLASS} htmlFor={`yard-radius-${i}`}>
-                    Radius (miles)
+                    Radius (miles)<span className="sr-only"> (yard {i + 1})</span>
                   </label>
                   <Input
                     id={`yard-radius-${i}`}
@@ -423,7 +433,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
               <div key={i} className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[120px]">
                   <label className={LABEL_CLASS} htmlFor={`property-name-${i}`}>
-                    Name
+                    Name<span className="sr-only"> (property type {i + 1})</span>
                   </label>
                   <Input
                     id={`property-name-${i}`}
@@ -433,7 +443,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
                 </div>
                 <div className="flex-1 min-w-[160px]">
                   <label className={LABEL_CLASS} htmlFor={`property-keywords-${i}`}>
-                    Keywords
+                    Keywords<span className="sr-only"> (property type {i + 1})</span>
                   </label>
                   <Input
                     id={`property-keywords-${i}`}
@@ -444,7 +454,7 @@ function ProfileForm({ initialProfile, hasServerProfile }: ProfileFormProps) {
                 </div>
                 <div className="min-w-[130px]">
                   <label className={LABEL_CLASS} htmlFor={`property-tier-${i}`}>
-                    Fit
+                    Fit<span className="sr-only"> (property type {i + 1})</span>
                   </label>
                   <Select
                     id={`property-tier-${i}`}
