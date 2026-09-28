@@ -16,6 +16,16 @@ export interface ScorePart { signal: ScoreSignal; label: string; points: number 
 export interface RulesScore { rulesScore: number; cap: number | null; parts: ScorePart[]; distanceMiles: number | null }
 export type NearestYardFn = (zip: string) => { miles: number; radiusMiles: number } | null
 
+// Per-signal explanation of a profile-scored lead's final `score` — persisted
+// to `Lead.scoreBreakdown` so the UI can show why a lead scored the way it did.
+export interface ScoreBreakdown {
+  parts: ScorePart[]
+  rulesScore: number
+  cap: number | null
+  aiAdjustment: number | null
+  aiReason: string | null
+}
+
 const TIER_ORDER: PropertyTier[] = ['no_go', 'great', 'good']
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 const fmt = (n: number) => String(Math.round(n * 10) / 10)
