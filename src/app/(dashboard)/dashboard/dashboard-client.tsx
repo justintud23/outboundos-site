@@ -34,7 +34,7 @@ export function DashboardClient({ initialData, initialActions, view }: Dashboard
     try {
       const d = days ?? (dateRange === '7d' ? 7 : 30)
       const [dashRes, actionsRes] = await Promise.all([
-        fetch(`/api/dashboard/refresh?days=${d}`),
+        fetch(`/api/dashboard/refresh?days=${d}&view=${view}`),
         fetch('/api/actions'),
       ])
       if (dashRes.ok) {
@@ -49,7 +49,7 @@ export function DashboardClient({ initialData, initialActions, view }: Dashboard
     } finally {
       setRefreshing(false)
     }
-  }, [dateRange])
+  }, [dateRange, view])
 
   const handleDateRangeChange = useCallback((range: '7d' | '30d') => {
     setDateRange(range)
