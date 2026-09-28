@@ -378,3 +378,59 @@ describe('OpenAIProvider.classifyReply', () => {
     expect(attack).not.toContain(openNonce as string)
   })
 })
+
+describe('OpenAIProvider.adjustLeadScores', () => {
+  let provider: OpenAIProvider
+  let mockCreate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    provider = new OpenAIProvider('test-key', 'gpt-4o')
+    const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
+      chat: { completions: { create: ReturnType<typeof vi.fn> } }
+    }
+    mockCreate = client.chat.completions.create
+  })
+
+  function mockCreateReturning(content: unknown): ReturnType<typeof vi.fn> {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }],
+    })
+    return mockCreate
+  }
+
+  it('returns clamped adjustments per lead and fences the data', async () => {
+    const create = mockCreateReturning({
+      adjustments: [
+        { leadId: 'l1', adjustment: 40, reason: 'Manages 14 HOAs' },
+        { leadId: 'l2', adjustment: -3.6, reason: 'Vendor' },
+        { leadId: 7, adjustment: 1, reason: 'x' },
+      ],
+    })
+    const out = await provider.adjustLeadScores(
+      [
+        {
+          id: 'l1',
+          title: 'CAM',
+          company: 'Acme HOA',
+          facts: { zip: '14206', city: null, state: null, propertyType: 'HOA', sites: 14, acres: null, relationship: null },
+          details: {},
+        },
+      ],
+      'Company: snow',
+    )
+    expect(out).toEqual([
+      { leadId: 'l1', adjustment: 15, reason: 'Manages 14 HOAs' },
+      { leadId: 'l2', adjustment: -4, reason: 'Vendor' },
+    ])
+    const messages = create.mock.calls[0]![0].messages
+    expect(messages[0].content).toContain('Company: snow')
+    expect(messages[0].content).toContain('-15')
+    expect(messages[1].content).toContain('l1')
+  })
+
+  it('throws DraftGenerationError on a malformed response', async () => {
+    mockCreateReturning('not json')
+    await expect(provider.adjustLeadScores([], 's')).rejects.toBeInstanceOf(DraftGenerationError)
+  })
+})
