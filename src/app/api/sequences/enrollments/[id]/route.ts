@@ -1,7 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { updateEnrollment } from '@/features/sequences/server/update-enrollment'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getEnrollmentOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { EnrollmentNotFoundError } from '@/features/sequences/types'
 
 const VALID_ACTIONS = ['pause', 'resume', 'stop'] as const
@@ -10,13 +11,15 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id: enrollmentId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getEnrollmentOwnerId(ctx.org.id, enrollmentId))
+  if (denied) return denied
 
   let body: { action?: string }
   try {
@@ -34,10 +37,10 @@ export async function PATCH(
 
   try {
     const enrollment = await updateEnrollment({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       enrollmentId,
       action: body.action as 'pause' | 'resume' | 'stop',
-      actorClerkId: userId,
+      actorClerkId: ctx.member.clerkUserId,
     })
     return NextResponse.json(enrollment)
   } catch (err) {

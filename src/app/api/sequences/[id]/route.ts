@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { getSequence } from '@/features/sequences/server/get-sequence'
 import { updateSequence } from '@/features/sequences/server/update-sequence'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getSequenceOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { SequenceNotFoundError, SequenceHasActiveEnrollmentsError } from '@/features/sequences/types'
 import { ContentHighRiskError } from '@/features/content-check/types'
 
@@ -33,13 +36,15 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId } = await auth()
-  if (!orgId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getSequenceOwnerId(ctx.org.id, id))
+  if (denied) return denied
 
   let body: { name?: string; steps?: unknown[] }
   try {
@@ -50,7 +55,7 @@ export async function PATCH(
 
   try {
     const sequence = await updateSequence({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       sequenceId: id,
       name: body.name,
       newSteps: body.steps as { stepNumber: number; subject: string; body: string; delayDays: number }[] | undefined,

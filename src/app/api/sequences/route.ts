@@ -1,12 +1,13 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getCampaignOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { createSequence } from '@/features/sequences/server/create-sequence'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { ContentHighRiskError } from '@/features/content-check/types'
 
 export async function POST(request: Request) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -21,11 +22,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'campaignId, name, and at least one step are required' }, { status: 400 })
   }
 
-  const org = await resolveOrganization(orgId)
+  const denied = denyUnlessCanAct(ctx, await getCampaignOwnerId(ctx.org.id, body.campaignId))
+  if (denied) return denied
 
   try {
     const sequence = await createSequence({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       campaignId: body.campaignId,
       name: body.name,
       steps: body.steps as { stepNumber: number; subject: string; body: string; delayDays: number; personalizationPrompt?: string | null }[],

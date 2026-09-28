@@ -1,7 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { enrollLead } from '@/features/sequences/server/enroll-lead'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getSequenceOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { LeadInTerminalStateError, LeadExcludedCanadaError } from '@/features/leads/types'
 import { AlreadyEnrolledError, SequenceHasNoStepsError } from '@/features/sequences/types'
 
@@ -9,13 +10,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id: sequenceId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getSequenceOwnerId(ctx.org.id, sequenceId))
+  if (denied) return denied
 
   let body: { leadIds?: string[] }
   try {
@@ -33,10 +36,10 @@ export async function POST(
   for (const leadId of body.leadIds) {
     try {
       const enrollment = await enrollLead({
-        organizationId: org.id,
+        organizationId: ctx.org.id,
         sequenceId,
         leadId,
-        actorClerkId: userId,
+        actorClerkId: ctx.member.clerkUserId,
       })
       results.push({ leadId, success: true, enrollmentId: enrollment.id })
     } catch (err) {
