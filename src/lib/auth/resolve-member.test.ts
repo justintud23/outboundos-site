@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Prisma } from '@prisma/client'
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn(), clerkClient: vi.fn() }))
 vi.mock('./resolve-organization', () => ({ resolveOrganization: vi.fn(async () => ({ id: 'org-1', clerkId: 'clerk-org' })) }))
@@ -7,6 +8,11 @@ vi.mock('@/lib/db/prisma', () => ({ prisma: { orgMember: { findUnique: vi.fn(), 
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db/prisma'
 import { resolveMember } from './resolve-member'
+
+const P2002 = new Prisma.PrismaClientKnownRequestError(
+  'Unique constraint failed',
+  { code: 'P2002', clientVersion: '7', meta: { target: ['clerkUserId', 'organizationId'] } },
+)
 
 type Fn = ReturnType<typeof vi.fn>
 const om = (prisma as unknown as { orgMember: Record<string, Fn> }).orgMember
@@ -52,5 +58,24 @@ describe('resolveMember', () => {
     expect(ctx).not.toBeNull()
     const data = om.update.mock.calls.at(-1)![0].data
     expect(data).toEqual({ lastSeenAt: expect.any(Date) })
+  })
+
+  it('recovers from a concurrent create race (P2002) by re-reading the winner’s row', async () => {
+    vi.mocked(auth).mockResolvedValue({ orgId: 'clerk-org', userId: 'user_1', orgRole: 'org:member' } as never)
+    om.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'm-winner', clerkUserId: 'user_1', organizationId: 'org-1', role: 'member', senderFirstName: null, senderLastName: null, lastSeenAt: new Date() })
+    om.create.mockRejectedValue(P2002)
+    const ctx = await resolveMember()
+    expect(ctx).not.toBeNull()
+    expect(ctx!.member.id).toBe('m-winner')
+    expect(om.findUnique).toHaveBeenCalledTimes(2)
+  })
+
+  it('propagates a non-P2002 create error', async () => {
+    vi.mocked(auth).mockResolvedValue({ orgId: 'clerk-org', userId: 'user_1', orgRole: 'org:member' } as never)
+    om.findUnique.mockResolvedValueOnce(null)
+    om.create.mockRejectedValue(new Error('db is on fire'))
+    await expect(resolveMember()).rejects.toThrow('db is on fire')
   })
 })
