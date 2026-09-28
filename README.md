@@ -268,6 +268,67 @@ The system blocks sends containing:
 
 ---
 
+## Business profile & lead scoring
+
+**Set Up**
+
+Go to Settings → Business profile, select a preset like "Commercial snow & paving" (or start blank), and add 1–5 of your service yards by ZIP code and radius (1–200 miles). Save your profile, then click **Rescore all leads** to recalculate existing leads.
+
+**How Scores Work**
+
+Leads score 0–100 based on location, property type, size, title keywords, and relationship history:
+
+| Factor | Points |
+|--------|--------|
+| In-area ZIP or always-include list | +30 |
+| Within 1.25× radius | +15 |
+| Unknown or no ZIP | +10 |
+| Outside area or never-include list | **cap 15** |
+| Property type (great) | +25 |
+| Property type (good) | +15 |
+| Property type (unknown/unmatched) | +8 |
+| Property type (no-go) | **cap 10** |
+| Big size (≥ threshold sites or acres) | +15 |
+| Some size present | +5 |
+| Down-rank keyword in title | −10 |
+| Decision keyword | +15 |
+| Other title | +5 |
+| Past customer | +15 |
+| Lost quote | +10 |
+
+Rules score is clamped by property type, then AI refines by ±15 (final score clamped to 0–100) using fit reasoning. Leads with a property cap skip AI adjustment. See the breakdown under "How this score was calculated" on each lead's page.
+
+**CSV Import**
+
+Include these columns (map in the form if needed):
+
+- **ZIP/address:** `zip`, `zip_code`, `zipcode`, `postal_code`, `postcode`, or a ZIP within `address`, `property_address`, `street_address`
+- **Property type:** `property_type`, `type`, `segment`, `account_type`, `industry`
+- **Size:** `sites`, `number_of_sites`, `locations`, `properties`, `property_count`, `num_properties`, `acres`, `lot_size`, `lot_acres`
+- **Relationship:** `relationship`, `status`, `customer_status`, `lead_type` — use "customer"/"client" for past customers, "lost"/"quote"/"quoted" for lost quotes
+
+Use **Column mapping** in the import form for any other columns.
+
+**Merge Fields**
+
+Personalize sequences with lead data; always include a fallback:
+
+```
+{propertyType|your property}
+{city|your market}
+{sites|your locations}
+```
+
+**Starter Sequences**
+
+Once your profile is saved, Sequences → New shows a **Start from template** option with three preset templates. Edit the wording and add your name under "Thanks," before enrolling leads.
+
+**No Business Profile**
+
+Organizations without a business profile use original generic scoring (AI pass over title and inferred size). The sequence form shows no templates, and profile-based merge fields use fallbacks.
+
+---
+
 ## Deliverability
 
 The **Deliverability** page (available only when Microsoft 365 is connected) monitors domain health, enforces sending ramps, and protects your reputation through automated checks and alerts.
