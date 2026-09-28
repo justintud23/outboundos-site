@@ -6,6 +6,7 @@ interface GetInboxThreadsInput {
   filter?: InboxFilter
   limit?: number
   offset?: number
+  ownerId?: string
 }
 
 export async function getInboxThreads({
@@ -13,6 +14,7 @@ export async function getInboxThreads({
   filter = 'all',
   limit = 25,
   offset = 0,
+  ownerId,
 }: GetInboxThreadsInput): Promise<{ threads: InboxThreadDTO[]; total: number }> {
   const cappedLimit = Math.min(limit, 100)
 
@@ -77,10 +79,11 @@ export async function getInboxThreads({
   const leadIds = activities.map((a) => a.leadId)
 
   const leads = await prisma.lead.findMany({
-    where: { id: { in: leadIds }, organizationId },
+    where: { id: { in: leadIds }, organizationId, ...(ownerId && { ownerId }) },
     select: {
       id: true, email: true, firstName: true, lastName: true,
       company: true, status: true,
+      owner: { select: { name: true, email: true } },
     },
   })
 
@@ -153,6 +156,7 @@ export async function getInboxThreads({
       replyCount: activity.replyCount,
       latestClassification: latestReply?.classification ?? null,
       latestPreview: latestReply?.rawBody?.slice(0, 120) ?? '',
+      ownerName: lead.owner?.name ?? lead.owner?.email ?? null,
     }
   })
 

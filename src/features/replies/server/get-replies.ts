@@ -7,6 +7,7 @@ interface GetRepliesInput {
   classification?: ReplyClassification
   limit?: number
   offset?: number
+  ownerId?: string
 }
 
 export async function getReplies({
@@ -14,11 +15,13 @@ export async function getReplies({
   classification,
   limit = 50,
   offset = 0,
+  ownerId,
 }: GetRepliesInput): Promise<{ replies: ReplyWithLeadDTO[]; total: number }> {
   const cappedLimit = Math.min(limit, 200)
   const where = {
     organizationId,
     ...(classification !== undefined && { classification }),
+    ...(ownerId && { lead: { ownerId } }),
   }
 
   const [rows, total] = await Promise.all([

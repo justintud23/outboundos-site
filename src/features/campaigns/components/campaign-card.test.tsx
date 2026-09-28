@@ -14,6 +14,7 @@ const baseCampaign: CampaignSummaryDTO = {
   draftPendingCount:  3,
   draftApprovedCount: 7,
   replyCount:         8,
+  ownerName:          null,
 }
 
 describe('CampaignCard', () => {

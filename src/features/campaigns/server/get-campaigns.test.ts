@@ -133,4 +133,42 @@ describe('getCampaigns', () => {
 
     expect(mockReplyCount).toHaveBeenCalledTimes(2)
   })
+
+  describe('owner filter', () => {
+    it('filters by ownerId when provided', async () => {
+      mockFindMany.mockResolvedValue([])
+
+      await getCampaigns({ organizationId: 'org-1', ownerId: 'm1' })
+
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: 'org-1', ownerId: 'm1' } }),
+      )
+    })
+
+    it('leaves the where clause unchanged when ownerId is absent', async () => {
+      mockFindMany.mockResolvedValue([])
+
+      await getCampaigns({ organizationId: 'org-1' })
+
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: 'org-1' } }),
+      )
+    })
+  })
+
+  describe('ownerName', () => {
+    it('maps ownerName from owner.name, falling back to owner.email, or null', async () => {
+      mockFindMany.mockResolvedValue([
+        { ...makeCampaignRow({ id: 'c1' }), owner: { name: 'Alice', email: 'alice@acme.com' } },
+        { ...makeCampaignRow({ id: 'c2' }), owner: { name: null, email: 'bob@acme.com' } },
+        { ...makeCampaignRow({ id: 'c3' }), owner: null },
+      ])
+      mockGroupBy.mockResolvedValue([])
+      mockReplyCount.mockResolvedValue(0)
+
+      const { campaigns } = await getCampaigns({ organizationId: 'org-1' })
+
+      expect(campaigns.map((c) => c.ownerName)).toEqual(['Alice', 'bob@acme.com', null])
+    })
+  })
 })

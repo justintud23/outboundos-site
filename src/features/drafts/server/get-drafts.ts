@@ -6,6 +6,7 @@ interface GetDraftsInput {
   statuses?: ('PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'BLOCKED')[]
   limit?: number
   offset?: number
+  ownerId?: string
 }
 
 export async function getDrafts({
@@ -13,12 +14,18 @@ export async function getDrafts({
   statuses = ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'],
   limit = 50,
   offset = 0,
+  ownerId,
 }: GetDraftsInput): Promise<{ drafts: DraftWithLeadDTO[]; total: number }> {
   const cappedLimit = Math.min(limit, 200)
+  const where = {
+    organizationId,
+    status: { in: statuses },
+    ...(ownerId && { OR: [{ campaign: { ownerId } }, { campaignId: null, lead: { ownerId } }] }),
+  }
 
   const [rows, total] = await Promise.all([
     prisma.draft.findMany({
-      where: { organizationId, status: { in: statuses } },
+      where,
       include: {
         lead: {
           select: {
@@ -35,7 +42,7 @@ export async function getDrafts({
       take: cappedLimit,
       skip: offset,
     }),
-    prisma.draft.count({ where: { organizationId, status: { in: statuses } } }),
+    prisma.draft.count({ where }),
   ])
 
   return {

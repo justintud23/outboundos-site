@@ -6,18 +6,24 @@ interface GetLeadsInput {
   organizationId: string
   limit?: number
   offset?: number
+  ownerId?: string
 }
 
 export async function getLeads({
   organizationId,
   limit = 50,
   offset = 0,
+  ownerId,
 }: GetLeadsInput): Promise<{ leads: LeadDTO[]; total: number }> {
   const cappedLimit = Math.min(limit, 200)
+  const where = {
+    organizationId,
+    ...(ownerId && { ownerId }),
+  }
 
   const [rows, total, org] = await Promise.all([
     prisma.lead.findMany({
-      where: { organizationId },
+      where,
       orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
       take: cappedLimit,
       skip: offset,
@@ -40,14 +46,16 @@ export async function getLeads({
         emailCheck: true,
         emailCheckResult: true,
         emailCheckedAt: true,
+        owner: { select: { name: true, email: true } },
       },
     }),
-    prisma.lead.count({ where: { organizationId } }),
+    prisma.lead.count({ where }),
     prisma.organization.findUnique({ where: { id: organizationId }, select: { allowCanadianRecipients: true } }),
   ])
 
-  const leads = rows.map(({ phone, country, customFields, ...lead }) => ({
+  const leads = rows.map(({ phone, country, customFields, owner, ...lead }) => ({
     ...lead,
+    ownerName: owner?.name ?? owner?.email ?? null,
     canadaExclusion: org?.allowCanadianRecipients ? null : canadaExclusionReason({ email: lead.email, phone, country, customFields }),
   }))
 

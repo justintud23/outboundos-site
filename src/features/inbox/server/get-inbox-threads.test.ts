@@ -60,4 +60,63 @@ describe('getInboxThreads', () => {
     expect(result.threads).toEqual([])
     expect(result.total).toBe(0)
   })
+
+  describe('owner filter', () => {
+    it('filters leads by ownerId when provided', async () => {
+      mockMsgGroupBy.mockResolvedValue([
+        { leadId: 'lead-1', _max: { sentAt: new Date('2026-04-05T00:00:00Z') }, _count: { _all: 1 } },
+      ])
+      mockReplyGroupBy.mockResolvedValue([])
+      mockLeadFindMany.mockResolvedValue([])
+
+      await getInboxThreads({ organizationId: ORG, ownerId: 'm1' })
+
+      expect(mockLeadFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: { in: ['lead-1'] }, organizationId: ORG, ownerId: 'm1' },
+        }),
+      )
+    })
+
+    it('leaves the lead where clause unchanged when ownerId is absent', async () => {
+      mockMsgGroupBy.mockResolvedValue([
+        { leadId: 'lead-1', _max: { sentAt: new Date('2026-04-05T00:00:00Z') }, _count: { _all: 1 } },
+      ])
+      mockReplyGroupBy.mockResolvedValue([])
+      mockLeadFindMany.mockResolvedValue([])
+
+      await getInboxThreads({ organizationId: ORG })
+
+      expect(mockLeadFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: { in: ['lead-1'] }, organizationId: ORG },
+        }),
+      )
+    })
+  })
+
+  describe('ownerName', () => {
+    it('maps ownerName from owner.name, falling back to owner.email, or null', async () => {
+      const msgDate = new Date('2026-04-05T00:00:00Z')
+      mockMsgGroupBy.mockResolvedValue([
+        { leadId: 'a', _max: { sentAt: msgDate }, _count: { _all: 1 } },
+        { leadId: 'b', _max: { sentAt: msgDate }, _count: { _all: 1 } },
+        { leadId: 'c', _max: { sentAt: msgDate }, _count: { _all: 1 } },
+      ])
+      mockReplyGroupBy.mockResolvedValue([])
+      mockLeadFindMany.mockResolvedValue([
+        { id: 'a', email: 'a@x.com', firstName: null, lastName: null, company: null, status: 'NEW', owner: { name: 'Alice', email: 'alice@acme.com' } },
+        { id: 'b', email: 'b@x.com', firstName: null, lastName: null, company: null, status: 'NEW', owner: { name: null, email: 'bob@acme.com' } },
+        { id: 'c', email: 'c@x.com', firstName: null, lastName: null, company: null, status: 'NEW', owner: null },
+      ])
+      mockReplyFindMany.mockResolvedValue([])
+
+      const { threads } = await getInboxThreads({ organizationId: ORG })
+
+      const byLead = new Map(threads.map((t) => [t.leadId, t.ownerName]))
+      expect(byLead.get('a')).toBe('Alice')
+      expect(byLead.get('b')).toBe('bob@acme.com')
+      expect(byLead.get('c')).toBeNull()
+    })
+  })
 })

@@ -23,6 +23,41 @@ beforeEach(() => {
   ;(prisma.lead.count as Fn).mockResolvedValue(2)
 })
 
+describe('getLeads — owner filter', () => {
+  beforeEach(() => {
+    ;(prisma.organization.findUnique as Fn).mockResolvedValue({ allowCanadianRecipients: true })
+  })
+
+  it('filters by ownerId when provided', async () => {
+    await getLeads({ organizationId: 'org-1', ownerId: 'm1' })
+    expect(prisma.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: 'org-1', ownerId: 'm1' } }),
+    )
+    expect(prisma.lead.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm1' } })
+  })
+
+  it('leaves the where clause unchanged when ownerId is absent', async () => {
+    await getLeads({ organizationId: 'org-1' })
+    expect(prisma.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: 'org-1' } }),
+    )
+    expect(prisma.lead.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1' } })
+  })
+})
+
+describe('getLeads — ownerName', () => {
+  it('maps ownerName from owner.name, falling back to owner.email, or null', async () => {
+    ;(prisma.organization.findUnique as Fn).mockResolvedValue({ allowCanadianRecipients: true })
+    ;(prisma.lead.findMany as Fn).mockResolvedValue([
+      row({ id: 'a', owner: { name: 'Alice', email: 'alice@acme.com' } }),
+      row({ id: 'b', owner: { name: null, email: 'bob@acme.com' } }),
+      row({ id: 'c', owner: null }),
+    ])
+    const { leads } = await getLeads({ organizationId: 'org-1' })
+    expect(leads.map((l) => l.ownerName)).toEqual(['Alice', 'bob@acme.com', null])
+  })
+})
+
 describe('getLeads — CASL', () => {
   it('marks Canadian leads with the exclusion reason and strips location fields from the DTO', async () => {
     ;(prisma.organization.findUnique as Fn).mockResolvedValue({ allowCanadianRecipients: false })

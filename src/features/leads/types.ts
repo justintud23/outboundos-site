@@ -22,6 +22,8 @@ export type LeadDTO = Pick<
   // CASL: why this lead is excluded as Canadian (null/absent when it isn't,
   // or when the org allows Canadian recipients). Set by list queries.
   canadaExclusion?: string | null
+  // Rep ownership: owner.name ?? owner.email, or null when unowned.
+  ownerName: string | null
 }
 
 export type ImportBatchDTO = Pick<
