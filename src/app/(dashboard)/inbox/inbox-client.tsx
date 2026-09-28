@@ -4,12 +4,14 @@ import { useState, useCallback } from 'react'
 import { ThreadList } from '@/features/inbox/components/thread-list'
 import { ThreadDetail } from '@/features/inbox/components/thread-detail'
 import type { InboxThreadDTO, InboxFilter, ThreadDetailDTO } from '@/features/inbox/types'
+import type { ViewMode } from '@/features/team/view'
 
 interface InboxClientProps {
   initialThreads: InboxThreadDTO[]
+  view: ViewMode
 }
 
-export function InboxClient({ initialThreads }: InboxClientProps) {
+export function InboxClient({ initialThreads, view }: InboxClientProps) {
   const [threads, setThreads] = useState(initialThreads)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [threadDetail, setThreadDetail] = useState<ThreadDetailDTO | null>(null)
@@ -73,6 +75,7 @@ export function InboxClient({ initialThreads }: InboxClientProps) {
           filter={filter}
           onSelectThread={handleSelectThread}
           onFilterChange={handleFilterChange}
+          view={view}
         />
       </div>
 

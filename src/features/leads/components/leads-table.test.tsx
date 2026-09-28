@@ -21,3 +21,15 @@ describe('LeadsTable — CASL', () => {
     expect(screen.queryByText('Excluded: Canada (CASL)')).not.toBeInTheDocument()
   })
 })
+
+describe('LeadsTable — Owner', () => {
+  it("shows the owner's name in the Owner column", () => {
+    render(<LeadsTable leads={[{ ...base, ownerName: 'Dana Lee' }]} />)
+    expect(screen.getByText('Dana Lee')).toBeInTheDocument()
+  })
+
+  it('shows Unassigned when the lead has no owner', () => {
+    render(<LeadsTable leads={[{ ...base, ownerName: null }]} />)
+    expect(screen.getByText('Unassigned')).toBeInTheDocument()
+  })
+})

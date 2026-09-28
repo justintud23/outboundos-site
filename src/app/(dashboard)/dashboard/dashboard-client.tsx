@@ -10,15 +10,18 @@ import { ActivityChart } from '@/features/dashboard/components/activity-chart'
 import { CampaignChart } from '@/features/dashboard/components/campaign-chart'
 import { RecentRepliesCompact } from '@/features/dashboard/components/recent-replies-compact'
 import { ActionCenterModule } from '@/features/dashboard/components/action-center-module'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { DashboardRefreshData } from '@/features/analytics/types'
 import type { NextAction } from '@/features/actions/types'
 
 interface DashboardClientProps {
   initialData: DashboardRefreshData
   initialActions: NextAction[]
+  view: ViewMode
 }
 
-export function DashboardClient({ initialData, initialActions }: DashboardClientProps) {
+export function DashboardClient({ initialData, initialActions, view }: DashboardClientProps) {
   const [data, setData] = useState(initialData)
   const [actions, setActions] = useState(initialActions)
   const [dateRange, setDateRange] = useState<'7d' | '30d'>('30d')
@@ -73,15 +76,20 @@ export function DashboardClient({ initialData, initialActions }: DashboardClient
 
   return (
     <div className="space-y-6">
-      <SnapshotBar
-        lastUpdatedAt={lastUpdatedAt}
-        dateRange={dateRange}
-        isLive={isLive}
-        onRefresh={() => void refresh()}
-        onDateRangeChange={handleDateRangeChange}
-        onLiveToggle={() => setIsLive((v) => !v)}
-        refreshing={refreshing}
-      />
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <SnapshotBar
+            lastUpdatedAt={lastUpdatedAt}
+            dateRange={dateRange}
+            isLive={isLive}
+            onRefresh={() => void refresh()}
+            onDateRangeChange={handleDateRangeChange}
+            onLiveToggle={() => setIsLive((v) => !v)}
+            refreshing={refreshing}
+          />
+        </div>
+        <ViewToggle view={view} />
+      </div>
 
       {/* Primary row — KPIs + Funnel + Classification */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 stagger-grid">

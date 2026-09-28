@@ -4,15 +4,18 @@ import { useState } from 'react'
 import { CsvUploadForm } from '@/features/leads/components/csv-upload-form'
 import { LeadsTable } from '@/features/leads/components/leads-table'
 import { DraftReviewDrawer } from '@/features/drafts/components/draft-review-drawer'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { LeadDTO, ImportBatchResult } from '@/features/leads/types'
 import type { DraftDTO, DraftWithLeadDTO } from '@/features/drafts/types'
 
 interface LeadsPageClientProps {
   initialLeads: LeadDTO[]
   initialTotal: number
+  view: ViewMode
 }
 
-export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientProps) {
+export function LeadsPageClient({ initialLeads, initialTotal, view }: LeadsPageClientProps) {
   const [leads, setLeads] = useState<LeadDTO[]>(initialLeads)
   const [total, setTotal] = useState(initialTotal)
   const [lastBatch, setLastBatch] = useState<ImportBatchResult['batch'] | null>(null)
@@ -130,7 +133,10 @@ export function LeadsPageClient({ initialLeads, initialTotal }: LeadsPageClientP
               <span className="text-[var(--status-danger)] text-xs">{generationError}</span>
             )}
           </div>
-          <CsvUploadForm onSuccess={handleImportSuccess} />
+          <div className="flex items-center gap-3">
+            <ViewToggle view={view} />
+            <CsvUploadForm onSuccess={handleImportSuccess} />
+          </div>
         </div>
 
         <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">

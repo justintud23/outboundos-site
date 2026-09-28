@@ -2,14 +2,17 @@
 
 import { useState, useCallback } from 'react'
 import { PipelineBoard } from '@/features/leads/components/pipeline-board'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { PipelineLeadDTO } from '@/features/leads/types'
 import type { LeadStatus } from '@prisma/client'
 
 interface PipelineClientProps {
   initialLeads: PipelineLeadDTO[]
+  view: ViewMode
 }
 
-export function PipelineClient({ initialLeads }: PipelineClientProps) {
+export function PipelineClient({ initialLeads, view }: PipelineClientProps) {
   const [leads, setLeads] = useState<PipelineLeadDTO[]>(initialLeads)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,6 +47,9 @@ export function PipelineClient({ initialLeads }: PipelineClientProps) {
 
   return (
     <div className="space-y-4 h-full">
+      <div className="flex justify-end">
+        <ViewToggle view={view} />
+      </div>
       {error && (
         <div className="text-[var(--status-danger)] text-sm bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/30 rounded-[var(--radius-btn)] px-4 py-2">
           {error}

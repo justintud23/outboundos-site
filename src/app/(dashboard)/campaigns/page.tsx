@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
@@ -6,7 +5,9 @@ import { StatCard } from '@/components/ui/stat-card'
 import { getCampaigns } from '@/features/campaigns/server/get-campaigns'
 import { CampaignCard } from '@/features/campaigns/components/campaign-card'
 import { NewCampaignForm } from '@/features/campaigns/components/new-campaign-form'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { resolveView, ownerFilterFor } from '@/features/team/view'
 
 function EmptyState() {
   return (
@@ -19,15 +20,22 @@ function EmptyState() {
   )
 }
 
-export default async function CampaignsPage() {
-  const { orgId } = await auth()
+interface CampaignsPageProps {
+  searchParams: Promise<{ view?: string | string[] }>
+}
 
-  if (!orgId) {
+export default async function CampaignsPage({ searchParams }: CampaignsPageProps) {
+  const ctx = await resolveMember()
+
+  if (!ctx) {
     redirect('/dashboard')
   }
 
-  const org = await resolveOrganization(orgId)
-  const { campaigns, total } = await getCampaigns({ organizationId: org.id })
+  const view = resolveView(ctx.isAdmin, (await searchParams).view)
+  const { campaigns, total } = await getCampaigns({
+    organizationId: ctx.org.id,
+    ownerId: ownerFilterFor(view, ctx.member.id),
+  })
 
   const totalMessages = campaigns.reduce((s, c) => s + c.messageCount, 0)
   const totalPending  = campaigns.reduce((s, c) => s + c.draftPendingCount, 0)
@@ -51,12 +59,15 @@ export default async function CampaignsPage() {
           <p className="text-[var(--text-secondary)] text-sm">
             {total} campaign{total !== 1 ? 's' : ''}
           </p>
-          <Link
-            href="/analytics"
-            className="text-[var(--text-muted)] text-xs hover:text-[var(--text-secondary)] transition-colors"
-          >
-            Full analytics &rarr;
-          </Link>
+          <div className="flex items-center gap-3">
+            <ViewToggle view={view} />
+            <Link
+              href="/analytics"
+              className="text-[var(--text-muted)] text-xs hover:text-[var(--text-secondary)] transition-colors"
+            >
+              Full analytics &rarr;
+            </Link>
+          </div>
         </div>
 
         {campaigns.length === 0 ? (

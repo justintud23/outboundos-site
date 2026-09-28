@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { ReplyClassification } from '@prisma/client'
 import { RepliesTable } from '@/features/replies/components/replies-table'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { ReplyWithLeadDTO } from '@/features/replies/types'
 
 const ALL_CLASSIFICATIONS: ReplyClassification[] = [
@@ -28,9 +30,10 @@ const CLASSIFICATION_LABELS: Record<ReplyClassification, string> = {
 interface RepliesClientProps {
   initialReplies: ReplyWithLeadDTO[]
   initialTotal: number
+  view: ViewMode
 }
 
-export function RepliesClient({ initialReplies, initialTotal }: RepliesClientProps) {
+export function RepliesClient({ initialReplies, initialTotal, view }: RepliesClientProps) {
   const [filter, setFilter] = useState<ReplyClassification | 'ALL'>('ALL')
 
   const filtered =
@@ -47,18 +50,21 @@ export function RepliesClient({ initialReplies, initialTotal }: RepliesClientPro
           {displayCount.toLocaleString()} repl{displayCount !== 1 ? 'ies' : 'y'}
         </span>
 
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as ReplyClassification | 'ALL')}
-          className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs rounded-[var(--radius-btn)] px-3 py-1.5 focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] transition-all duration-[var(--transition-base)]"
-        >
-          <option value="ALL">All Classifications</option>
-          {ALL_CLASSIFICATIONS.map((c) => (
-            <option key={c} value={c}>
-              {CLASSIFICATION_LABELS[c]}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <ViewToggle view={view} />
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as ReplyClassification | 'ALL')}
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs rounded-[var(--radius-btn)] px-3 py-1.5 focus:outline-none focus:border-[var(--accent-indigo)] focus:shadow-[var(--focus-ring)] transition-all duration-[var(--transition-base)]"
+          >
+            <option value="ALL">All Classifications</option>
+            {ALL_CLASSIFICATIONS.map((c) => (
+              <option key={c} value={c}>
+                {CLASSIFICATION_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">

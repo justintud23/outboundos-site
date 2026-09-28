@@ -72,4 +72,14 @@ describe('CampaignCard', () => {
     const nameLink = screen.getByRole('link', { name: /Q2 Outreach Blitz/i })
     expect((nameLink as HTMLAnchorElement).href).toContain('/campaigns/c1')
   })
+
+  it('shows the owner name when set', () => {
+    render(<CampaignCard campaign={{ ...baseCampaign, ownerName: 'Dana Lee' }} />)
+    expect(screen.getByText('Dana Lee')).toBeDefined()
+  })
+
+  it('shows Unassigned when there is no owner', () => {
+    render(<CampaignCard campaign={{ ...baseCampaign, ownerName: null }} />)
+    expect(screen.getByText('Unassigned')).toBeDefined()
+  })
 })
