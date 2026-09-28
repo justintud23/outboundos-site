@@ -296,18 +296,19 @@ Leads score 0–100 based on location, property type, size, title keywords, and 
 | Past customer | +15 |
 | Lost quote | +10 |
 
-Rules score is clamped by property type, then AI refines by ±15 (final score clamped to 0–100) using fit reasoning. Leads with a property cap skip AI adjustment. See the breakdown under "How this score was calculated" on each lead's page.
+The rules score is capped when a lead is out of area (15) or a not-a-fit property type (10). Any capped lead skips AI adjustment. AI refines by ±15 (final score clamped to 0–100) using fit reasoning. See the breakdown under "How this score was calculated" on each lead's page.
 
 **CSV Import**
 
-Include these columns (map in the form if needed):
+Include these columns (or map in Settings → Business profile → Column mapping):
 
 - **ZIP/address:** `zip`, `zip_code`, `zipcode`, `postal_code`, `postcode`, or a ZIP within `address`, `property_address`, `street_address`
+- **City:** `city`, `property_city`, `town`
 - **Property type:** `property_type`, `type`, `segment`, `account_type`, `industry`
 - **Size:** `sites`, `number_of_sites`, `locations`, `properties`, `property_count`, `num_properties`, `acres`, `lot_size`, `lot_acres`
 - **Relationship:** `relationship`, `status`, `customer_status`, `lead_type` — use "customer"/"client" for past customers, "lost"/"quote"/"quoted" for lost quotes
 
-Use **Column mapping** in the import form for any other columns.
+Use Settings → Business profile → **Column mapping** for any other columns.
 
 **Merge Fields**
 
@@ -325,7 +326,7 @@ Once your profile is saved, Sequences → New shows a **Start from template** op
 
 **No Business Profile**
 
-Organizations without a business profile use original generic scoring (AI pass over title and inferred size). The sequence form shows no templates, and profile-based merge fields use fallbacks.
+Organizations without a business profile use the original generic AI scoring (based on title, company and email domain). The sequence form shows no templates. Merge fields like {propertyType}, {city}, and {sites} fall back only if the lead has no such column.
 
 ---
 
