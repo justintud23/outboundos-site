@@ -36,14 +36,20 @@ describe('getDashboardSummary', () => {
     expect(mockReplyCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1', classification: 'POSITIVE' } })
   })
 
-  it('filters the leads and campaigns counts by ownerId when provided; messages/replies are unaffected', async () => {
+  it('filters all counts by ownerId when provided: leads/campaigns directly, messages/replies via lead.ownerId', async () => {
     await getDashboardSummary({ organizationId: 'org-1', ownerId: 'm1' })
 
     expect(mockLeadCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm1' } })
     expect(mockCampaignCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm1' } })
-    expect(mockMessageCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1' } })
-    expect(mockReplyCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1' } })
-    expect(mockReplyCount).toHaveBeenCalledWith({ where: { organizationId: 'org-1', classification: 'POSITIVE' } })
+    expect(mockMessageCount).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', lead: { ownerId: 'm1' } },
+    })
+    expect(mockReplyCount).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', lead: { ownerId: 'm1' } },
+    })
+    expect(mockReplyCount).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', classification: 'POSITIVE', lead: { ownerId: 'm1' } },
+    })
   })
 
   it('returns the DTO shape', async () => {

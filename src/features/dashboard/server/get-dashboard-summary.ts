@@ -15,15 +15,18 @@ export async function getDashboardSummary({
   organizationId: string
   ownerId?: string
 }): Promise<DashboardSummaryDTO> {
-  // Only the leads and campaigns counts have a direct ownerId to filter on
-  // (mirroring getLeads/getCampaigns). messagesSent/replies/positiveReplies
-  // have no ownership rule defined for this task and are left org-wide.
+  // leads/campaigns have a direct ownerId to filter on (mirroring
+  // getLeads/getCampaigns); messagesSent/replies/positiveReplies count
+  // OutboundMessage/InboundReply rows, which reach their owner via the lead
+  // relation (mirroring getReplies' `lead: { ownerId }`).
   const [leads, campaigns, messagesSent, replies, positiveReplies] = await Promise.all([
     prisma.lead.count({ where: { organizationId, ...(ownerId && { ownerId }) } }),
     prisma.campaign.count({ where: { organizationId, ...(ownerId && { ownerId }) } }),
-    prisma.outboundMessage.count({ where: { organizationId } }),
-    prisma.inboundReply.count({ where: { organizationId } }),
-    prisma.inboundReply.count({ where: { organizationId, classification: 'POSITIVE' } }),
+    prisma.outboundMessage.count({ where: { organizationId, ...(ownerId && { lead: { ownerId } }) } }),
+    prisma.inboundReply.count({ where: { organizationId, ...(ownerId && { lead: { ownerId } }) } }),
+    prisma.inboundReply.count({
+      where: { organizationId, classification: 'POSITIVE', ...(ownerId && { lead: { ownerId } }) },
+    }),
   ])
 
   return { leads, campaigns, messagesSent, replies, positiveReplies }
