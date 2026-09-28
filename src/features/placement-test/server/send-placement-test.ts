@@ -5,6 +5,8 @@ import { getAIProvider } from '@/lib/ai'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '@/features/sequences/render-template'
 import { getLeadContext } from '@/features/business-profile/server/lead-context'
 import { templateLeadWithFacts } from '@/features/business-profile/lead-facts'
+import { getCampaignSender } from '@/features/team/server/campaign-sender'
+import { withSenderFields } from '@/features/team/sender-fields'
 import { checkGuardrails } from '@/features/drafts/guardrails'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
@@ -178,7 +180,8 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
 
   // 6. Render, the same way run-sequence-step builds a first-step draft.
   const context = await getLeadContext(organizationId, lead.customFields)
-  const renderLead = templateLeadWithFacts(lead, context.facts)
+  const sender = await getCampaignSender(organizationId, campaignId)
+  const renderLead = withSenderFields(templateLeadWithFacts(lead, context.facts), sender)
   const subject = renderTemplate(step.subject, renderLead)
   let personalization: string | null = null
   let personalizationSkipped = false

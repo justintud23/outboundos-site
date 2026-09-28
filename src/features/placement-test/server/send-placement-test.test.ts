@@ -39,6 +39,9 @@ vi.mock('@/features/mailboxes/server/mailbox-slots', () => ({
 const { getLeadContext } = vi.hoisted(() => ({ getLeadContext: vi.fn() }))
 vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadContext }))
 
+const { getCampaignSender } = vi.hoisted(() => ({ getCampaignSender: vi.fn() }))
+vi.mock('@/features/team/server/campaign-sender', () => ({ getCampaignSender }))
+
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { getAIProvider } from '@/lib/ai'
@@ -143,6 +146,7 @@ beforeEach(() => {
   mockReleaseMailboxSlot.mockResolvedValue(undefined)
 
   getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
+  getCampaignSender.mockResolvedValue({ senderFirstName: null, senderName: null })
 })
 
 describe('sendPlacementTest — seed validation', () => {
@@ -386,6 +390,16 @@ describe('sendPlacementTest — happy path', () => {
     expect(mockPrisma.draft.update).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+  })
+
+  it('renders {senderFirstName} in the sent body from the campaign owner', async () => {
+    getCampaignSender.mockResolvedValue({ senderFirstName: 'Mike', senderName: 'Mike Rossi' })
+    mockPrisma.sequence.findFirst.mockResolvedValue({
+      ...fakeSequence,
+      steps: [{ ...fakeStep, body: 'Hello {firstName|there}\n\nThanks,\n{senderFirstName|}' }],
+    })
+    await sendPlacementTest(INPUT)
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ body: 'Hello Jane\n\nThanks,\nMike' }))
   })
 })
 

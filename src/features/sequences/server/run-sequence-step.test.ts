@@ -23,6 +23,9 @@ vi.mock('@/lib/ai', () => ({ getAIProvider: () => ({ personalize }) }))
 const { getLeadContext } = vi.hoisted(() => ({ getLeadContext: vi.fn() }))
 vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadContext }))
 
+const { getCampaignSender } = vi.hoisted(() => ({ getCampaignSender: vi.fn() }))
+vi.mock('@/features/team/server/campaign-sender', () => ({ getCampaignSender }))
+
 import { prisma } from '@/lib/db/prisma'
 import { checkEnrollmentStop } from './check-enrollment-stop'
 import { assignEnrollmentMailbox } from './assign-mailbox'
@@ -85,6 +88,7 @@ const autoCampaign = (sampleApprovedAt: Date | null) => ({
 beforeEach(() => {
   vi.resetAllMocks()
   getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
+  getCampaignSender.mockResolvedValue({ senderFirstName: null, senderName: null })
 })
 
 describe('runSequenceStep', () => {
@@ -132,6 +136,38 @@ describe('runSequenceStep', () => {
 
     const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
     expect(result).toBe('DRAFT_GENERATED')
+  })
+
+  it('renders {senderFirstName} in the draft body from the campaign owner', async () => {
+    getCampaignSender.mockResolvedValue({ senderFirstName: 'Mike', senderName: 'Mike Rossi' })
+    mockEnrollmentFind.mockResolvedValue(
+      makeEnrollment({
+        sequence: {
+          campaignId: 'camp-1',
+          campaign: { id: 'camp-1', autoSend: false, sampleSize: 10, sampleApprovedAt: null },
+          steps: [{ id: 'step-1', stepNumber: 1, subject: 'Hi', body: 'Hello {firstName|there}\n\nThanks,\n{senderFirstName|}', delayDays: 0, personalizationPrompt: null }],
+        },
+      }),
+    )
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+    const draftCreate = vi.fn().mockResolvedValue({ id: 'draft-1' })
+    mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      return fn({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: draftCreate,
+          groupBy: vi.fn().mockResolvedValue([]),
+        },
+        sequenceStep: { findUnique: vi.fn().mockResolvedValue({ winningVariantId: null, winningVariant: null, subjectVariants: [] }) },
+        sequenceEnrollment: { update: vi.fn().mockResolvedValue({}) },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      })
+    })
+
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('DRAFT_GENERATED')
+    const data = draftCreate.mock.calls[0][0].data
+    expect(data.body).toBe('Hello Jane\n\nThanks,\nMike')
   })
 
   it('assigns a subject variant on the FIRST step when a test exists', async () => {

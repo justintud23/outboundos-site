@@ -8,6 +8,8 @@ import { assignEnrollmentMailbox } from './assign-mailbox'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '../render-template'
 import { getLeadContext } from '@/features/business-profile/server/lead-context'
 import { templateLeadWithFacts } from '@/features/business-profile/lead-facts'
+import { getCampaignSender } from '@/features/team/server/campaign-sender'
+import { withSenderFields } from '@/features/team/sender-fields'
 import { checkGuardrails, type GuardrailFlag } from '@/features/drafts/guardrails'
 import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
 import { verificationGate } from '@/features/verification/gate'
@@ -177,7 +179,8 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
   //    transaction, fetched once and reused for both personalization and
   //    merge-field rendering below.
   const context = await getLeadContext(enrollment.organizationId, lead.customFields)
-  const renderLead = templateLeadWithFacts(lead, context.facts)
+  const sender = await getCampaignSender(enrollment.organizationId, campaign.id)
+  const renderLead = withSenderFields(templateLeadWithFacts(lead, context.facts), sender)
 
   // 5b. AI personalization.
   let personalization: string | null = null
