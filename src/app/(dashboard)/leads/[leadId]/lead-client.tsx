@@ -7,6 +7,7 @@ import { LeadTimeline } from '@/features/leads/components/lead-timeline'
 import { LeadMessages } from '@/features/leads/components/lead-messages'
 import { LeadActionsPanel } from '@/features/leads/components/lead-actions-panel'
 import { LeadSequenceCard } from '@/features/leads/components/lead-sequence-card'
+import { ScoreBreakdownTable } from '@/features/business-profile/components/score-breakdown'
 import { executeAction, isInlineAction } from '@/features/leads/components/inline-action-item'
 import { computeEngagementScore } from '@/features/leads/utils/compute-engagement-score'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
@@ -209,6 +210,9 @@ export function LeadCommandCenter({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT — Primary content (2/3) */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Score breakdown — right under the header card */}
+          <ScoreBreakdownTable breakdown={lead.scoreBreakdown} />
+
           {/* Tab switcher */}
           <div className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] animate-fade-in-up" style={{ animationDelay: '50ms' }}>
             <div className="flex border-b border-[var(--border-default)]">

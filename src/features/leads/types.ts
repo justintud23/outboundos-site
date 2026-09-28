@@ -117,6 +117,7 @@ export type LeadDetailDTO = Pick<
   | 'emailCheck'
   | 'emailCheckResult'
   | 'emailCheckedAt'
+  | 'scoreBreakdown'
 > & {
   lastActivityAt: Date
 }

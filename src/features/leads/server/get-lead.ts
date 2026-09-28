@@ -33,6 +33,7 @@ export async function getLead({
       emailCheck: true,
       emailCheckResult: true,
       emailCheckedAt: true,
+      scoreBreakdown: true,
     },
   })
 
