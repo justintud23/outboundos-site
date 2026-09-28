@@ -25,3 +25,27 @@ export interface LeadFacts {
   acres: number | null
   relationship: Relationship | null
 }
+
+export type PresetId = 'snow_paving' | 'blank'
+export type PropertyTier = 'great' | 'good' | 'no_go'
+
+export interface PropertyTypeRule {
+  label: string
+  keywords: string[]
+  tier: PropertyTier
+}
+
+export interface BusinessProfileDTO {
+  preset: PresetId
+  companySummary: string
+  services: string[]
+  yards: Yard[]
+  alwaysZips: string[]
+  neverZips: string[]
+  propertyTypes: PropertyTypeRule[]
+  decisionTitleKeywords: string[]
+  downrankTitleKeywords: string[]
+  bigSites: number
+  bigAcres: number | null
+  columnMapping: ColumnMapping
+}
