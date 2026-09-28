@@ -62,7 +62,10 @@ function formatPoints(points: number): string {
 export function ScoreBreakdownTable({ breakdown }: ScoreBreakdownTableProps) {
   if (!isScoreBreakdown(breakdown)) return null
 
-  const finalScore = breakdown.rulesScore + (breakdown.aiAdjustment ?? 0)
+  // Matches the clamp scoreLeads.ts applies when persisting `Lead.score` —
+  // without it, e.g. rulesScore 100 + AI +15 would display 115 here while
+  // the stored score is 100.
+  const finalScore = Math.max(0, Math.min(100, breakdown.rulesScore + (breakdown.aiAdjustment ?? 0)))
   const cappingPart =
     breakdown.cap !== null
       ? breakdown.parts.find((p) => CAPPING_SIGNALS.has(p.signal) && p.points === 0)

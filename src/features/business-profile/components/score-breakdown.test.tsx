@@ -55,6 +55,42 @@ describe('ScoreBreakdownTable', () => {
     expect(screen.queryByText(/Capped at/)).not.toBeInTheDocument()
   })
 
+  it('clamps the footer score to 100 when rulesScore + aiAdjustment overflows', () => {
+    const { container } = render(
+      <ScoreBreakdownTable
+        breakdown={{
+          parts: [{ signal: 'area', label: 'In area (10 mi)', points: 30 }],
+          rulesScore: 100,
+          cap: null,
+          aiAdjustment: 15,
+          aiReason: 'Great fit all around',
+        }}
+      />,
+    )
+    const footerRow = container.querySelector('tfoot tr')
+    expect(footerRow?.textContent).toContain('Score')
+    expect(footerRow?.textContent).toContain('100')
+    expect(footerRow?.textContent).not.toContain('115')
+  })
+
+  it('clamps the footer score to 0 when rulesScore + aiAdjustment underflows', () => {
+    const { container } = render(
+      <ScoreBreakdownTable
+        breakdown={{
+          parts: [{ signal: 'area', label: 'Area unknown (no ZIP)', points: 5 }],
+          rulesScore: 5,
+          cap: null,
+          aiAdjustment: -15,
+          aiReason: 'Weak fit',
+        }}
+      />,
+    )
+    const footerRow = container.querySelector('tfoot tr')
+    expect(footerRow?.textContent).toContain('Score')
+    expect(footerRow?.textContent).toContain('0')
+    expect(footerRow?.textContent).not.toContain('-10')
+  })
+
   it('renders nothing for null', () => {
     const { container } = render(<ScoreBreakdownTable breakdown={null} />)
     expect(container).toBeEmptyDOMElement()
