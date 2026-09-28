@@ -1,13 +1,17 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { rescoreOrganizationLeads } from '@/features/business-profile/server/rescore'
 
 export const maxDuration = 60
 
 export async function POST(request: Request) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
+
   const body = (await request.json().catch(() => ({}))) as { since?: unknown }
   let since: Date | undefined
   if (body.since !== undefined) {
@@ -15,8 +19,7 @@ export async function POST(request: Request) {
     if (Number.isNaN(since.getTime())) return NextResponse.json({ error: 'Invalid since' }, { status: 400 })
   }
   try {
-    const org = await resolveOrganization(orgId)
-    return NextResponse.json(await rescoreOrganizationLeads(org.id, { since }))
+    return NextResponse.json(await rescoreOrganizationLeads(ctx.org.id, { since }))
   } catch (err) {
     console.error('[POST /api/settings/business-profile/rescore]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

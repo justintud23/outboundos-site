@@ -1,19 +1,23 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getMessageOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { retryFailedMessage } from '@/features/messages/server/retry-message'
 import { MessageNotFoundError, MessageNotFailedError } from '@/features/messages/types'
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { orgId } = await auth()
-  if (!orgId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'No active organization. Select an organization to continue.' }, { status: 403 })
   }
 
   const { id } = await params
+
+  const denied = denyUnlessCanAct(ctx, await getMessageOwnerId(ctx.org.id, id))
+  if (denied) return denied
+
   try {
-    const org = await resolveOrganization(orgId)
-    const result = await retryFailedMessage({ organizationId: org.id, messageId: id })
+    const result = await retryFailedMessage({ organizationId: ctx.org.id, messageId: id })
     return NextResponse.json(result)
   } catch (err) {
     if (err instanceof MessageNotFoundError) {

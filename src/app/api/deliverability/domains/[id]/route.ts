@@ -1,13 +1,17 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 
 const EARLIEST = new Date('1985-01-01T00:00:00Z') // first .com registrations
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
+
   const { id } = await params
 
   const body = (await request.json().catch(() => null)) as { registeredAt?: unknown } | null
@@ -24,9 +28,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   try {
-    const org = await resolveOrganization(orgId)
     const result = await prisma.domainHealth.updateMany({
-      where: { id, organizationId: org.id },
+      where: { id, organizationId: ctx.org.id },
       data: { registeredAt: date, registeredAtSource: 'manual' },
     })
     if (result.count === 0) return NextResponse.json({ error: 'Domain not found' }, { status: 404 })

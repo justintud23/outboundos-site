@@ -1,14 +1,15 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { generateDraft } from '@/features/drafts/server/generate-draft'
 import { PendingDraftExistsError, LeadNotFoundError } from '@/features/drafts/types'
 import { DraftGenerationError } from '@/lib/ai'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getLeadOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 
 export async function POST(request: Request) {
-  const { orgId, userId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId || !userId) {
+  if (!ctx) {
     return NextResponse.json(
       { error: 'No active organization. Select an organization to continue.' },
       { status: 403 },
@@ -33,10 +34,11 @@ export async function POST(request: Request) {
 
   const { leadId } = body as { leadId: string }
 
-  const org = await resolveOrganization(orgId)
+  const denied = denyUnlessCanAct(ctx, await getLeadOwnerId(ctx.org.id, leadId))
+  if (denied) return denied
 
   try {
-    const draft = await generateDraft({ organizationId: org.id, leadId, clerkUserId: userId })
+    const draft = await generateDraft({ organizationId: ctx.org.id, leadId, clerkUserId: ctx.member.clerkUserId })
     return NextResponse.json(draft, { status: 201 })
   } catch (err) {
     if (err instanceof PendingDraftExistsError) {

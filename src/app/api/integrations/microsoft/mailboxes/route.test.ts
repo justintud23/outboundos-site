@@ -1,27 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: vi.fn(),
-}))
-
-vi.mock('@/lib/auth/resolve-organization', () => ({
-  resolveOrganization: vi.fn(),
-}))
+vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
 
 vi.mock('@/features/integrations/server/microsoft', () => ({
   importGraphMailboxes: vi.fn(),
 }))
 
-import { auth } from '@clerk/nextjs/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { importGraphMailboxes } from '@/features/integrations/server/microsoft'
 import { POST } from './route'
 
-const mockAuth = auth as unknown as ReturnType<typeof vi.fn>
-const mockResolveOrganization = resolveOrganization as unknown as ReturnType<typeof vi.fn>
+const mockResolveMember = resolveMember as unknown as ReturnType<typeof vi.fn>
 const mockImportGraphMailboxes = importGraphMailboxes as unknown as ReturnType<typeof vi.fn>
 
 const connectedOrg = { id: 'internal-org-id', clerkId: 'clerk-org-id', msTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47' }
+const rep = { org: connectedOrg, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
+const admin = { org: connectedOrg, member: { id: 'm-admin', clerkUserId: 'user_admin' }, isAdmin: true }
 
 function makeRequest(body: unknown): Request {
   return new Request('https://app.test/api/integrations/microsoft/mailboxes', {
@@ -35,11 +29,25 @@ const validUser = { id: 'u1', email: 'mike@acme.com', displayName: 'Mike' }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-  mockResolveOrganization.mockResolvedValue(connectedOrg)
+  mockResolveMember.mockResolvedValue(admin as never)
 })
 
 describe('POST /api/integrations/microsoft/mailboxes', () => {
+  it('403 without an active org', async () => {
+    mockResolveMember.mockResolvedValue(null)
+    const res = await POST(makeRequest({ users: [validUser] }))
+    expect(res.status).toBe(403)
+    expect(mockImportGraphMailboxes).not.toHaveBeenCalled()
+  })
+
+  it('403 ADMIN_ONLY for a non-admin member, and does not import', async () => {
+    mockResolveMember.mockResolvedValue(rep as never)
+    const res = await POST(makeRequest({ users: [validUser] }))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('ADMIN_ONLY')
+    expect(mockImportGraphMailboxes).not.toHaveBeenCalled()
+  })
+
   it('returns 400 for an empty users array', async () => {
     const res = await POST(makeRequest({ users: [] }))
 
@@ -69,7 +77,7 @@ describe('POST /api/integrations/microsoft/mailboxes', () => {
     expect(mockImportGraphMailboxes).not.toHaveBeenCalled()
   })
 
-  it('returns 201 with { created } on success', async () => {
+  it('returns 201 with { created } on success for an admin', async () => {
     mockImportGraphMailboxes.mockResolvedValue({ created: 1 })
 
     const res = await POST(makeRequest({ users: [validUser] }))
@@ -80,7 +88,7 @@ describe('POST /api/integrations/microsoft/mailboxes', () => {
   })
 
   it('returns 409 when Microsoft 365 is not connected', async () => {
-    mockResolveOrganization.mockResolvedValue({ ...connectedOrg, msTenantId: null })
+    mockResolveMember.mockResolvedValue({ ...admin, org: { ...connectedOrg, msTenantId: null } } as never)
 
     const res = await POST(makeRequest({ users: [validUser] }))
 

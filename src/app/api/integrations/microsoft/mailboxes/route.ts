@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { importGraphMailboxes } from '@/features/integrations/server/microsoft'
 
 const MAX_USERS = 50
@@ -27,11 +27,13 @@ function isGraphUserInput(v: unknown): v is GraphUserInput {
 }
 
 export async function POST(request: Request) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
 
-  const org = await resolveOrganization(orgId)
-  if (!org.msTenantId) {
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
+
+  if (!ctx.org.msTenantId) {
     return NextResponse.json({ error: 'Microsoft 365 not connected' }, { status: 409 })
   }
 
@@ -51,6 +53,6 @@ export async function POST(request: Request) {
     )
   }
 
-  const result = await importGraphMailboxes(org.id, users)
+  const result = await importGraphMailboxes(ctx.org.id, users)
   return NextResponse.json(result, { status: 201 })
 }

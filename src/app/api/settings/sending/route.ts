@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import {
   getSendingSettings,
   updateSendingSettings,
@@ -37,8 +39,11 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization. Select an organization to continue.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization. Select an organization to continue.' }, { status: 403 })
+
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
 
   let body: unknown
   try {
@@ -61,8 +66,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const org = await resolveOrganization(orgId)
-    const settings = await updateSendingSettings(org.id, patch as SendingSettingsPatch)
+    const settings = await updateSendingSettings(ctx.org.id, patch as SendingSettingsPatch)
     return NextResponse.json(settings)
   } catch (err) {
     if (err instanceof SettingsValidationError) {

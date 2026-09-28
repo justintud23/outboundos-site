@@ -1,30 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: vi.fn(),
-}))
-
-vi.mock('@/lib/auth/resolve-organization', () => ({
-  resolveOrganization: vi.fn(),
-}))
+vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
 
 vi.mock('@/features/mailboxes/server/set-mailbox-ramp', () => ({
   setMailboxRampPreset: vi.fn(),
   restartMailboxRamp: vi.fn(),
 }))
 
-import { auth } from '@clerk/nextjs/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { setMailboxRampPreset, restartMailboxRamp } from '@/features/mailboxes/server/set-mailbox-ramp'
 import { MailboxNotFoundError } from '@/features/mailboxes/types'
 import { PATCH } from './route'
 
-const mockAuth = auth as unknown as ReturnType<typeof vi.fn>
-const mockResolveOrganization = resolveOrganization as unknown as ReturnType<typeof vi.fn>
+const mockResolveMember = resolveMember as unknown as ReturnType<typeof vi.fn>
 const mockSetMailboxRampPreset = setMailboxRampPreset as unknown as ReturnType<typeof vi.fn>
 const mockRestartMailboxRamp = restartMailboxRamp as unknown as ReturnType<typeof vi.fn>
 
-const fakeOrg = { id: 'internal-org-id', clerkId: 'clerk-org-id' }
+const rep = { org: { id: 'internal-org-id' }, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
+const admin = { org: { id: 'internal-org-id' }, member: { id: 'm-admin', clerkUserId: 'user_admin' }, isAdmin: true }
+
 const fakeMailboxDTO = {
   id: 'mb-1',
   organizationId: 'internal-org-id',
@@ -55,12 +49,28 @@ function makeRequest(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockResolveMember.mockResolvedValue(admin as never)
+})
+
+describe('PATCH /api/mailboxes/[id] - guard', () => {
+  it('401 without an active org', async () => {
+    mockResolveMember.mockResolvedValue(null)
+    const res = await PATCH(makeRequest({ rampPreset: 'AGGRESSIVE' }), { params: Promise.resolve({ id: 'mb-1' }) })
+    expect(res.status).toBe(401)
+    expect(mockSetMailboxRampPreset).not.toHaveBeenCalled()
+  })
+
+  it('403 ADMIN_ONLY for a non-admin member, and does not call the server function', async () => {
+    mockResolveMember.mockResolvedValue(rep as never)
+    const res = await PATCH(makeRequest({ rampPreset: 'AGGRESSIVE' }), { params: Promise.resolve({ id: 'mb-1' }) })
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('ADMIN_ONLY')
+    expect(mockSetMailboxRampPreset).not.toHaveBeenCalled()
+  })
 })
 
 describe('PATCH /api/mailboxes/[id] - ramp actions', () => {
   it('calls setMailboxRampPreset when rampPreset is provided', async () => {
-    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-    mockResolveOrganization.mockResolvedValue(fakeOrg)
     const updated = { ...fakeMailboxDTO, rampPreset: 'AGGRESSIVE' }
     mockSetMailboxRampPreset.mockResolvedValue(updated)
 
@@ -78,9 +88,6 @@ describe('PATCH /api/mailboxes/[id] - ramp actions', () => {
   })
 
   it('returns 400 when rampPreset is invalid', async () => {
-    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-    mockResolveOrganization.mockResolvedValue(fakeOrg)
-
     const req = makeRequest({ rampPreset: 'TURBO' })
     const res = await PATCH(req, { params: Promise.resolve({ id: 'mb-1' }) })
 
@@ -91,8 +98,6 @@ describe('PATCH /api/mailboxes/[id] - ramp actions', () => {
   })
 
   it('calls restartMailboxRamp when restartRamp is true', async () => {
-    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-    mockResolveOrganization.mockResolvedValue(fakeOrg)
     mockRestartMailboxRamp.mockResolvedValue(fakeMailboxDTO)
 
     const req = makeRequest({ restartRamp: true })
@@ -108,8 +113,6 @@ describe('PATCH /api/mailboxes/[id] - ramp actions', () => {
   })
 
   it('returns 404 when MailboxNotFoundError is thrown', async () => {
-    mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-    mockResolveOrganization.mockResolvedValue(fakeOrg)
     mockSetMailboxRampPreset.mockRejectedValue(new MailboxNotFoundError())
 
     const req = makeRequest({ rampPreset: 'AGGRESSIVE' })

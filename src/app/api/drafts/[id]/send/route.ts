@@ -1,7 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { sendDraft } from '@/features/messages/server/send-draft'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getDraftOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import {
   DraftNotApprovedError,
   DraftAlreadySentError,
@@ -20,9 +21,9 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId || !userId) {
+  if (!ctx) {
     return NextResponse.json(
       { error: 'No active organization. Select an organization to continue.' },
       { status: 403 },
@@ -30,10 +31,12 @@ export async function POST(
   }
 
   const { id: draftId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getDraftOwnerId(ctx.org.id, draftId))
+  if (denied) return denied
 
   try {
-    const message = await sendDraft({ organizationId: org.id, draftId, clerkUserId: userId })
+    const message = await sendDraft({ organizationId: ctx.org.id, draftId, clerkUserId: ctx.member.clerkUserId })
     return NextResponse.json(message, { status: 201 })
   } catch (err) {
     if (err instanceof DraftNotFoundError) {

@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 import { createMailbox } from '@/features/mailboxes/server/create-mailbox'
 import { MailboxAlreadyExistsError, ManualMailboxNotAllowedError } from '@/features/mailboxes/types'
@@ -21,14 +23,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { orgId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId) {
+  if (!ctx) {
     return NextResponse.json(
       { error: 'No active organization. Select an organization to continue.' },
       { status: 403 },
     )
   }
+
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
 
   let body: unknown
   try {
@@ -60,8 +65,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const org = await resolveOrganization(orgId)
-    const mailbox = await createMailbox({ organizationId: org.id, email, displayName })
+    const mailbox = await createMailbox({ organizationId: ctx.org.id, email, displayName })
     return NextResponse.json(mailbox, { status: 201 })
   } catch (err) {
     if (err instanceof MailboxAlreadyExistsError) {

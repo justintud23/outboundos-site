@@ -1,13 +1,16 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { createTemplate } from '@/features/templates/server/create-template'
 
 export async function POST(request: Request) {
-  const { orgId } = await auth()
-  if (!orgId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
 
   let body: { name?: string; promptType?: string; body?: string; notes?: string }
   try {
@@ -25,10 +28,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `promptType must be one of: ${validTypes.join(', ')}` }, { status: 400 })
   }
 
-  const org = await resolveOrganization(orgId)
-
   const template = await createTemplate({
-    organizationId: org.id,
+    organizationId: ctx.org.id,
     name: body.name,
     promptType: body.promptType as 'LEAD_SCORING' | 'EMAIL_DRAFT' | 'REPLY_CLASSIFICATION' | 'SUBJECT_LINE',
     body: body.body,
