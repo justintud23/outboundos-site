@@ -25,11 +25,12 @@ const mailboxPath = (mailbox: string) => `/users/${encodeURIComponent(mailbox)}`
 const DELTA_SELECT =
   'id,conversationId,subject,from,receivedDateTime,sentDateTime,isDraft,body,bodyPreview,internetMessageHeaders'
 
-function messageBody(c: OutgoingContent) {
+function messageBody(c: OutgoingContent, cc?: string | null) {
   return {
     subject: c.subject,
     body: { contentType: 'Text', content: c.text },
     toRecipients: [{ emailAddress: { address: c.to } }],
+    ...(cc ? { ccRecipients: [{ emailAddress: { address: cc } }] } : {}),
   }
 }
 
@@ -128,10 +129,11 @@ export async function sendMailAsText(
   to: string,
   subject: string,
   text: string,
+  cc?: string | null,
 ): Promise<void> {
   await graphFetch(tenantId, `${mailboxPath(fromMailbox)}/sendMail`, {
     method: 'POST',
-    body: { message: messageBody({ to, subject, text }), saveToSentItems: false },
+    body: { message: messageBody({ to, subject, text }, cc), saveToSentItems: false },
   })
 }
 

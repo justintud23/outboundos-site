@@ -1,9 +1,11 @@
 import { prisma } from '@/lib/db/prisma'
 import { sendMailAsText } from '@/lib/email/graph/mail'
+import { resolveAlertRecipients } from '@/features/team/server/alert-recipients'
 
 // Escalation emails go FROM a shared mailbox in the sending tenant
 // (MS_NOTIFY_MAILBOX — no license, never counts against cold-mailbox limits)
-// TO the org's escalationEmail. All functions are best-effort: they return
+// TO the resolved recipient (lead owner → mailbox owner → org), CC'ing the
+// org address when enabled. All functions are best-effort: they return
 // false instead of throwing so a notification problem never breaks a cron tick;
 // the inbox monitor re-sweeps replies whose notifiedAt is still null.
 
@@ -44,18 +46,24 @@ export function buildReplyNotification(i: ReplyNotificationInput): { subject: st
   return { subject: `[Reply – ${i.classification}] ${who}`, text: lines.join('\n') }
 }
 
-async function deliver(organizationId: string, subject: string, text: string): Promise<boolean> {
+async function deliver(
+  organizationId: string,
+  subject: string,
+  text: string,
+  refs?: { leadId?: string | null; mailboxId?: string | null },
+): Promise<boolean> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { escalationEmail: true, msTenantId: true },
+    select: { msTenantId: true },
   })
   const from = process.env.MS_NOTIFY_MAILBOX
-  if (!org?.escalationEmail || !org.msTenantId || !from) {
+  const { to, cc } = await resolveAlertRecipients(organizationId, refs)
+  if (!to || !org?.msTenantId || !from) {
     console.warn(`[notify] org ${organizationId}: missing escalationEmail, msTenantId or MS_NOTIFY_MAILBOX — skipped`)
     return false
   }
   try {
-    await sendMailAsText(org.msTenantId, from, org.escalationEmail, subject, text)
+    await sendMailAsText(org.msTenantId, from, to, subject, text, cc)
     return true
   } catch (err) {
     console.error(`[notify] org ${organizationId}: send failed`, err)
@@ -94,7 +102,7 @@ export async function notifyReply(replyId: string): Promise<boolean> {
       leadUrl: leadUrl(reply.leadId),
     })
 
-    const ok = await deliver(reply.organizationId, subject, text)
+    const ok = await deliver(reply.organizationId, subject, text, { leadId: reply.leadId, mailboxId: reply.mailboxId })
     if (ok) await prisma.inboundReply.update({ where: { id: replyId }, data: { notifiedAt: new Date() } })
     return ok
   } catch (err) {
@@ -124,7 +132,7 @@ export async function notifyUnmatchedReply(unmatchedId: string): Promise<boolean
       leadUrl: null,
     })
 
-    const ok = await deliver(reply.organizationId, subject, text)
+    const ok = await deliver(reply.organizationId, subject, text, { mailboxId: reply.mailboxId })
     if (ok) await prisma.unmatchedReply.update({ where: { id: unmatchedId }, data: { notifiedAt: new Date() } })
     return ok
   } catch (err) {
