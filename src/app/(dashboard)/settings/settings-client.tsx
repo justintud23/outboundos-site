@@ -8,13 +8,16 @@ import { IMPORT_FROM_MICROSOFT_MESSAGE, type MailboxDTO } from '@/features/mailb
 import type { SendingSettingsDTO } from '@/features/settings/server/sending-settings'
 import { MicrosoftCard } from '@/features/settings/components/microsoft-card'
 import { SendingSettingsForm } from '@/features/settings/components/sending-settings-form'
+import { BusinessProfileSection } from '@/features/business-profile/components/business-profile-section'
+import type { BusinessProfileDTO } from '@/features/business-profile/types'
 
 interface SettingsClientProps {
   initialMailboxes: MailboxDTO[]
   sendingSettings: SendingSettingsDTO
+  businessProfile: BusinessProfileDTO | null
 }
 
-export function SettingsClient({ initialMailboxes, sendingSettings }: SettingsClientProps) {
+export function SettingsClient({ initialMailboxes, sendingSettings, businessProfile }: SettingsClientProps) {
   const [mailboxes, setMailboxes] = useState<MailboxDTO[]>(initialMailboxes)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -82,6 +85,8 @@ export function SettingsClient({ initialMailboxes, sendingSettings }: SettingsCl
       </Suspense>
 
       <SendingSettingsForm initial={sendingSettings} />
+
+      <BusinessProfileSection initialProfile={businessProfile} />
 
       <div>
         <h2 className="text-[var(--text-primary)] text-sm font-medium mb-1">Sending mailboxes</h2>

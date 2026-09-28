@@ -1,3 +1,5 @@
+import type { LeadFacts } from '@/features/business-profile/types'
+
 export interface LeadScoreInput {
   id: string
   email: string
@@ -33,6 +35,8 @@ export interface PersonalizeInput {
   company?: string | null
   title?: string | null
   customFields?: unknown
+  profile?: { companySummary: string; services: string[] }
+  facts?: LeadFacts & { distanceMiles: number | null }
 }
 
 export interface ReplyClassifyInput {
@@ -51,6 +55,20 @@ export type ReplyClassificationValue =
 export interface ReplyClassifyOutput {
   classification: ReplyClassificationValue
   confidence: number  // 0–1
+}
+
+export interface LeadAdjustInput {
+  id: string
+  title: string | null
+  company: string | null
+  facts: LeadFacts
+  details: unknown
+}
+
+export interface LeadAdjustOutput {
+  leadId: string
+  adjustment: number
+  reason: string
 }
 
 /**
@@ -87,4 +105,7 @@ export interface AIProvider {
 
   /** One or two sentences, per `instructions`, grounded ONLY in the lead's data. */
   personalize(input: PersonalizeInput, instructions: string): Promise<string>
+
+  /** Fine-tunes each lead's rules-based score by -15..15 using the sender's industry profile. */
+  adjustLeadScores(leads: LeadAdjustInput[], profileSummary: string): Promise<LeadAdjustOutput[]>
 }

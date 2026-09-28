@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, PersonalizeInput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue } from './provider'
+import type { AIProvider, LeadScoreInput, LeadScoreOutput, EmailDraftInput, EmailDraftOutput, PersonalizeInput, ReplyClassifyInput, ReplyClassifyOutput, ReplyClassificationValue, LeadAdjustInput, LeadAdjustOutput } from './provider'
 import { DraftGenerationError } from './provider'
 import { UNTRUSTED_DATA_PREAMBLE, fenceUntrusted } from './prompt-safety'
 
@@ -216,10 +216,14 @@ Return ONLY a JSON object: { "classification": "<CATEGORY>", "confidence": <0.0-
       company: input.company ?? null,
       title: input.title ?? null,
       details: input.customFields && typeof input.customFields === 'object' ? input.customFields : null,
+      ...(input.profile && { sender: input.profile }),
+      ...(input.facts && { facts: input.facts }),
     })
 
     const systemPrompt = `You write ONE personalized opening line for a short B2B cold email.
 Guidance from the sender: ${instructions}
+
+If sender details are present, connect the lead's property or situation to the sender's services; if facts are present, you may use the property type, town and size.
 
 Rules: 1–2 sentences, under 40 words, plain text, no greeting, no sign-off.
 Use ONLY facts present in the lead data; if nothing relevant is there, write a
@@ -255,5 +259,50 @@ Return a JSON object: { "line": "<the sentence(s)>" }`
     }
     if (!line) throw new DraftGenerationError('AI personalization returned an empty line.')
     return line
+  }
+
+  async adjustLeadScores(leads: LeadAdjustInput[], profileSummary: string): Promise<LeadAdjustOutput[]> {
+    const leadData = JSON.stringify(leads.map((l) => ({ id: l.id, title: l.title, company: l.company, facts: l.facts, details: l.details && typeof l.details === 'object' ? l.details : null })))
+    const systemPrompt = `You help a contractor prioritize cold-outreach leads. Each lead already has a rules-based fit score;
+you only fine-tune it using details the rules can't read (e.g. whether a title is really a decision-maker for
+property services, or whether the company manages many properties).
+
+About the sender:
+${profileSummary}
+
+For each lead return an adjustment between -15 and 15 (0 when nothing stands out) and a short reason (max 12 words).
+Use only facts in the lead data. Never invent facts.
+
+${UNTRUSTED_DATA_PREAMBLE}
+
+Return a JSON object: { "adjustments": [ { "leadId": "<id>", "adjustment": <integer -15..15>, "reason": "<short>" } ] }`
+
+    let content: string
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: fenceUntrusted('leads', leadData) },
+        ],
+        temperature: 0.2,
+        response_format: JSON_RESPONSE_FORMAT,
+      })
+      content = response.choices[0]?.message.content ?? ''
+    } catch (err) {
+      throw new DraftGenerationError('AI score adjustment failed.', err)
+    }
+    try {
+      const raw = JSON.parse(content) as { adjustments?: unknown }
+      if (!Array.isArray(raw.adjustments)) throw new SyntaxError('adjustments missing')
+      return raw.adjustments.flatMap((a): LeadAdjustOutput[] => {
+        const item = a as { leadId?: unknown; adjustment?: unknown; reason?: unknown }
+        if (typeof item.leadId !== 'string') return []
+        const n = typeof item.adjustment === 'number' && Number.isFinite(item.adjustment) ? Math.round(item.adjustment) : 0
+        return [{ leadId: item.leadId, adjustment: Math.max(-15, Math.min(15, n)), reason: typeof item.reason === 'string' ? item.reason.slice(0, 120) : '' }]
+      })
+    } catch (err) {
+      throw new DraftGenerationError('AI score adjustment returned an invalid response.', err)
+    }
   }
 }

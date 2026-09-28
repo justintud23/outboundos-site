@@ -6,7 +6,7 @@ function makeLead(overrides: Partial<LeadDetailDTO> = {}): LeadDetailDTO {
   return {
     id: 'lead-1', email: 'test@example.com', firstName: 'Jane', lastName: 'Doe',
     company: 'Acme', title: 'CTO', linkedinUrl: null, phone: null, source: 'CSV',
-    status: 'NEW', score: null, scoreReason: null, scoredAt: null,
+    status: 'NEW', score: null, scoreReason: null, scoredAt: null, scoreBreakdown: null,
     customFields: null, createdAt: new Date(), updatedAt: new Date(),
     lastActivityAt: new Date(),
     emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null,

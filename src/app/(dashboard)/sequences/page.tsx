@@ -6,6 +6,8 @@ import { getSequences } from '@/features/sequences/server/get-sequences'
 import { getCampaigns } from '@/features/campaigns/server/get-campaigns'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { getSendingSettings } from '@/features/settings/server/sending-settings'
+import { getBusinessProfile } from '@/features/business-profile/server/profile'
+import { STARTER_SEQUENCES } from '@/features/business-profile/starter-sequences'
 
 export default async function SequencesPage() {
   const { orgId } = await auth()
@@ -15,10 +17,11 @@ export default async function SequencesPage() {
   }
 
   const org = await resolveOrganization(orgId)
-  const [{ sequences }, { campaigns }, sendingSettings] = await Promise.all([
+  const [{ sequences }, { campaigns }, sendingSettings, profile] = await Promise.all([
     getSequences({ organizationId: org.id }),
     getCampaigns({ organizationId: org.id }),
     getSendingSettings(org.id),
+    getBusinessProfile(org.id),
   ])
 
   return (
@@ -30,6 +33,7 @@ export default async function SequencesPage() {
           campaigns={campaigns.map((c) => ({ id: c.id, name: c.name }))}
           blockedPhrases={sendingSettings.guardrailBlockedPhrases}
           allowedWords={sendingSettings.guardrailAllowedWords}
+          starterSequences={profile ? STARTER_SEQUENCES[profile.preset] : []}
         />
       </div>
     </>

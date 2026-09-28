@@ -221,6 +221,36 @@ describe('OpenAIProvider.personalize', () => {
     expect(args.messages[1].content).toMatch(/<<lead:/)
   })
 
+  it('includes sender and facts in the fenced lead data, and the system prompt mentions connecting the sender to the lead, when profile/facts are given', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":"Saw you run 4 plazas near our Buffalo yard."}' } }] })
+    await provider.personalize(
+      {
+        firstName: 'Jane',
+        company: 'Acme PM',
+        customFields: { city: 'Amherst' },
+        profile: { companySummary: 'We plow commercial lots.', services: ['Snow removal', 'Salting'] },
+        facts: { zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null, distanceMiles: 8 },
+      },
+      'Mention their city.',
+    )
+    const args = mockCreate.mock.calls.at(-1)![0]
+    expect(args.messages[0].content).toContain("connect the lead's property")
+    // Fenced content is `<<lead:token>>\n<json>\n<</lead:token>>` — the JSON is
+    // the single middle line (fenceUntrusted never inserts internal newlines).
+    const userJson = JSON.parse((args.messages[1].content as string).split('\n')[1]!)
+    expect(userJson.sender).toEqual({ companySummary: 'We plow commercial lots.', services: ['Snow removal', 'Salting'] })
+    expect(userJson.facts).toEqual({ zip: '14226', city: 'Amherst', state: 'NY', propertyType: 'Retail', sites: 4, acres: null, relationship: null, distanceMiles: 8 })
+  })
+
+  it('omits sender and facts keys entirely when profile/facts are absent (Review Focus #5)', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":"A generic but natural line."}' } }] })
+    await provider.personalize({ firstName: 'Jane', company: 'Acme PM' }, 'Mention their city.')
+    const args = mockCreate.mock.calls.at(-1)![0]
+    const userJson = JSON.parse((args.messages[1].content as string).split('\n')[1]!)
+    expect(userJson).not.toHaveProperty('sender')
+    expect(userJson).not.toHaveProperty('facts')
+  })
+
   it('throws DraftGenerationError on an empty line', async () => {
     mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: '{"line":""}' } }] })
     await expect(provider.personalize({}, 'x')).rejects.toBeInstanceOf(DraftGenerationError)
@@ -376,5 +406,61 @@ describe('OpenAIProvider.classifyReply', () => {
     expect(user.content.trimEnd().endsWith(`<</reply_body:${openNonce}>>`)).toBe(true)
     expect(user.content).toContain('</reply_body>') // the fake one survives as data
     expect(attack).not.toContain(openNonce as string)
+  })
+})
+
+describe('OpenAIProvider.adjustLeadScores', () => {
+  let provider: OpenAIProvider
+  let mockCreate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    provider = new OpenAIProvider('test-key', 'gpt-4o')
+    const client = (OpenAI as unknown as ReturnType<typeof vi.fn>).mock.results[0]?.value as {
+      chat: { completions: { create: ReturnType<typeof vi.fn> } }
+    }
+    mockCreate = client.chat.completions.create
+  })
+
+  function mockCreateReturning(content: unknown): ReturnType<typeof vi.fn> {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }],
+    })
+    return mockCreate
+  }
+
+  it('returns clamped adjustments per lead and fences the data', async () => {
+    const create = mockCreateReturning({
+      adjustments: [
+        { leadId: 'l1', adjustment: 40, reason: 'Manages 14 HOAs' },
+        { leadId: 'l2', adjustment: -3.6, reason: 'Vendor' },
+        { leadId: 7, adjustment: 1, reason: 'x' },
+      ],
+    })
+    const out = await provider.adjustLeadScores(
+      [
+        {
+          id: 'l1',
+          title: 'CAM',
+          company: 'Acme HOA',
+          facts: { zip: '14206', city: null, state: null, propertyType: 'HOA', sites: 14, acres: null, relationship: null },
+          details: {},
+        },
+      ],
+      'Company: snow',
+    )
+    expect(out).toEqual([
+      { leadId: 'l1', adjustment: 15, reason: 'Manages 14 HOAs' },
+      { leadId: 'l2', adjustment: -4, reason: 'Vendor' },
+    ])
+    const messages = create.mock.calls[0]![0].messages
+    expect(messages[0].content).toContain('Company: snow')
+    expect(messages[0].content).toContain('-15')
+    expect(messages[1].content).toContain('l1')
+  })
+
+  it('throws DraftGenerationError on a malformed response', async () => {
+    mockCreateReturning('not json')
+    await expect(provider.adjustLeadScores([], 's')).rejects.toBeInstanceOf(DraftGenerationError)
   })
 })

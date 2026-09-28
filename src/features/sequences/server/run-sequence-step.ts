@@ -6,6 +6,8 @@ import { canadaExclusionReason } from '@/features/leads/canada'
 import { selectSubjectVariant } from './select-subject-variant'
 import { assignEnrollmentMailbox } from './assign-mailbox'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '../render-template'
+import { getLeadContext } from '@/features/business-profile/server/lead-context'
+import { templateLeadWithFacts } from '@/features/business-profile/lead-facts'
 import { checkGuardrails, type GuardrailFlag } from '@/features/drafts/guardrails'
 import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
 import { verificationGate } from '@/features/verification/gate'
@@ -171,13 +173,29 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
     }
   }
 
-  // 5. AI personalization — outside any transaction.
+  // 5. Business-profile context and derived lead facts — outside any
+  //    transaction, fetched once and reused for both personalization and
+  //    merge-field rendering below.
+  const context = await getLeadContext(enrollment.organizationId, lead.customFields)
+  const renderLead = templateLeadWithFacts(lead, context.facts)
+
+  // 5b. AI personalization.
   let personalization: string | null = null
   let aiFailed = false
   if (nextStep.personalizationPrompt && nextStep.body.includes(PERSONALIZATION_TOKEN)) {
     try {
       personalization = await getAIProvider().personalize(
-        { firstName: lead.firstName, lastName: lead.lastName, company: lead.company, title: lead.title, customFields: lead.customFields },
+        {
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          company: lead.company,
+          title: lead.title,
+          customFields: lead.customFields,
+          ...(context.profile && {
+            profile: { companySummary: context.profile.companySummary, services: context.profile.services },
+            facts: { ...context.facts, distanceMiles: context.distanceMiles },
+          }),
+        },
         nextStep.personalizationPrompt,
       )
     } catch (err) {
@@ -225,8 +243,8 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
       }
     }
 
-    const subject = renderTemplate(subjectTemplate, lead)
-    const body = renderTemplate(insertPersonalization(nextStep.body, personalization), lead)
+    const subject = renderTemplate(subjectTemplate, renderLead)
+    const body = renderTemplate(insertPersonalization(nextStep.body, personalization), renderLead)
     const flags: GuardrailFlag[] = checkGuardrails({
       subject,
       body,

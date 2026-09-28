@@ -1,6 +1,18 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider, type LeadScoreOutput } from '@/lib/ai'
 import type { LeadScoreResult } from '../types'
+import { getBusinessProfile } from '@/features/business-profile/server/profile'
+import { nearestYard } from '@/features/business-profile/server/zip-distance'
+import { readLeadFacts } from '@/features/business-profile/lead-facts'
+import {
+  scoreLeadByRules,
+  summarizeProfile,
+  SCORE_WEIGHTS,
+  type ScorePart,
+  type ScoreBreakdown,
+  type NearestYardFn,
+} from '@/features/business-profile/score-rules'
+import type { BusinessProfileDTO } from '@/features/business-profile/types'
 
 const FALLBACK_SCORING_PROMPT = `You are a B2B sales intelligence assistant. Score each lead from 0 to 100 based on their likely fit as an ICP (Ideal Customer Profile) for an outbound sales campaign.
 
@@ -81,11 +93,30 @@ export async function scoreLeads({
       lastName: true,
       company: true,
       title: true,
+      customFields: true,
     },
   })
 
   if (leads.length === 0) return []
 
+  const profile = await getBusinessProfile(organizationId)
+  if (!profile) return scoreWithPrompt(organizationId, leads)
+  return scoreWithProfile(organizationId, leads, profile)
+}
+
+// ─── Generic (no-profile) path — unchanged from before Task 8 ─────────────
+
+async function scoreWithPrompt(
+  organizationId: string,
+  leads: {
+    id: string
+    email: string
+    firstName: string | null
+    lastName: string | null
+    company: string | null
+    title: string | null
+  }[],
+): Promise<LeadScoreResult[]> {
   // Fetch active prompt template (fall back to built-in if none configured)
   const template = await prisma.promptTemplate.findFirst({
     where: {
@@ -146,5 +177,65 @@ export async function scoreLeads({
     }
   }
 
+  return results
+}
+
+// ─── Profile-based path ────────────────────────────────────────────────────
+
+async function scoreWithProfile(
+  organizationId: string,
+  leads: { id: string; title: string | null; company: string | null; customFields: unknown }[],
+  profile: BusinessProfileDTO,
+): Promise<LeadScoreResult[]> {
+  const nearest: NearestYardFn = (zip) => nearestYard(zip, profile.yards)
+  const scored = leads.map((lead) => {
+    const facts = readLeadFacts(lead.customFields, profile.columnMapping)
+    return { lead, facts, rules: scoreLeadByRules({ facts, title: lead.title }, profile, nearest) }
+  })
+
+  // Only uncapped leads get the AI's ±15 nudge (Review Focus #2).
+  const eligible = scored.filter((s) => s.rules.cap === null)
+  const summary = summarizeProfile(profile)
+  const provider = getAIProvider()
+  const adjustments = new Map<string, { adjustment: number; reason: string }>()
+  await mapWithConcurrency(chunk(eligible, SCORING_CHUNK_SIZE), SCORING_CONCURRENCY, async (group) => {
+    const ids = new Set(group.map((g) => g.lead.id))
+    try {
+      const out = await provider.adjustLeadScores(
+        group.map((g) => ({ id: g.lead.id, title: g.lead.title, company: g.lead.company, facts: g.facts, details: g.lead.customFields })),
+        summary,
+      )
+      for (const o of out) if (ids.has(o.leadId)) adjustments.set(o.leadId, o)
+    } catch (err) {
+      console.warn('[scoreLeads] AI adjustment chunk failed — keeping rules scores', err)
+    }
+  })
+
+  const results: LeadScoreResult[] = []
+  for (const { lead, rules } of scored) {
+    const adj = rules.cap === null ? adjustments.get(lead.id) ?? null : null
+    const aiAdjustment = adj ? Math.max(-SCORE_WEIGHTS.aiBand, Math.min(SCORE_WEIGHTS.aiBand, Math.round(adj.adjustment))) : null
+    const parts: ScorePart[] = [...rules.parts]
+    if (rules.cap === null) {
+      parts.push(
+        adj
+          ? { signal: 'ai', label: `AI ${aiAdjustment! >= 0 ? '+' : ''}${aiAdjustment}: ${adj.reason}`, points: aiAdjustment! }
+          : { signal: 'ai', label: 'AI adjustment skipped', points: 0 },
+      )
+    }
+    const score = Math.max(0, Math.min(100, rules.rulesScore + (aiAdjustment ?? 0)))
+    const reason = parts.map((p) => p.label).join(' · ')
+    const breakdown: ScoreBreakdown = { parts, rulesScore: rules.rulesScore, cap: rules.cap, aiAdjustment, aiReason: adj?.reason ?? null }
+    try {
+      await prisma.lead.update({
+        where: { id: lead.id, organizationId },
+        data: { score, scoreReason: reason, scoredAt: new Date(), scoreBreakdown: breakdown as unknown as object },
+      })
+      results.push({ leadId: lead.id, score, reason, success: true })
+    } catch (err) {
+      console.error('Failed to persist score for lead', lead.id, err)
+      results.push({ leadId: lead.id, score, reason, success: false })
+    }
+  }
   return results
 }
