@@ -89,6 +89,8 @@
 | `/api/campaigns/[id]/owner`, `/api/leads/[id]/owner` | PATCH | admin (new) | 11 |
 | `/api/team/members/[id]` | PATCH | admin, or self (new) | 12 |
 | `/api/team/settings` | PATCH | admin (new) | 12 |
+| `/api/integrations/microsoft/connect` | GET | admin | final fix |
+| `/api/integrations/microsoft/callback` | GET | admin | final fix |
 | `/api/unsubscribe`, `/api/webhooks/sendgrid`, `/api/cron/*` | — | not user-authenticated; unchanged | — |
 
 "Draft owner" = the draft's campaign owner when it has a campaign; otherwise the draft's lead owner.

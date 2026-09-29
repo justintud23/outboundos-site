@@ -334,7 +334,7 @@ Organizations without a business profile use the original generic AI scoring (ba
 
 **Roles & Visibility**
 
-Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members.
+Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members. Connecting Microsoft 365 (Settings → Connect Microsoft 365) is admin-only.
 
 All team members can view every campaign, lead, sequence, and reply, but reps can only change work they own. Unassigned items and admin-only settings are restricted to admins.
 
