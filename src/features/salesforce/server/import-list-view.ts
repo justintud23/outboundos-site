@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { normalizeCountry } from '@/features/leads/canada'
-import { getSalesforceClient, type SfClient } from './client'
+import { chunk, getSalesforceClient, type SfClient } from './client'
 import { fetchPeople, lookupByEmails, type SfPerson } from './records'
 import { getConnection } from './connection'
 import { SalesforceAuthError } from './errors'
@@ -84,6 +84,30 @@ function pickRepresentative(records: SfPerson[]): SfPerson {
   const lead = records.find((r) => r.type === 'LEAD')
   if (lead) return lead
   return records[0] as SfPerson // records is always non-empty by construction
+}
+
+const EXISTING_LEAD_CHUNK = 200
+
+/**
+ * Existing org leads whose email matches one of `emails` (already lower-cased)
+ * ignoring case. CSV imports keep the email's original case and the unique
+ * index is case-sensitive, so an exact match would miss `Jane@Acme.com` and
+ * create a duplicate. The database match is case-insensitive; the result is
+ * then filtered to exact lower-cased equality so a looser database match
+ * (e.g. ILIKE treating `_` as a wildcard) can never link the wrong lead.
+ */
+async function findExistingLeads(organizationId: string, emails: string[]) {
+  const wanted = new Set(emails)
+  const leads = []
+  for (const part of chunk(emails, EXISTING_LEAD_CHUNK)) {
+    leads.push(
+      ...(await prisma.lead.findMany({
+        where: { organizationId, OR: part.map((e) => ({ email: { equals: e, mode: 'insensitive' as const } })) },
+        select: EXISTING_LEAD_SELECT,
+      })),
+    )
+  }
+  return leads.filter((l) => wanted.has(l.email.toLowerCase()))
 }
 
 export async function listListViews(organizationId: string, object: SfObjectName): Promise<{ id: string; label: string }[]> {
@@ -183,14 +207,13 @@ export async function importListView({
   }
 
   const emails = [...blockedMap.keys(), ...clearMap.keys()]
-  const existingLeads = emails.length > 0
-    ? await prisma.lead.findMany({ where: { organizationId, email: { in: emails } }, select: EXISTING_LEAD_SELECT })
-    : []
+  const existingLeads = await findExistingLeads(organizationId, emails)
 
   let linked = 0
   for (const lead of existingLeads) {
-    const blocked = blockedMap.get(lead.email)
-    const entry = blocked ?? clearMap.get(lead.email) ?? null
+    const key = lead.email.toLowerCase()
+    const blocked = blockedMap.get(key)
+    const entry = blocked ?? clearMap.get(key) ?? null
     if (!entry) continue // every email queried came from blockedMap/clearMap, so this can't happen
     if (!blocked) linked++
 
@@ -226,7 +249,7 @@ export async function importListView({
     })
   }
 
-  const existingEmails = new Set(existingLeads.map((l) => l.email))
+  const existingEmails = new Set(existingLeads.map((l) => l.email.toLowerCase()))
   const batch = await prisma.importBatch.create({
     data: { organizationId, fileName: `Salesforce: ${listViewLabel}`, rowCount: people.length, status: 'PROCESSING' },
   })

@@ -403,6 +403,62 @@ describe('importListView — existing leads', () => {
   })
 })
 
+describe('importListView — case-insensitive existing-lead match (I4)', () => {
+  it('an existing lead stored as Jane@Acme.com is linked, not recreated, for list-view email jane@acme.com', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: 'sf-jane', email: 'jane@acme.com' })])
+    p.lead.findMany.mockResolvedValue([
+      {
+        id: 'lead-jane', email: 'Jane@Acme.com', salesforceId: null,
+        firstName: null, lastName: null, company: null, title: null, phone: null, country: null, customFields: null,
+      },
+    ])
+
+    const result = await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    expect(result.linked).toBe(1)
+    expect(result.imported).toBe(0)
+    expect(p.lead.createManyAndReturn).not.toHaveBeenCalled()
+    expect(p.lead.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'lead-jane' } }))
+  })
+
+  it('queries existing leads case-insensitively', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: 'sf-jane', email: 'jane@acme.com' })])
+
+    await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    const [{ where }] = p.lead.findMany.mock.calls[0]
+    expect(where).toEqual({ organizationId: 'org-1', OR: [{ email: { equals: 'jane@acme.com', mode: 'insensitive' } }] })
+  })
+
+  it('ignores a looser database match that is not the same email ignoring case', async () => {
+    // Guards against ILIKE-style wildcard matches (e.g. `_`) widening the query.
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: 'sf-1', email: 'a_b@acme.com' })])
+    p.lead.findMany.mockResolvedValue([
+      {
+        id: 'lead-other', email: 'axb@acme.com', salesforceId: null,
+        firstName: null, lastName: null, company: null, title: null, phone: null, country: null, customFields: null,
+      },
+    ])
+
+    const result = await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    expect(p.lead.update).not.toHaveBeenCalled()
+    expect(result.imported).toBe(1)
+  })
+})
+
 describe('importListView — owners', () => {
   it('defaults ownerId to memberId', async () => {
     mockGetSalesforceClient.mockReturnValue(fakeClient())
