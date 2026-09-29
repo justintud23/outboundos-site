@@ -351,7 +351,7 @@ Admins see a banner until every campaign and mailbox has an owner (dismissible).
 When a rep owns a campaign:
 - Emails send from that rep's own mailboxes. If the rep owns none, emails use shared (unassigned) mailboxes.
 - If the rep's mailboxes are all paused or on failing domains, the email waits in queue — never falls back to shared or another rep's mailbox.
-- Manual send (Drafts page) applies the same rules, keyed on the lead owner.
+- Manual send (Drafts page) applies the same rules, keyed on the draft's campaign owner (or the lead owner when the draft has no campaign).
 
 **Sender Fields & Templates**
 
