@@ -8,6 +8,8 @@ export interface SalesforceStatusDTO {
   status: 'CONNECTED' | 'NEEDS_RECONNECT' | 'RATE_LIMITED' | null
   username: string | null
   instanceUrl: string | null
+  /** The OAuth login host the connection was made through; the sandbox host means a sandbox org. */
+  loginHost: string | null
   lastError: string | null
   rateLimitedUntil: string | null
   customerAccountTypes: string[]
@@ -28,6 +30,7 @@ const NOT_CONNECTED_DEFAULTS = {
   status: null,
   username: null,
   instanceUrl: null,
+  loginHost: null,
   lastError: null,
   rateLimitedUntil: null,
   customerAccountTypes: ['Customer'],
@@ -66,6 +69,7 @@ export async function getSalesforceStatus(organizationId: string): Promise<Sales
     status: conn.status,
     username: conn.sfUsername,
     instanceUrl: conn.instanceUrl,
+    loginHost: conn.loginHost,
     lastError: conn.lastError,
     rateLimitedUntil: conn.rateLimitedUntil ? conn.rateLimitedUntil.toISOString() : null,
     customerAccountTypes: conn.customerAccountTypes,

@@ -30,6 +30,7 @@ const mockGetAppConfig = getSalesforceAppConfig as unknown as Fn
 const baseConn = {
   sfUsername: 'admin@example.com',
   instanceUrl: 'https://my.salesforce.com',
+  loginHost: 'https://login.salesforce.com',
   status: 'CONNECTED' as const,
   lastError: null,
   rateLimitedUntil: null,
@@ -124,7 +125,14 @@ describe('getSalesforceStatus', () => {
     expect(status.status).toBe('CONNECTED')
     expect(status.username).toBe('admin@example.com')
     expect(status.instanceUrl).toBe('https://my.salesforce.com')
+    expect(status.loginHost).toBe('https://login.salesforce.com')
     expect(status.customerAccountTypes).toEqual(['Customer', 'Key Account'])
+  })
+
+  it('passes a sandbox loginHost through (I5)', async () => {
+    mockGetConnection.mockResolvedValue({ ...baseConn, loginHost: 'https://test.salesforce.com' })
+    const status = await getSalesforceStatus('org-1')
+    expect(status.loginHost).toBe('https://test.salesforce.com')
   })
 
   it('serializes rateLimitedUntil to an ISO string when present', async () => {

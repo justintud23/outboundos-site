@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import type { SalesforceStatusDTO } from '@/features/salesforce/server/settings'
+import { loginHostFor } from '@/features/salesforce/config'
 
 interface SalesforceCardProps {
   status: SalesforceStatusDTO
@@ -54,6 +55,9 @@ export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
   const statusMessage = getStatusMessage(searchParams)
 
   const accountTypesId = useId()
+  // Reconnect through the same login host the connection was made with, so a
+  // sandbox connection isn't sent to the production login page.
+  const reconnectEnv = status.loginHost === loginHostFor('sandbox') ? 'sandbox' : 'production'
 
   const [env, setEnv] = useState<'production' | 'sandbox'>('production')
   const [accountTypesInput, setAccountTypesInput] = useState(status.customerAccountTypes.join(', '))
@@ -152,7 +156,7 @@ export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
             Salesforce needs to be reconnected. Activity logging and customer checks are paused.
           </p>
           {isAdmin && (
-            <a href="/api/integrations/salesforce/connect?env=production">
+            <a href={`/api/integrations/salesforce/connect?env=${reconnectEnv}`}>
               <Button variant="outline" size="sm" as="span">
                 Reconnect
               </Button>

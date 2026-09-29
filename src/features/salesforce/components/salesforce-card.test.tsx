@@ -31,6 +31,7 @@ const notConnected: SalesforceStatusDTO = {
   status: null,
   username: null,
   instanceUrl: null,
+  loginHost: null,
   lastError: null,
   rateLimitedUntil: null,
   customerAccountTypes: ['Customer'],
@@ -46,6 +47,7 @@ const connected: SalesforceStatusDTO = {
   status: 'CONNECTED',
   username: 'admin@example.com',
   instanceUrl: 'https://my.salesforce.com',
+  loginHost: 'https://login.salesforce.com',
   lastError: null,
   rateLimitedUntil: null,
   customerAccountTypes: ['Customer', 'Key Account'],
@@ -140,6 +142,27 @@ describe('SalesforceCard', () => {
       screen.getByText('Salesforce needs to be reconnected. Activity logging and customer checks are paused.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Reconnect' })).toBeInTheDocument()
+  })
+
+  it('Reconnect for a production connection uses env=production', () => {
+    render(<SalesforceCard status={{ ...connected, status: 'NEEDS_RECONNECT' }} isAdmin />)
+    expect(screen.getByRole('link', { name: 'Reconnect' })).toHaveAttribute(
+      'href',
+      '/api/integrations/salesforce/connect?env=production',
+    )
+  })
+
+  it('Reconnect for a sandbox connection uses env=sandbox (I5)', () => {
+    render(
+      <SalesforceCard
+        status={{ ...connected, status: 'NEEDS_RECONNECT', loginHost: 'https://test.salesforce.com' }}
+        isAdmin
+      />,
+    )
+    expect(screen.getByRole('link', { name: 'Reconnect' })).toHaveAttribute(
+      'href',
+      '/api/integrations/salesforce/connect?env=sandbox',
+    )
   })
 
   it('shows the connected_new_org message from the query param', () => {

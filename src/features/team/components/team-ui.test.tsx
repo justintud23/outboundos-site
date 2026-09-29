@@ -203,6 +203,7 @@ describe('SettingsClient — non-admin', () => {
     status: null,
     username: null,
     instanceUrl: null,
+    loginHost: null,
     lastError: null,
     rateLimitedUntil: null,
     customerAccountTypes: ['Customer'],
