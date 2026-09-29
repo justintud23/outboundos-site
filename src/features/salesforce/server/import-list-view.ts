@@ -1,0 +1,246 @@
+import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/db/prisma'
+import { normalizeCountry } from '@/features/leads/canada'
+import { getSalesforceClient, type SfClient } from './client'
+import { fetchPeople, type SfPerson } from './records'
+import { getConnection } from './connection'
+import { SalesforceAuthError } from './errors'
+import { classifySfRecord, BLOCKING, SKIP_KEY, type ClassifyRules, type SfStatus } from '../classify'
+
+export const MAX_SF_IMPORT = 2000
+export const PREVIEW_ROWS = 25
+const LIST_VIEW_PAGE_SIZE = 200
+
+export type SfObjectName = 'Lead' | 'Contact'
+
+export interface SfImportResult {
+  batchId: string
+  imported: number
+  linked: number
+  skipped: { customer: number; openOpportunity: number; optedOut: number; converted: number; noEmail: number; invalid: number }
+  leadIds: string[]
+}
+
+interface ImportListViewInput {
+  organizationId: string
+  memberId: string
+  object: SfObjectName
+  listViewId: string
+  listViewLabel: string
+  useSalesforceOwners: boolean
+}
+
+const EXISTING_LEAD_SELECT = {
+  id: true,
+  email: true,
+  salesforceId: true,
+  firstName: true,
+  lastName: true,
+  company: true,
+  title: true,
+  phone: true,
+  country: true,
+  customFields: true,
+} as const
+
+/** Every id a list view returns, paged 200 at a time and capped at MAX_SF_IMPORT. */
+async function collectIds(client: SfClient, object: SfObjectName, listViewId: string): Promise<string[]> {
+  const ids: string[] = []
+  let offset = 0
+  for (;;) {
+    const page = await client.listViewIds(object, listViewId, { limit: LIST_VIEW_PAGE_SIZE, offset })
+    ids.push(...page.ids)
+    offset += LIST_VIEW_PAGE_SIZE
+    if (page.ids.length === 0) break
+    if (ids.length >= page.size) break
+    if (ids.length >= MAX_SF_IMPORT) break
+  }
+  return ids.slice(0, MAX_SF_IMPORT)
+}
+
+function cfObject(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
+/** Only fills a currently-null field; never overwrites an existing value. */
+function fillField(existing: string | null, incoming: string | null): string | undefined {
+  return existing == null && incoming != null ? incoming : undefined
+}
+
+function personName(p: SfPerson): string {
+  const full = [p.firstName, p.lastName].filter(Boolean).join(' ').trim()
+  return full || p.email || ''
+}
+
+export async function listListViews(organizationId: string, object: SfObjectName): Promise<{ id: string; label: string }[]> {
+  const client = getSalesforceClient(organizationId)
+  return client.listViews(object)
+}
+
+export async function previewListView({
+  organizationId,
+  object,
+  listViewId,
+}: {
+  organizationId: string
+  object: SfObjectName
+  listViewId: string
+}): Promise<{ total: number; rows: { id: string; name: string; email: string | null; company: string | null; title: string | null }[] }> {
+  const client = getSalesforceClient(organizationId)
+  const { ids, size } = await client.listViewIds(object, listViewId, { limit: PREVIEW_ROWS, offset: 0 })
+  const people = await fetchPeople(client, object, { ids })
+
+  // SOQL's `WHERE Id IN (...)` doesn't promise result order matches the
+  // list view's own ordering, so re-sort by the id list the list view gave us.
+  const byId = new Map(people.map((p) => [p.id, p]))
+  const rows = ids
+    .map((id) => byId.get(id))
+    .filter((p): p is SfPerson => !!p)
+    .map((p) => ({ id: p.id, name: personName(p), email: p.email, company: p.company, title: p.title }))
+
+  return { total: size, rows }
+}
+
+export async function importListView({
+  organizationId,
+  memberId,
+  object,
+  listViewId,
+  listViewLabel,
+  useSalesforceOwners,
+}: ImportListViewInput): Promise<SfImportResult> {
+  const conn = await getConnection(organizationId)
+  if (!conn) throw new SalesforceAuthError('Salesforce is not connected.')
+  const rules: ClassifyRules = { customerAccountTypes: conn.customerAccountTypes, blockOpenOpportunities: conn.blockOpenOpportunities }
+
+  const client = getSalesforceClient(organizationId)
+  const ids = await collectIds(client, object, listViewId)
+  const people = await fetchPeople(client, object, { ids })
+  const now = new Date()
+
+  const skipped = { customer: 0, openOpportunity: 0, optedOut: 0, converted: 0, noEmail: 0, invalid: 0 }
+  const blockedMap = new Map<string, { status: SfStatus; detail: string | null; person: SfPerson }>()
+  const clearMap = new Map<string, SfPerson>()
+
+  for (const p of people) {
+    const email = p.email
+    if (!email) {
+      skipped.noEmail++
+      continue
+    }
+    if (!z.string().email().safeParse(email).success) {
+      skipped.invalid++
+      continue
+    }
+    const check = classifySfRecord(p, rules)
+    if (BLOCKING.has(check.status)) {
+      const key = SKIP_KEY[check.status]
+      if (key) skipped[key]++
+      blockedMap.set(email, { status: check.status, detail: check.detail, person: p })
+    } else {
+      clearMap.set(email, p)
+    }
+  }
+
+  const emails = [...blockedMap.keys(), ...clearMap.keys()]
+  const existingLeads = emails.length > 0
+    ? await prisma.lead.findMany({ where: { organizationId, email: { in: emails } }, select: EXISTING_LEAD_SELECT })
+    : []
+
+  let linked = 0
+  for (const lead of existingLeads) {
+    const blocked = blockedMap.get(lead.email)
+    const clearPerson = clearMap.get(lead.email)
+    const entry = blocked ?? (clearPerson ? { status: 'CLEAR' as const, detail: null, person: clearPerson } : null)
+    if (!entry) continue // every email queried came from blockedMap/clearMap, so this can't happen
+    if (!blocked) linked++
+
+    const person = entry.person
+    const linkFields = lead.salesforceId == null
+      ? { salesforceId: person.id, salesforceType: person.type, salesforceAccountId: person.accountId }
+      : {}
+
+    const existingCF = cfObject(lead.customFields)
+    const cfPatch: Record<string, unknown> = {}
+    if (!('state' in existingCF) && person.state) cfPatch.state = person.state
+    if (!('zip' in existingCF) && person.postalCode) cfPatch.zip = person.postalCode
+    const customFieldsUpdate =
+      Object.keys(cfPatch).length > 0
+        ? { customFields: { ...existingCF, ...cfPatch } as Prisma.InputJsonValue }
+        : {}
+
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        ...linkFields,
+        firstName: fillField(lead.firstName, person.firstName),
+        lastName: fillField(lead.lastName, person.lastName),
+        company: fillField(lead.company, person.company),
+        title: fillField(lead.title, person.title),
+        phone: fillField(lead.phone, person.phone),
+        country: fillField(lead.country, normalizeCountry(person.country)),
+        ...customFieldsUpdate,
+        sfCheckStatus: entry.status,
+        sfCheckDetail: entry.detail,
+        sfCheckedAt: now,
+      },
+    })
+  }
+
+  const existingEmails = new Set(existingLeads.map((l) => l.email))
+  const batch = await prisma.importBatch.create({
+    data: { organizationId, fileName: `Salesforce: ${listViewLabel}`, rowCount: people.length, status: 'PROCESSING' },
+  })
+
+  const newClearPeople = [...clearMap.entries()].filter(([email]) => !existingEmails.has(email))
+
+  let ownerByEmail: Map<string, string> | null = null
+  if (useSalesforceOwners) {
+    const members = await prisma.orgMember.findMany({ where: { organizationId }, select: { id: true, email: true } })
+    ownerByEmail = new Map(
+      members.filter((m): m is typeof m & { email: string } => !!m.email).map((m) => [m.email.toLowerCase(), m.id]),
+    )
+  }
+  const ownerFor = (person: SfPerson): string => {
+    const match = person.ownerEmail ? ownerByEmail?.get(person.ownerEmail.toLowerCase()) : undefined
+    return match ?? memberId
+  }
+
+  const data = newClearPeople.map(([email, p]) => {
+    const cf: Record<string, string> = {}
+    if (p.state) cf.state = p.state
+    if (p.postalCode) cf.zip = p.postalCode
+    return {
+      organizationId,
+      importBatchId: batch.id,
+      ownerId: ownerFor(p),
+      email,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      company: p.company,
+      title: p.title,
+      phone: p.phone,
+      country: normalizeCountry(p.country),
+      customFields: Object.keys(cf).length > 0 ? cf : undefined,
+      source: 'SALESFORCE' as const,
+      salesforceId: p.id,
+      salesforceType: p.type,
+      salesforceAccountId: p.accountId,
+      sfCheckStatus: 'CLEAR' as const,
+      sfCheckedAt: now,
+    }
+  })
+
+  const created = data.length > 0
+    ? await prisma.lead.createManyAndReturn({ data, skipDuplicates: true, select: { id: true } })
+    : []
+
+  const skippedTotal = Object.values(skipped).reduce((a, b) => a + b, 0)
+  await prisma.importBatch.update({
+    where: { id: batch.id },
+    data: { successCount: created.length + linked, errorCount: skippedTotal, status: 'COMPLETED' },
+  })
+
+  return { batchId: batch.id, imported: created.length, linked, skipped, leadIds: created.map((l) => l.id) }
+}
