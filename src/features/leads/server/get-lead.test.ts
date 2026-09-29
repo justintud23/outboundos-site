@@ -38,6 +38,12 @@ const baseLead = {
   updatedAt: new Date('2025-01-05'),
   ownerId: null,
   owner: null,
+  salesforceId: null,
+  salesforceType: null,
+  sfCheckStatus: null,
+  sfCheckDetail: null,
+  sfCheckedAt: null,
+  sfBlockOverride: false,
 }
 
 beforeEach(() => {
@@ -121,5 +127,47 @@ describe('getLead', () => {
 
     expect(result.ownerId).toBe('m-1')
     expect(result.ownerName).toBe('owner@x.com')
+  })
+
+  it('returns null salesforce fields when the lead is not linked', async () => {
+    mockLeadFindFirst.mockResolvedValue(baseLead)
+    mockOutboundFindFirst.mockResolvedValue(null)
+    mockInboundFindFirst.mockResolvedValue(null)
+
+    const result = await getLead({ organizationId: ORG_ID, leadId: LEAD_ID })
+
+    expect(result.salesforce).toEqual({
+      id: null,
+      type: null,
+      checkStatus: null,
+      checkDetail: null,
+      checkedAt: null,
+      blockOverride: false,
+    })
+  })
+
+  it('returns the salesforce block with an ISO checkedAt string', async () => {
+    mockLeadFindFirst.mockResolvedValue({
+      ...baseLead,
+      salesforceId: '00Q123',
+      salesforceType: 'LEAD',
+      sfCheckStatus: 'CUSTOMER',
+      sfCheckDetail: 'Acme',
+      sfCheckedAt: new Date('2025-01-20T10:00:00.000Z'),
+      sfBlockOverride: true,
+    })
+    mockOutboundFindFirst.mockResolvedValue(null)
+    mockInboundFindFirst.mockResolvedValue(null)
+
+    const result = await getLead({ organizationId: ORG_ID, leadId: LEAD_ID })
+
+    expect(result.salesforce).toEqual({
+      id: '00Q123',
+      type: 'LEAD',
+      checkStatus: 'CUSTOMER',
+      checkDetail: 'Acme',
+      checkedAt: '2025-01-20T10:00:00.000Z',
+      blockOverride: true,
+    })
   })
 })
