@@ -26,6 +26,16 @@ vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadConte
 const { getCampaignSender } = vi.hoisted(() => ({ getCampaignSender: vi.fn() }))
 vi.mock('@/features/team/server/campaign-sender', () => ({ getCampaignSender }))
 
+const { ensureSalesforceClear, applySalesforceBlock } = vi.hoisted(() => ({
+  ensureSalesforceClear: vi.fn(),
+  applySalesforceBlock: vi.fn(),
+}))
+vi.mock('@/features/salesforce/server/check', () => ({
+  ensureSalesforceClear,
+  applySalesforceBlock,
+  SF_HOLD_MS: 10 * 60 * 1000,
+}))
+
 import { prisma } from '@/lib/db/prisma'
 import { checkEnrollmentStop } from './check-enrollment-stop'
 import { assignEnrollmentMailbox } from './assign-mailbox'
@@ -89,6 +99,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
   getCampaignSender.mockResolvedValue({ senderFirstName: null, senderName: null })
+  ensureSalesforceClear.mockResolvedValue({ allowed: new Set(['lead-1']), held: new Set(), blocked: new Map() })
 })
 
 describe('runSequenceStep', () => {
@@ -537,5 +548,72 @@ describe('runSequenceStep — email verification gate (first step only)', () => 
     const { draftCreate } = txFake()
     await runSequenceStep({ enrollmentId: 'enroll-1' })
     expect(draftCreate).toHaveBeenCalled()
+  })
+})
+
+describe('runSequenceStep — Salesforce pre-send check (Task 7)', () => {
+  beforeEach(() => {
+    mockCheckStop.mockResolvedValue({ shouldStop: false })
+  })
+
+  it('blocked: applies the block and stops, without any AI call', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    ensureSalesforceClear.mockResolvedValue({
+      allowed: new Set(),
+      held: new Set(),
+      blocked: new Map([['lead-1', 'Salesforce: customer (Acme)']]),
+    })
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('STOPPED')
+    expect(ensureSalesforceClear).toHaveBeenCalledWith('org-1', ['lead-1'])
+    expect(applySalesforceBlock).toHaveBeenCalledWith('org-1', 'lead-1', 'Salesforce: customer (Acme)')
+    expect(personalize).not.toHaveBeenCalled()
+  })
+
+  it('held: defers by SF_HOLD_MS, without any AI call', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    ensureSalesforceClear.mockResolvedValue({ allowed: new Set(), held: new Set(['lead-1']), blocked: new Map() })
+    const before = Date.now()
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('DEFERRED')
+    expect(applySalesforceBlock).not.toHaveBeenCalled()
+    expect(personalize).not.toHaveBeenCalled()
+    const next = (prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>).mock.calls[0]![0].data.nextDueAt.getTime()
+    expect(next - before).toBeGreaterThanOrEqual(10 * 60 * 1000 - 50)
+    expect(next - before).toBeLessThan(11 * 60 * 1000)
+  })
+
+  it('allowed: proceeds unchanged', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    ensureSalesforceClear.mockResolvedValue({ allowed: new Set(['lead-1']), held: new Set(), blocked: new Map() })
+    const { draftCreate } = txFake()
+    expect(await runSequenceStep({ enrollmentId: 'enroll-1' })).toBe('DRAFT_GENERATED')
+    expect(draftCreate).toHaveBeenCalledTimes(1)
+    expect(applySalesforceBlock).not.toHaveBeenCalled()
+  })
+
+  // Fix round 1 — "not blocked and not held" must never be treated as allowed:
+  // only a lead explicitly in `allowed` may proceed.
+  it('neither blocked nor allowed (empty sets): holds rather than sending, without any AI call', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    ensureSalesforceClear.mockResolvedValue({ allowed: new Set(), held: new Set(), blocked: new Map() })
+    const { draftCreate } = txFake()
+    const before = Date.now()
+    const result = await runSequenceStep({ enrollmentId: 'enroll-1' })
+    expect(result).toBe('DEFERRED')
+    expect(draftCreate).not.toHaveBeenCalled()
+    expect(applySalesforceBlock).not.toHaveBeenCalled()
+    expect(personalize).not.toHaveBeenCalled()
+    const next = (prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>).mock.calls[0]![0].data.nextDueAt.getTime()
+    expect(next - before).toBeGreaterThanOrEqual(10 * 60 * 1000 - 50)
+    expect(next - before).toBeLessThan(11 * 60 * 1000)
+  })
+
+  it('ensureSalesforceClear rejecting propagates, with no AI call and no draft created', async () => {
+    mockEnrollmentFind.mockResolvedValue(makeEnrollment())
+    ensureSalesforceClear.mockRejectedValue(new Error('db down'))
+    await expect(runSequenceStep({ enrollmentId: 'enroll-1' })).rejects.toThrow('db down')
+    expect(personalize).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
   })
 })

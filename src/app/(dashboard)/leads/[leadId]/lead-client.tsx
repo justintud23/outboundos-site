@@ -40,6 +40,7 @@ interface LeadCommandCenterProps {
   actions: NextAction[]
   isAdmin: boolean
   members: MemberSummary[]
+  salesforceInstanceUrl: string | null
 }
 
 export function LeadCommandCenter({
@@ -50,6 +51,7 @@ export function LeadCommandCenter({
   actions,
   isAdmin,
   members,
+  salesforceInstanceUrl,
 }: LeadCommandCenterProps) {
   const [activeTab, setActiveTab] = useState<Tab>('timeline')
   const router = useRouter()
@@ -209,7 +211,14 @@ export function LeadCommandCenter({
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Lead Header */}
-      <LeadHeader lead={lead} statusOverride={optimisticStatus} engagement={engagement} isAdmin={isAdmin} members={members} />
+      <LeadHeader
+        lead={lead}
+        statusOverride={optimisticStatus}
+        engagement={engagement}
+        isAdmin={isAdmin}
+        members={members}
+        salesforceInstanceUrl={salesforceInstanceUrl}
+      />
 
       {/* Main 2-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

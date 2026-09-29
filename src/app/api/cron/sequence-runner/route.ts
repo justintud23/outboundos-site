@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
 import { verifyPendingLeads, VERIFY_BUDGET_MS, type VerifyRunResult } from '@/features/verification/server/verify-leads'
+import { prefetchSalesforceChecks } from '@/features/salesforce/server/check'
+import { processSalesforceJobs, type ProcessJobsResult } from '@/features/salesforce/server/process-jobs'
 
 export const maxDuration = 60
 
@@ -22,6 +24,7 @@ export async function GET(request: Request) {
   const results: { enrollmentId: string; result: string }[] = []
   let outOfBudget = false
   let verification: VerifyRunResult | { error: string } | null = null
+  let salesforce: ProcessJobsResult | { error: string } | null = null
 
   try {
     // 1. Recover stale locks
@@ -53,8 +56,18 @@ export async function GET(request: Request) {
       },
       orderBy: { nextDueAt: 'asc' },
       take: BATCH_SIZE,
-      select: { id: true },
+      select: { id: true, leadId: true },
     })
+
+    // 2b. Warm the Salesforce pre-send cache for this batch ahead of time so
+    //     each step's own check (in runSequenceStep) is more likely to hit a
+    //     fresh cached result. Best-effort: never let a prefetch failure stop
+    //     the tick from processing enrollments.
+    try {
+      await prefetchSalesforceChecks(dueEnrollments.map((e) => e.leadId))
+    } catch (err) {
+      console.error('[sequence-runner] salesforce prefetch failed', err)
+    }
 
     // 3. Process each enrollment
     for (const { id } of dueEnrollments) {
@@ -87,6 +100,19 @@ export async function GET(request: Request) {
         })
       }
     }
+
+    // 4. Run due Salesforce sync jobs (log sends/replies as Tasks, create+link
+    //    leads) with whatever's left of this tick's time. Never let a
+    //    Salesforce failure fail the whole cron run. Require at least 10s of
+    //    headroom so a job's own network calls can't push the tick past
+    //    cron-job.org's ~30s timeout (or maxDuration) and skip the heartbeat.
+    if (Date.now() - startedAt < SEQUENCE_RUNNER_BUDGET_MS - 10_000) {
+      try {
+        salesforce = await processSalesforceJobs({ budgetMs: 5_000 })
+      } catch (err) {
+        salesforce = { error: String(err) }
+      }
+    }
   } finally {
     // Record the heartbeat even when the tick throws, so a broken runner shows
     // up as "ran" with its partial result instead of silently going stale.
@@ -98,6 +124,7 @@ export async function GET(request: Request) {
     results,
     staleLockRecovery: true,
     verification,
+    salesforce,
     ...(outOfBudget && { outOfBudget }),
   })
 }

@@ -12,9 +12,11 @@ import { BusinessProfileSection } from '@/features/business-profile/components/b
 import { OwnerSelect } from '@/features/team/components/owner-select'
 import { TeamSection } from '@/features/team/components/team-section'
 import { MySettings } from '@/features/team/components/my-settings'
+import { SalesforceCard } from '@/features/salesforce/components/salesforce-card'
 import type { BusinessProfileDTO } from '@/features/business-profile/types'
 import type { MemberSummary } from '@/features/team/server/assign-owner'
 import type { TeamDTO } from '@/features/team/server/team-settings'
+import type { SalesforceStatusDTO } from '@/features/salesforce/server/settings'
 
 interface CurrentMember {
   id: string
@@ -30,6 +32,7 @@ interface SettingsClientProps {
   isAdmin: boolean
   members: MemberSummary[]
   team: TeamDTO
+  salesforceStatus: SalesforceStatusDTO
   currentMember: CurrentMember
 }
 
@@ -43,7 +46,7 @@ function AdminOnlyNotice({ label }: { label: string }) {
   )
 }
 
-export function SettingsClient({ initialMailboxes, sendingSettings, businessProfile, isAdmin, members, team, currentMember }: SettingsClientProps) {
+export function SettingsClient({ initialMailboxes, sendingSettings, businessProfile, isAdmin, members, team, salesforceStatus, currentMember }: SettingsClientProps) {
   const [mailboxes, setMailboxes] = useState<MailboxDTO[]>(initialMailboxes)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -115,12 +118,22 @@ export function SettingsClient({ initialMailboxes, sendingSettings, businessProf
         senderLastName={currentMember.senderLastName}
       />
 
+      {!isAdmin && (
+        <Suspense fallback={null}>
+          <SalesforceCard status={salesforceStatus} isAdmin={isAdmin} />
+        </Suspense>
+      )}
+
       {!isAdmin && <AdminOnlyNotice label="Sending, business profile and mailboxes" />}
 
       {isAdmin && sendingSettings && (
         <>
           <Suspense fallback={null}>
             <MicrosoftCard connected={sendingSettings.msConnected} mailboxEmails={mailboxes.map((m) => m.email)} />
+          </Suspense>
+
+          <Suspense fallback={null}>
+            <SalesforceCard status={salesforceStatus} isAdmin={isAdmin} />
           </Suspense>
 
           <SendingSettingsForm initial={sendingSettings} />

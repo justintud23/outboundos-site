@@ -129,6 +129,38 @@ enum EmailCheck {
   INVALID
 }
 
+enum SalesforceConnectionStatus {
+  CONNECTED
+  NEEDS_RECONNECT
+  RATE_LIMITED
+}
+
+enum SalesforceObject {
+  LEAD
+  CONTACT
+}
+
+enum SfCheckStatus {
+  CLEAR
+  CUSTOMER
+  OPEN_OPPORTUNITY
+  OPTED_OUT
+  CONVERTED
+  NOT_FOUND
+}
+
+enum SalesforceJobType {
+  LOG_SEND
+  LOG_REPLY
+  CREATE_LEAD
+}
+
+enum SalesforceJobStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
 // ─── ORGANIZATION ──────────────────────────────────────────────
 
 model Organization {
@@ -139,51 +171,56 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Sending schedule (org timezone). sendDays uses 0=Sun … 6=Sat.
-  timezone           String   @default("America/New_York")
-  businessHoursStart Int      @default(8)
-  businessHoursEnd   Int      @default(17)
-  sendDays           Int[]    @default([1, 2, 3, 4, 5])
-  escalationEmail    String?
+  timezone                   String    @default("America/New_York")
+  businessHoursStart         Int       @default(8)
+  businessHoursEnd           Int       @default(17)
+  sendDays                   Int[]     @default([1, 2, 3, 4, 5])
+  escalationEmail            String?
   // Org-wide kill switch. Set by a human, or automatically on Graph 401/403.
-  sendingPaused      Boolean  @default(false)
-  pausedReason       String?
-  guardrailBlockedPhrases String[] @default([])
-  guardrailAllowedWords   String[] @default([])
+  sendingPaused              Boolean   @default(false)
+  pausedReason               String?
+  guardrailBlockedPhrases    String[]  @default([])
+  guardrailAllowedWords      String[]  @default([])
   // Microsoft 365 sending tenant (app-only Graph auth; secret lives in env).
-  msTenantId         String?
+  msTenantId                 String?
   // CAN-SPAM: every commercial email must identify the sender and carry a
   // valid physical postal address. Sending is blocked until it's set.
-  businessName       String?
-  postalAddress      String?
+  businessName               String?
+  postalAddress              String?
   // CASL: Canadian recipients need consent, so cold email to them is blocked
   // unless the org explicitly allows it (only with documented consent).
-  allowCanadianRecipients Boolean @default(false)
+  allowCanadianRecipients    Boolean   @default(false)
   // Rep ownership: CC the org escalation address on reps' reply alerts.
   copyAdminOnReplies         Boolean   @default(true)
   ownershipBannerDismissedAt DateTime?
   // Deliverability 2A: send to catch-all/unknown addresses unless this is on.
-  blockRiskyEmails         Boolean   @default(false)
+  blockRiskyEmails           Boolean   @default(false)
   // Set when a verification outage (no credits / bad key) was alerted; cleared
   // after the next successful check. The reason is shown on Deliverability.
-  verificationAlertedAt    DateTime?
-  verificationPausedReason String?
+  verificationAlertedAt      DateTime?
+  verificationPausedReason   String?
+  // Salesforce sync: detects a reconnect to a DIFFERENT Salesforce org even
+  // after a disconnect deleted the salesforceConnection row.
+  lastSalesforceOrgId        String?
 
-  members          OrgMember[]
-  leads            Lead[]
-  importBatches    ImportBatch[]
-  campaigns        Campaign[]
-  sequences        Sequence[]
-  mailboxes        Mailbox[]
-  drafts           Draft[]
-  outboundMessages OutboundMessage[]
-  inboundReplies   InboundReply[]
-  unmatchedReplies UnmatchedReply[]
-  auditLogs        AuditLog[]
-  promptTemplates  PromptTemplate[]
-  leadStatusChanges   LeadStatusChange[]
-  sequenceEnrollments SequenceEnrollment[]
-  domainHealth     DomainHealth[]
-  businessProfile  BusinessProfile?
+  members              OrgMember[]
+  leads                Lead[]
+  importBatches        ImportBatch[]
+  campaigns            Campaign[]
+  sequences            Sequence[]
+  mailboxes            Mailbox[]
+  drafts               Draft[]
+  outboundMessages     OutboundMessage[]
+  inboundReplies       InboundReply[]
+  unmatchedReplies     UnmatchedReply[]
+  auditLogs            AuditLog[]
+  promptTemplates      PromptTemplate[]
+  leadStatusChanges    LeadStatusChange[]
+  sequenceEnrollments  SequenceEnrollment[]
+  domainHealth         DomainHealth[]
+  businessProfile      BusinessProfile?
+  salesforceConnection SalesforceConnection?
+  salesforceSyncJobs   SalesforceSyncJob[]
 
   @@map("organizations")
 }
@@ -206,9 +243,10 @@ model OrgMember {
   senderLastName  String?
   lastSeenAt      DateTime?
 
-  ownedCampaigns Campaign[] @relation("CampaignOwner")
-  ownedLeads     Lead[]     @relation("LeadOwner")
-  ownedMailboxes Mailbox[]  @relation("MailboxOwner")
+  ownedCampaigns        Campaign[]             @relation("CampaignOwner")
+  ownedLeads            Lead[]                 @relation("LeadOwner")
+  ownedMailboxes        Mailbox[]              @relation("MailboxOwner")
+  salesforceConnections SalesforceConnection[] @relation("SalesforceConnectedBy")
 
   @@unique([clerkUserId, organizationId])
   @@index([organizationId])
@@ -234,12 +272,12 @@ model Lead {
   linkedinUrl String?
   phone       String?
 
-  source   LeadSource @default(CSV)
-  status   LeadStatus @default(NEW)
+  source LeadSource @default(CSV)
+  status LeadStatus @default(NEW)
 
-  score       Int?
-  scoreReason String?
-  scoredAt    DateTime?
+  score          Int?
+  scoreReason    String?
+  scoredAt       DateTime?
   // Per-signal explanation of `score` when a BusinessProfile is used.
   scoreBreakdown Json?
 
@@ -253,14 +291,26 @@ model Lead {
   emailCheckedAt     DateTime?
   emailCheckAttempts Int        @default(0)
 
+  // Salesforce sync: link to the matched Lead/Contact, and the pre-send
+  // check result that may hold sending on this person.
+  salesforceId        String?
+  salesforceType      SalesforceObject?
+  salesforceAccountId String?
+  sfCheckStatus       SfCheckStatus?
+  sfCheckedAt         DateTime?
+  sfCheckDetail       String?
+  sfBlockOverride     Boolean           @default(false)
+  sfHeldSince         DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  drafts           Draft[]
-  outboundMessages OutboundMessage[]
-  inboundReplies   InboundReply[]
+  drafts              Draft[]
+  outboundMessages    OutboundMessage[]
+  inboundReplies      InboundReply[]
   statusChanges       LeadStatusChange[]
   sequenceEnrollments SequenceEnrollment[]
+  salesforceSyncJobs  SalesforceSyncJob[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -270,17 +320,18 @@ model Lead {
   @@index([importBatchId])
   @@index([emailCheck])
   @@index([organizationId, ownerId])
+  @@index([organizationId, salesforceId])
   @@map("leads")
 }
 
 // ─── LEAD STATUS CHANGES ──────────────────────────────────────
 
 model LeadStatusChange {
-  id             String     @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadId         String
-  lead           Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   fromStatus   LeadStatus
   toStatus     LeadStatus
@@ -323,13 +374,13 @@ model ImportBatch {
 // ─── CAMPAIGNS ─────────────────────────────────────────────────
 
 model Campaign {
-  id             String         @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   mailboxId      String?
-  mailbox        Mailbox?       @relation(fields: [mailboxId], references: [id])
+  mailbox        Mailbox?     @relation(fields: [mailboxId], references: [id])
   ownerId        String?
-  owner          OrgMember?     @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner          OrgMember?   @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   name        String
   description String?
@@ -373,8 +424,8 @@ model Sequence {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  steps  SequenceStep[]
-  drafts Draft[]
+  steps       SequenceStep[]
+  drafts      Draft[]
   enrollments SequenceEnrollment[]
 
   @@index([organizationId])
@@ -390,7 +441,7 @@ model SequenceStep {
   stepNumber Int
   subject    String
   body       String
-  delayDays  Int @default(0)
+  delayDays  Int    @default(0)
 
   // Guidance for the AI-written line inserted at {personalization}.
   personalizationPrompt String?
@@ -446,13 +497,13 @@ model SubjectVariant {
 // ─── SEQUENCE ENROLLMENTS ─────────────────────────────────────
 
 model SequenceEnrollment {
-  id                  String           @id @default(cuid())
-  organizationId      String
-  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sequenceId          String
-  sequence            Sequence         @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  leadId              String
-  lead                Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sequenceId     String
+  sequence       Sequence     @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   currentStepNumber   Int              @default(0)
   status              EnrollmentStatus @default(ACTIVE)
@@ -505,7 +556,7 @@ model Mailbox {
   warmupStartedAt DateTime @default(now())
 
   // Ramp schedule (see features/mailboxes/warmup.ts). Day 1 = warmupStartedAt.
-  rampPreset      RampPreset @default(CONSERVATIVE)
+  rampPreset RampPreset @default(CONSERVATIVE)
 
   // Circuit breaker: when recent bounce / spam-complaint rates breach safe
   // thresholds (see features/mailboxes/breaker.ts) the mailbox is AUTO-paused to
@@ -519,14 +570,14 @@ model Mailbox {
   pauseReason    String?
   breakerResetAt DateTime  @default(now())
 
-  provider        MailboxProvider @default(SENDGRID)
-  graphUserId     String?
+  provider       MailboxProvider @default(SENDGRID)
+  graphUserId    String?
   // Resumable Graph delta URLs (a deltaLink, or a nextLink mid-sync).
-  inboxDeltaLink  String?
-  sentDeltaLink   String?
-  lastPolledAt    DateTime?
+  inboxDeltaLink String?
+  sentDeltaLink  String?
+  lastPolledAt   DateTime?
   // Send-time pacing: earliest moment this mailbox may send again.
-  nextSendAt      DateTime?
+  nextSendAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -552,12 +603,12 @@ model Draft {
   leadId         String
   lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  campaignId     String?
-  campaign       Campaign?     @relation(fields: [campaignId], references: [id])
-  sequenceId     String?
-  sequence       Sequence?     @relation(fields: [sequenceId], references: [id])
-  sequenceStepId String?
-  sequenceStep   SequenceStep? @relation(fields: [sequenceStepId], references: [id])
+  campaignId           String?
+  campaign             Campaign?           @relation(fields: [campaignId], references: [id])
+  sequenceId           String?
+  sequence             Sequence?           @relation(fields: [sequenceId], references: [id])
+  sequenceStepId       String?
+  sequenceStep         SequenceStep?       @relation(fields: [sequenceStepId], references: [id])
   sequenceEnrollmentId String?
   sequenceEnrollment   SequenceEnrollment? @relation(fields: [sequenceEnrollmentId], references: [id])
 
@@ -599,17 +650,17 @@ model Draft {
 // ─── OUTBOUND MESSAGES ─────────────────────────────────────────
 
 model OutboundMessage {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadId         String
-  lead           Lead          @relation(fields: [leadId], references: [id])
+  lead           Lead         @relation(fields: [leadId], references: [id])
   mailboxId      String
-  mailbox        Mailbox       @relation(fields: [mailboxId], references: [id])
+  mailbox        Mailbox      @relation(fields: [mailboxId], references: [id])
   campaignId     String?
-  campaign       Campaign?     @relation(fields: [campaignId], references: [id])
-  draftId        String?   @unique
-  draft          Draft?        @relation(fields: [draftId], references: [id])
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id])
+  draftId        String?      @unique
+  draft          Draft?       @relation(fields: [draftId], references: [id])
 
   // A/B test attribution key: the variant ACTUALLY sent (first send, unedited
   // subject). Null for follow-ups, edited subjects, and non-test sends. Per-variant
@@ -639,8 +690,9 @@ model OutboundMessage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  events         MessageEvent[]
-  inboundReplies InboundReply[]
+  events             MessageEvent[]
+  inboundReplies     InboundReply[]
+  salesforceSyncJobs SalesforceSyncJob[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -660,11 +712,11 @@ model OutboundMessage {
 
 model MessageEvent {
   id                String          @id @default(cuid())
-  organizationId    String          // denormalized — no FK by design; allows event insertion before parent message row is committed
+  organizationId    String // denormalized — no FK by design; allows event insertion before parent message row is committed
   outboundMessageId String
   outboundMessage   OutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
 
-  sgEventId         String?         @unique
+  sgEventId         String?          @unique
   eventType         MessageEventType
   providerEventType String?
   providerTimestamp DateTime?
@@ -706,6 +758,8 @@ model InboundReply {
 
   receivedAt DateTime @default(now())
   createdAt  DateTime @default(now())
+
+  salesforceSyncJobs SalesforceSyncJob[]
 
   @@index([organizationId])
   @@index([leadId])
@@ -804,13 +858,13 @@ model DomainHealth {
   id                 String        @id @default(cuid())
   organizationId     String
   organization       Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  domain             String        // lower-case
+  domain             String // lower-case
   status             DomainStatus  @default(UNVERIFIED)
-  checks             Json?         // DomainCheck[] — see features/deliverability/evaluate-domain.ts
+  checks             Json? // DomainCheck[] — see features/deliverability/evaluate-domain.ts
   registeredAt       DateTime?
-  registeredAtSource String?       // 'rdap' | 'manual'
-  lastCheckedAt      DateTime?     // last check that produced a result
-  lastAttemptAt      DateTime?     // last attempt, including "couldn't check"
+  registeredAtSource String? // 'rdap' | 'manual'
+  lastCheckedAt      DateTime? // last check that produced a result
+  lastAttemptAt      DateTime? // last attempt, including "couldn't check"
   lastStatusChangeAt DateTime?
   lastError          String?
   alertedStatus      DomainStatus?
@@ -846,4 +900,64 @@ model BusinessProfile {
   updatedAt             DateTime     @updatedAt
 
   @@map("business_profiles")
+}
+
+// ─── SALESFORCE SYNC ───────────────────────────────────────────
+
+// One per org (enforced by the unique organizationId below). Holds the
+// encrypted refresh token and the sync preferences an admin controls from
+// Settings. heldAlertedAt de-duplicates the daily "leads held" alert.
+model SalesforceConnection {
+  id                     String                     @id @default(cuid())
+  organizationId         String                     @unique
+  organization           Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instanceUrl            String
+  loginHost              String
+  sfOrgId                String
+  sfUserId               String
+  sfUsername             String
+  sfUserEmail            String?
+  refreshTokenEnc        String
+  status                 SalesforceConnectionStatus @default(CONNECTED)
+  lastError              String?
+  rateLimitedUntil       DateTime?
+  heldAlertedAt          DateTime?
+  customerAccountTypes   String[]                   @default(["Customer"])
+  blockOpenOpportunities Boolean                    @default(true)
+  logActivity            Boolean                    @default(true)
+  connectedAt            DateTime                   @default(now())
+  connectedByMemberId    String?
+  connectedBy            OrgMember?                 @relation("SalesforceConnectedBy", fields: [connectedByMemberId], references: [id], onDelete: SetNull)
+  updatedAt              DateTime                   @updatedAt
+
+  @@map("salesforce_connections")
+}
+
+// A queued unit of work synced TO Salesforce (logging a send/reply as a
+// Task, or creating a Lead). The unique constraints make enqueue idempotent
+// per (type, source record) — retrying a webhook never double-enqueues.
+model SalesforceSyncJob {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId            String
+  lead              Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type              SalesforceJobType
+  outboundMessageId String?
+  outboundMessage   OutboundMessage?    @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+  inboundReplyId    String?
+  inboundReply      InboundReply?       @relation(fields: [inboundReplyId], references: [id], onDelete: Cascade)
+  status            SalesforceJobStatus @default(PENDING)
+  attempts          Int                 @default(0)
+  nextAttemptAt     DateTime            @default(now())
+  lastError         String?
+  sfTaskId          String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([type, outboundMessageId])
+  @@unique([type, inboundReplyId])
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, status])
+  @@map("salesforce_sync_jobs")
 }

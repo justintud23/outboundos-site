@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
+import { SalesforceBadge } from '@/features/salesforce/components/salesforce-badge'
 import { OwnerSelect } from '@/features/team/components/owner-select'
 import { OwnerBadge } from '@/features/team/components/owner-badge'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
@@ -44,9 +45,17 @@ interface LeadHeaderProps {
   engagement?: EngagementScore | null
   isAdmin: boolean
   members: MemberSummary[]
+  salesforceInstanceUrl: string | null
 }
 
-export function LeadHeader({ lead, statusOverride, engagement, isAdmin, members }: LeadHeaderProps) {
+export function LeadHeader({
+  lead,
+  statusOverride,
+  engagement,
+  isAdmin,
+  members,
+  salesforceInstanceUrl,
+}: LeadHeaderProps) {
   const name =
     [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email
 
@@ -132,6 +141,17 @@ export function LeadHeader({ lead, statusOverride, engagement, isAdmin, members 
           <p className="text-[var(--text-muted)] text-xs mt-2">
             Last activity {relativeTime(lead.lastActivityAt)}
           </p>
+
+          {salesforceInstanceUrl && (
+            <div className="mt-2">
+              <SalesforceBadge
+                instanceUrl={salesforceInstanceUrl}
+                leadId={lead.id}
+                salesforce={lead.salesforce}
+                isAdmin={isAdmin}
+              />
+            </div>
+          )}
         </div>
 
         {/* Actions */}

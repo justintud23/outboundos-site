@@ -13,7 +13,11 @@ import {
   MissingPostalAddressError,
   DomainNotHealthyError,
   EmailNotVerifiedError,
+  LeadBlockedBySalesforceError,
+  SalesforceCheckUnavailableError,
 } from '../types'
+import { ensureSalesforceClear, applySalesforceBlock } from '@/features/salesforce/server/check'
+import { enqueueSendLog } from '@/features/salesforce/server/enqueue'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES, LeadExcludedCanadaError } from '@/features/leads/types'
@@ -77,7 +81,20 @@ export async function sendDraft({
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
-  // 2c. A draft already on the automatic send queue is owned by the queue —
+  // 2c. Salesforce pre-send check — before any claim or send. Anything short
+  //     of an explicit "allowed" refuses — "not blocked" is never treated
+  //     as "allowed".
+  const sf = await ensureSalesforceClear(organizationId, [draft.leadId])
+  const sfReason = sf.blocked.get(draft.leadId)
+  if (sfReason) {
+    await applySalesforceBlock(organizationId, draft.leadId, sfReason)
+    throw new LeadBlockedBySalesforceError(sfReason)
+  }
+  if (!sf.allowed.has(draft.leadId)) {
+    throw new SalesforceCheckUnavailableError()
+  }
+
+  // 2d. A draft already on the automatic send queue is owned by the queue —
   //     refuse up front (before any mailbox work) and leave its message alone.
   const queued = await prisma.outboundMessage.findUnique({
     where: { draftId },
@@ -98,7 +115,7 @@ export async function sendDraft({
     },
   })
 
-  // 2d. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
+  // 2e. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
   const postalAddress = org?.postalAddress?.trim()
   if (!org || !postalAddress) {
     throw new MissingPostalAddressError()
@@ -108,7 +125,7 @@ export async function sendDraft({
     if (canadaReason) throw new LeadExcludedCanadaError(draft.leadId, canadaReason)
   }
 
-  // 2e. Email verification (first email to this lead only).
+  // 2f. Email verification (first email to this lead only).
   if (isVerificationConfigured()) {
     const emailedBefore = await prisma.outboundMessage.findFirst({
       where: { organizationId, leadId: draft.leadId, sentAt: { not: null } },
@@ -411,6 +428,8 @@ export async function sendDraft({
     return message
   })
 
+  await enqueueSendLog(organizationId, draft.leadId, finalized.id)
+
   // 6b. Auto-transition lead status: NEW → CONTACTED
   await transitionLeadStatus({
     organizationId,
@@ -506,6 +525,8 @@ async function resolveExistingClaim({
     where: { id: existing.id },
     data: { status: 'SENT', sentAt: existing.sentAt ?? new Date() },
   })
+
+  await enqueueSendLog(organizationId, leadId, reconciled.id)
 
   // Lead transition is idempotent (auto: trigger no-ops if already advanced),
   // so it is safe to (re)apply on reconciliation.

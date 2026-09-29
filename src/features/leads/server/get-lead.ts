@@ -36,6 +36,12 @@ export async function getLead({
       scoreBreakdown: true,
       ownerId: true,
       owner: { select: { name: true, email: true } },
+      salesforceId: true,
+      salesforceType: true,
+      sfCheckStatus: true,
+      sfCheckDetail: true,
+      sfCheckedAt: true,
+      sfBlockOverride: true,
     },
   })
 
@@ -62,6 +68,28 @@ export async function getLead({
   if (latestInbound?.receivedAt) dates.push(latestInbound.receivedAt)
   const lastActivityAt = new Date(Math.max(...dates.map((d) => d.getTime())))
 
-  const { owner, ...rest } = lead
-  return { ...rest, lastActivityAt, ownerName: owner?.name ?? owner?.email ?? null }
+  const {
+    owner,
+    salesforceId,
+    salesforceType,
+    sfCheckStatus,
+    sfCheckDetail,
+    sfCheckedAt,
+    sfBlockOverride,
+    ...rest
+  } = lead
+
+  return {
+    ...rest,
+    lastActivityAt,
+    ownerName: owner?.name ?? owner?.email ?? null,
+    salesforce: {
+      id: salesforceId,
+      type: salesforceType,
+      checkStatus: sfCheckStatus,
+      checkDetail: sfCheckDetail,
+      checkedAt: sfCheckedAt ? sfCheckedAt.toISOString() : null,
+      blockOverride: sfBlockOverride,
+    },
+  }
 }

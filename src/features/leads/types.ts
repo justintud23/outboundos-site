@@ -1,4 +1,4 @@
-import type { Lead, ImportBatch, LeadStatus } from '@prisma/client'
+import type { Lead, ImportBatch, LeadStatus, SfCheckStatus } from '@prisma/client'
 
 // DTO returned to UI — subset of the Prisma model
 export type LeadDTO = Pick<
@@ -98,6 +98,16 @@ export const CLASSIFICATION_TO_STATUS: Record<string, LeadStatus> = {
 
 // ─── Lead detail ────────────────────────────────────────────
 
+// Salesforce link/check state for a lead, as shown on the lead page badge.
+export interface LeadSalesforceDTO {
+  id: string | null
+  type: 'LEAD' | 'CONTACT' | null
+  checkStatus: SfCheckStatus | null
+  checkDetail: string | null
+  checkedAt: string | null
+  blockOverride: boolean
+}
+
 export type LeadDetailDTO = Pick<
   Lead,
   | 'id'
@@ -125,6 +135,7 @@ export type LeadDetailDTO = Pick<
   // Rep ownership: owner.name ?? owner.email, or null when unowned.
   ownerId: string | null
   ownerName: string | null
+  salesforce: LeadSalesforceDTO
 }
 
 // ─── Timeline ───────────────────────────────────────────────

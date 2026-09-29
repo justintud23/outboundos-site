@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CsvUploadForm } from '@/features/leads/components/csv-upload-form'
 import { LeadsTable } from '@/features/leads/components/leads-table'
 import { DraftReviewDrawer } from '@/features/drafts/components/draft-review-drawer'
 import { ViewToggle } from '@/features/team/components/view-toggle'
+import { SalesforceImportDialog } from '@/features/salesforce/components/salesforce-import-dialog'
 import type { ViewMode } from '@/features/team/view'
 import type { LeadDTO, ImportBatchResult } from '@/features/leads/types'
 import type { DraftDTO, DraftWithLeadDTO } from '@/features/drafts/types'
@@ -13,9 +15,12 @@ interface LeadsPageClientProps {
   initialLeads: LeadDTO[]
   initialTotal: number
   view: ViewMode
+  isAdmin: boolean
+  salesforceConnected: boolean
 }
 
-export function LeadsPageClient({ initialLeads, initialTotal, view }: LeadsPageClientProps) {
+export function LeadsPageClient({ initialLeads, initialTotal, view, isAdmin, salesforceConnected }: LeadsPageClientProps) {
+  const router = useRouter()
   const [leads, setLeads] = useState<LeadDTO[]>(initialLeads)
   const [total, setTotal] = useState(initialTotal)
   const [lastBatch, setLastBatch] = useState<ImportBatchResult['batch'] | null>(null)
@@ -135,6 +140,9 @@ export function LeadsPageClient({ initialLeads, initialTotal, view }: LeadsPageC
           </div>
           <div className="flex items-center gap-3">
             <ViewToggle view={view} />
+            {salesforceConnected && (
+              <SalesforceImportDialog isAdmin={isAdmin} onImported={() => router.refresh()} />
+            )}
             <CsvUploadForm onSuccess={handleImportSuccess} />
           </div>
         </div>

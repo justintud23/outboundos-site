@@ -8,6 +8,7 @@ import { getLeadSequence } from '@/features/leads/server/get-lead-sequence'
 import { getNextActions } from '@/features/actions/server/get-next-actions'
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { listMembers } from '@/features/team/server/assign-owner'
+import { getConnection } from '@/features/salesforce/server/connection'
 import { LeadNotFoundError } from '@/features/leads/types'
 
 export default async function LeadDetailPage({
@@ -33,12 +34,13 @@ export default async function LeadDetailPage({
     throw error
   }
 
-  const [timeline, threadDetail, sequence, actions, members] = await Promise.all([
+  const [timeline, threadDetail, sequence, actions, members, connection] = await Promise.all([
     getLeadTimeline({ organizationId: org.id, leadId }),
     getThreadDetail({ organizationId: org.id, leadId }),
     getLeadSequence({ organizationId: org.id, leadId }),
     getNextActions({ organizationId: org.id, leadId, limit: 5 }),
     isAdmin ? listMembers(org.id) : Promise.resolve([]),
+    getConnection(org.id),
   ])
 
   const name =
@@ -56,6 +58,7 @@ export default async function LeadDetailPage({
           actions={actions}
           isAdmin={isAdmin}
           members={members}
+          salesforceInstanceUrl={connection?.instanceUrl ?? null}
         />
       </div>
     </>
