@@ -914,6 +914,36 @@ describe('sendDraft — mailbox choice by owner, non-sequence rotation (Task 6)'
     })
   })
 
+  it('a draft with a campaign: the rotation query is scoped to the campaign owner, not the lead owner', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      campaignId: 'camp-1',
+      campaign: { ownerId: 'm-campaign-owner' },
+      lead: { ...fakeDraft.lead, ownerId: 'm-lead-owner' },
+    })
+    mockPrisma.mailbox.count.mockResolvedValue(1)
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm-campaign-owner' } })
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: 'm-campaign-owner',
+    })
+  })
+
+  it('a draft with no campaign: the rotation query falls back to the lead owner', async () => {
+    mockPrisma.draft.findFirst.mockResolvedValue({
+      ...fakeDraft,
+      campaignId: null,
+      campaign: null,
+      lead: { ...fakeDraft.lead, ownerId: 'm-lead-owner' },
+    })
+    mockPrisma.mailbox.count.mockResolvedValue(1)
+    await sendDraft(INPUT)
+    expect(mockPrisma.mailbox.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', ownerId: 'm-lead-owner' } })
+    expect(mockPrisma.mailbox.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      organizationId: 'org-1', isActive: true, autoPaused: false, ownerId: 'm-lead-owner',
+    })
+  })
+
   it('pinned-enrollment branch is unchanged: no mailbox.count call, no ownerId in the pinned lookup', async () => {
     mockPrisma.draft.findFirst.mockResolvedValue({
       ...fakeDraft,

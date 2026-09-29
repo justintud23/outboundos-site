@@ -59,6 +59,7 @@ export async function sendDraft({
           ownerId: true,
         },
       },
+      campaign: { select: { ownerId: true } },
     },
   })
 
@@ -201,7 +202,11 @@ export async function sendDraft({
     }
     mailboxes = [pinned]
   } else {
-    const ownerFilter = await mailboxOwnerFilter(organizationId, draft.lead.ownerId ?? null)
+    // Rep ownership: rotation keys on the draft's campaign owner when it has a
+    // campaign, else the lead owner (matches getDraftOwnerId, the same rule
+    // the send route's authorization check uses).
+    const rotationOwnerId = draft.campaign ? draft.campaign.ownerId : (draft.lead.ownerId ?? null)
+    const ownerFilter = await mailboxOwnerFilter(organizationId, rotationOwnerId)
     mailboxes = await prisma.mailbox.findMany({
       where: {
         organizationId,
