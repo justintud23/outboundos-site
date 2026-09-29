@@ -6,7 +6,7 @@ import { getSalesforceClient, type SfClient } from './client'
 import { fetchPeople, type SfPerson } from './records'
 import { getConnection } from './connection'
 import { SalesforceAuthError } from './errors'
-import { classifySfRecord, BLOCKING, SKIP_KEY, type ClassifyRules, type SfStatus } from '../classify'
+import { classifySfRecord, mostRestrictive, BLOCKING, SKIP_KEY, type ClassifyRules, type SfStatus } from '../classify'
 
 export const MAX_SF_IMPORT = 2000
 export const PREVIEW_ROWS = 25
@@ -73,6 +73,19 @@ function personName(p: SfPerson): string {
   return full || p.email || ''
 }
 
+/**
+ * A list view can return two Salesforce records that share an email (e.g. a
+ * Contact and a Lead, or two Contacts) — pick the one to link/create from: a
+ * Contact when the group has one, else the first Lead.
+ */
+function pickRepresentative(records: SfPerson[]): SfPerson {
+  const contact = records.find((r) => r.type === 'CONTACT')
+  if (contact) return contact
+  const lead = records.find((r) => r.type === 'LEAD')
+  if (lead) return lead
+  return records[0] as SfPerson // records is always non-empty by construction
+}
+
 export async function listListViews(organizationId: string, object: SfObjectName): Promise<{ id: string; label: string }[]> {
   const client = getSalesforceClient(organizationId)
   return client.listViews(object)
@@ -123,6 +136,11 @@ export async function importListView({
   const blockedMap = new Map<string, { status: SfStatus; detail: string | null; person: SfPerson }>()
   const clearMap = new Map<string, SfPerson>()
 
+  // Group by lower-cased email first: a list view can return two records
+  // (e.g. a Contact and a Lead) for the same person, and if one is blocking
+  // while the other is clear, the pair must be decided together — otherwise
+  // the clear record alone would import/link a person Salesforce blocks.
+  const groups = new Map<string, SfPerson[]>()
   for (const p of people) {
     const email = p.email
     if (!email) {
@@ -133,13 +151,21 @@ export async function importListView({
       skipped.invalid++
       continue
     }
-    const check = classifySfRecord(p, rules)
-    if (BLOCKING.has(check.status)) {
-      const key = SKIP_KEY[check.status]
+    const key = email.toLowerCase()
+    const group = groups.get(key)
+    if (group) group.push(p)
+    else groups.set(key, [p])
+  }
+
+  for (const [email, records] of groups) {
+    const combined = mostRestrictive(records.map((r) => classifySfRecord(r, rules)))
+    const rep = pickRepresentative(records)
+    if (BLOCKING.has(combined.status)) {
+      const key = SKIP_KEY[combined.status]
       if (key) skipped[key]++
-      blockedMap.set(email, { status: check.status, detail: check.detail, person: p })
+      blockedMap.set(email, { status: combined.status, detail: combined.detail, person: rep })
     } else {
-      clearMap.set(email, p)
+      clearMap.set(email, rep)
     }
   }
 

@@ -227,6 +227,70 @@ describe('importListView — skip counting', () => {
   })
 })
 
+describe('importListView — duplicate email within a list view', () => {
+  it('one CUSTOMER Contact and one clear Lead sharing an email: no new lead, counted once as customer', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([
+      person({ id: 'sf-contact', email: 'dup@acme.com', type: 'CONTACT', accountType: 'Customer' }),
+      person({ id: 'sf-lead', email: 'dup@acme.com', type: 'LEAD' }),
+    ])
+
+    const result = await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    expect(result.skipped.customer).toBe(1)
+    expect(result.imported).toBe(0)
+    expect(p.lead.createManyAndReturn).not.toHaveBeenCalled()
+  })
+
+  it('the same pair matching an existing lead: that lead is stamped CUSTOMER and is not counted as linked', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([
+      person({ id: 'sf-contact', email: 'dup@acme.com', type: 'CONTACT', accountType: 'Customer' }),
+      person({ id: 'sf-lead', email: 'dup@acme.com', type: 'LEAD' }),
+    ])
+    p.lead.findMany.mockResolvedValue([
+      {
+        id: 'lead-existing', email: 'dup@acme.com', salesforceId: null,
+        firstName: null, lastName: null, company: null, title: null, phone: null, country: null, customFields: null,
+      },
+    ])
+
+    const result = await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    expect(p.lead.update).toHaveBeenCalledTimes(1)
+    const [{ data }] = p.lead.update.mock.calls[0]
+    expect(data.sfCheckStatus).toBe('CUSTOMER')
+    expect(result.linked).toBe(0)
+  })
+
+  it('two clear records sharing an email: exactly one lead is created, linked to the Contact', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    // Contact listed first, Lead second — a last-write-wins bug would pick
+    // the Lead instead of the (correct) Contact.
+    mockFetchPeople.mockResolvedValue([
+      person({ id: 'sf-contact', email: 'dup@acme.com', type: 'CONTACT', accountType: 'Prospect', accountId: 'acc-1', accountName: 'Acme Inc' }),
+      person({ id: 'sf-lead', email: 'dup@acme.com', type: 'LEAD' }),
+    ])
+
+    const result = await importListView({
+      organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+      listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+    })
+
+    expect(p.lead.createManyAndReturn).toHaveBeenCalledTimes(1)
+    const [{ data }] = p.lead.createManyAndReturn.mock.calls[0]
+    expect(data).toHaveLength(1)
+    expect(data[0]).toMatchObject({ salesforceType: 'CONTACT', salesforceId: 'sf-contact', salesforceAccountId: 'acc-1' })
+    expect(result.imported).toBe(1)
+  })
+})
+
 describe('importListView — existing leads', () => {
   it('links an existing lead instead of recreating it, filling only null fields, and counts it as linked', async () => {
     mockGetSalesforceClient.mockReturnValue(fakeClient())
