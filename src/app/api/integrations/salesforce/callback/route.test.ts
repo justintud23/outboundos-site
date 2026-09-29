@@ -20,6 +20,10 @@ vi.mock('@/features/salesforce/server/connection', () => ({
   saveConnection: vi.fn(),
 }))
 
+vi.mock('@/features/salesforce/server/owner-match', () => ({
+  clearOwnerMatchCache: vi.fn(),
+}))
+
 vi.mock('@/features/salesforce/config', () => ({
   loginHostFor: vi.fn((env: string) => (env === 'sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com')),
 }))
@@ -27,6 +31,7 @@ vi.mock('@/features/salesforce/config', () => ({
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { verifyState, exchangeCode, fetchIdentity } from '@/features/salesforce/server/oauth'
 import { saveConnection } from '@/features/salesforce/server/connection'
+import { clearOwnerMatchCache } from '@/features/salesforce/server/owner-match'
 import { GET } from './route'
 
 const mockResolveMember = resolveMember as unknown as ReturnType<typeof vi.fn>
@@ -34,6 +39,7 @@ const mockVerifyState = verifyState as unknown as ReturnType<typeof vi.fn>
 const mockExchangeCode = exchangeCode as unknown as ReturnType<typeof vi.fn>
 const mockFetchIdentity = fetchIdentity as unknown as ReturnType<typeof vi.fn>
 const mockSaveConnection = saveConnection as unknown as ReturnType<typeof vi.fn>
+const mockClearOwnerMatchCache = clearOwnerMatchCache as unknown as ReturnType<typeof vi.fn>
 
 const fakeOrg = { id: 'org-1' }
 const admin = { org: fakeOrg, member: { id: 'mem-admin' }, isAdmin: true }
@@ -163,5 +169,24 @@ describe('GET /api/integrations/salesforce/callback', () => {
     mockSaveConnection.mockResolvedValue({ orgChanged: true })
     const res = await GET(makeRequest('?code=abc&state=st'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=connected_new_org')
+  })
+
+  it('clears the owner-match cache after saving the connection (M1)', async () => {
+    const order: string[] = []
+    mockSaveConnection.mockImplementation(async () => { order.push('save'); return { orgChanged: true } })
+    mockClearOwnerMatchCache.mockImplementation(() => { order.push('clear') })
+
+    await GET(makeRequest('?code=abc&state=s'))
+
+    expect(order).toEqual(['save', 'clear'])
+  })
+
+  it('does not clear the owner-match cache when saveConnection throws', async () => {
+    mockSaveConnection.mockRejectedValue(new Error('db down'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await GET(makeRequest('?code=abc&state=s'))
+
+    expect(mockClearOwnerMatchCache).not.toHaveBeenCalled()
   })
 })

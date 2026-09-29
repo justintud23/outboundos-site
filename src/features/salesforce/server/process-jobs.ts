@@ -10,9 +10,11 @@ export const BACKOFF_MS = [5 * 60_000, 30 * 60_000, 2 * 3_600_000, 12 * 3_600_00
 export const MAX_ATTEMPTS = 6
 
 // Errors from creating a Task that mean the linked Salesforce record is gone
-// (deleted, or the id no longer resolves) — the lead's link is stale and
+// (deleted, or the id no longer resolves). The lead's link is stale and
 // must be cleared rather than retried against a dead id.
-const DELETED_REF_CODES = new Set(['ENTITY_IS_DELETED', 'INVALID_CROSS_REFERENCE_KEY', 'NOT_FOUND'])
+// INVALID_CROSS_REFERENCE_KEY is deliberately excluded: Salesforce also
+// returns it for a bad OwnerId, which says nothing about the WhoId link.
+const DELETED_REF_CODES = new Set(['ENTITY_IS_DELETED', 'NOT_FOUND'])
 
 const LOG_JOB_TYPES: SalesforceJobType[] = ['LOG_SEND', 'LOG_REPLY']
 const DONE_OR_FAILED: SalesforceJobStatus[] = ['DONE', 'FAILED']

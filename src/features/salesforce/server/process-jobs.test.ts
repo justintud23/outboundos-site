@@ -390,7 +390,23 @@ describe('processSalesforceJobs', () => {
     expect(result.failed).toBe(1)
   })
 
-  describe('deleted-record path (ENTITY_IS_DELETED / INVALID_CROSS_REFERENCE_KEY / NOT_FOUND on a Task create)', () => {
+  describe('deleted-record path (ENTITY_IS_DELETED / NOT_FOUND on a Task create)', () => {
+    it('INVALID_CROSS_REFERENCE_KEY (e.g. a stale OwnerId) is not treated as a deleted record: the link is kept and the job retries (M1)', async () => {
+      const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'INVALID_CROSS_REFERENCE_KEY', 'invalid cross reference id'))
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.lead.findUnique.mockResolvedValue({ salesforceId: '00SLIVE', ownerId: 'mem-1' })
+      p.salesforceSyncJob.findMany.mockResolvedValue([job({ attempts: 0 })])
+
+      const result = await processSalesforceJobs({ now: NOW })
+
+      expect(p.lead.updateMany).not.toHaveBeenCalled()
+      expect(p.salesforceSyncJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { attempts: 1, nextAttemptAt: new Date(NOW.getTime() + BACKOFF_MS[0]!), lastError: expect.stringContaining('invalid cross reference id') },
+      })
+      expect(result.retried).toBe(1)
+    })
+
     it('clears only salesforceId/Type/AccountId, scoped to the stale id — sfCheckStatus and sfBlockOverride are never touched', async () => {
       const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'NOT_FOUND', 'not found'))
       mockGetSalesforceClient.mockReturnValue(fakeClient(create))

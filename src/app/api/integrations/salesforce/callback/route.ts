@@ -4,6 +4,7 @@ import { resolveMember } from '@/lib/auth/resolve-member'
 import { loginHostFor } from '@/features/salesforce/config'
 import { verifyState, exchangeCode, fetchIdentity, SF_PKCE_COOKIE, SF_PKCE_COOKIE_PATH } from '@/features/salesforce/server/oauth'
 import { saveConnection } from '@/features/salesforce/server/connection'
+import { clearOwnerMatchCache } from '@/features/salesforce/server/owner-match'
 
 function settingsError(request: Request, reason: string) {
   return NextResponse.redirect(new URL(`/settings?salesforce=error&reason=${reason}`, request.url))
@@ -42,6 +43,10 @@ export async function GET(request: Request) {
       sfUserEmail: identity.email,
       refreshToken,
     })
+    // Cached Salesforce User ids may belong to a different Salesforce org
+    // after a reconnect. Cleared here rather than in saveConnection to avoid
+    // a connection -> owner-match -> client -> connection import cycle.
+    clearOwnerMatchCache()
     jar.delete({ name: SF_PKCE_COOKIE, path: SF_PKCE_COOKIE_PATH })
     return NextResponse.redirect(
       new URL(`/settings?salesforce=${orgChanged ? 'connected_new_org' : 'connected'}`, request.url),
