@@ -213,7 +213,7 @@ describe('markNeedsReconnect', () => {
     expect(mockSendOrgAlert).toHaveBeenCalledWith(
       'org-1',
       'Salesforce disconnected',
-      expect.stringContaining('reconnect in Settings'),
+      expect.stringContaining('reconnects in Settings'),
     )
   })
 

@@ -91,7 +91,7 @@ export async function markNeedsReconnect(organizationId: string, message: string
   })
   if (res.count === 1) {
     await sendOrgAlert(organizationId, 'Salesforce disconnected',
-      `OutboundOS lost access to Salesforce (${message}).\n\nSending continues, but activity logging and customer checks are paused. An admin can reconnect in Settings → Salesforce.`)
+      `OutboundOS lost access to Salesforce (${message}).\n\nActivity logging is paused, and emails to leads without a Salesforce check in the last 7 days are held until an admin reconnects in Settings → Salesforce.`)
   }
 }
 

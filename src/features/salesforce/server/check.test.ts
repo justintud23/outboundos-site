@@ -170,17 +170,21 @@ describe('ensureSalesforceClear - stale cache, active connection', () => {
     expect(updateA?.[0].data).toMatchObject({
       sfCheckStatus: 'CLEAR',
       sfCheckedAt: NOW,
-      sfHeldSince: null,
       salesforceId: '003A',
       salesforceType: 'CONTACT',
       salesforceAccountId: 'acc-1',
     })
 
     const updateB = p.lead.update.mock.calls.find((c: unknown[]) => (c[0] as { where: { id: string } }).where.id === 'lead-b')
-    expect(updateB?.[0].data).toMatchObject({ sfCheckStatus: 'CLEAR', sfCheckedAt: NOW, sfHeldSince: null })
+    expect(updateB?.[0].data).toMatchObject({ sfCheckStatus: 'CLEAR', sfCheckedAt: NOW })
     expect(updateB?.[0].data).not.toHaveProperty('salesforceId')
 
     expect(result.allowed).toEqual(new Set(['lead-a', 'lead-b']))
+    // M1: sfHeldSince clearing is a separate, single batched write covering every decided lead.
+    expect(p.lead.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['lead-a', 'lead-b'] }, sfHeldSince: { not: null } },
+      data: { sfHeldSince: null },
+    })
   })
 })
 
@@ -284,7 +288,12 @@ describe('applySalesforceBlock', () => {
       data: { status: 'STOPPED', stoppedAt: expect.any(Date), stoppedReason: 'Salesforce: customer (Acme)', processing: false },
     })
     expect(p.draft.updateMany).toHaveBeenCalledWith({
-      where: { organizationId: 'org-1', leadId: 'lead-1', status: { in: ['PENDING_REVIEW', 'APPROVED'] }, outboundMessages: { none: {} } },
+      where: {
+        organizationId: 'org-1',
+        leadId: 'lead-1',
+        status: { in: ['PENDING_REVIEW', 'APPROVED'] },
+        outboundMessages: { none: { status: 'SENT' } },
+      },
       data: { status: 'BLOCKED' },
     })
     expect(p.outboundMessage.updateMany).toHaveBeenCalledWith({
@@ -325,6 +334,262 @@ describe('prefetchSalesforceChecks', () => {
   it('does nothing for an empty list', async () => {
     await prefetchSalesforceChecks([], NOW)
     expect(p.lead.findMany).not.toHaveBeenCalled()
+  })
+
+  it('passes each org only its own lead ids on to ensureSalesforceClear (M3(e))', async () => {
+    p.lead.findMany.mockImplementation(async (args: { where: { id?: { in: string[] }; organizationId?: string } }) => {
+      if (args.where.organizationId) {
+        // The per-org findMany inside ensureSalesforceClear.
+        const ids = args.where.id?.in ?? []
+        return ids.map((id) => leadRow({ id, organizationId: args.where.organizationId }))
+      }
+      // The grouping findMany inside prefetchSalesforceChecks.
+      return [
+        { id: 'lead-1', organizationId: 'org-A' },
+        { id: 'lead-2', organizationId: 'org-A' },
+        { id: 'lead-3', organizationId: 'org-B' },
+      ]
+    })
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(false)
+
+    await prefetchSalesforceChecks(['lead-1', 'lead-2', 'lead-3'], NOW)
+
+    const orgACall = p.lead.findMany.mock.calls.find(
+      (c: unknown[]) => (c[0] as { where: { organizationId?: string } }).where.organizationId === 'org-A',
+    )
+    const orgBCall = p.lead.findMany.mock.calls.find(
+      (c: unknown[]) => (c[0] as { where: { organizationId?: string } }).where.organizationId === 'org-B',
+    )
+    expect(((orgACall?.[0] as { where: { id: { in: string[] } } }).where.id.in).sort()).toEqual(['lead-1', 'lead-2'])
+    expect(((orgBCall?.[0] as { where: { id: { in: string[] } } }).where.id.in).sort()).toEqual(['lead-3'])
+  })
+})
+
+describe('ensureSalesforceClear - I1: a DB write failure after a successful lookup', () => {
+  it('rejects instead of returning, so a lead the lookup just confirmed as CUSTOMER is never reachable as allowed', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-cust', email: 'cust@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) })])
+    mockLookupByEmails.mockResolvedValue(
+      new Map([['cust@acme.com', { status: 'CUSTOMER', detail: 'Acme', person: { id: '003X', type: 'CONTACT', accountId: 'acc-9' } }]]),
+    )
+    p.lead.update.mockRejectedValue(new Error('pool timeout'))
+
+    await expect(ensureSalesforceClear('org-1', ['lead-cust'], NOW)).rejects.toThrow('pool timeout')
+  })
+
+  it('does not fall back to holdOrDecideFromStale on a write failure (would re-decide from stale rows)', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    // Stored status is stale-but-clear; if the catch wrongly re-ran the stale
+    // fallback after a write failure, this lead would come back "allowed"
+    // from the 7-day rule even though Salesforce just said CUSTOMER.
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-cust', email: 'cust@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) })])
+    mockLookupByEmails.mockResolvedValue(new Map([['cust@acme.com', { status: 'CUSTOMER', detail: 'Acme', person: null }]]))
+    p.lead.update.mockRejectedValue(new Error('pool timeout'))
+
+    await expect(ensureSalesforceClear('org-1', ['lead-cust'], NOW)).rejects.toThrow('pool timeout')
+    // holdOrDecideFromStale's bulk write (sfHeldSince stamping) must never have run.
+    expect(p.lead.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('ensureSalesforceClear - decision sets are mutually exclusive', () => {
+  it('never places a lead id in more than one of allowed/held/blocked, across a mixed batch', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    p.lead.findMany.mockResolvedValue([
+      leadRow({ id: 'lead-override', sfBlockOverride: true, sfCheckStatus: 'CUSTOMER', sfCheckedAt: hoursAgo(1) }),
+      leadRow({ id: 'lead-fresh-blocked', sfCheckStatus: 'CUSTOMER', sfCheckDetail: 'Acme', sfCheckedAt: hoursAgo(1) }),
+      leadRow({ id: 'lead-fresh-allowed', sfCheckStatus: 'CLEAR', sfCheckedAt: hoursAgo(1) }),
+      leadRow({ id: 'lead-lookup-blocked', email: 'blocked@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) }),
+      leadRow({ id: 'lead-lookup-allowed', email: 'clear@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) }),
+      leadRow({ id: 'lead-lookup-missing-key', email: 'missing@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) }),
+    ])
+    mockLookupByEmails.mockResolvedValue(
+      new Map([
+        ['blocked@acme.com', { status: 'CUSTOMER', detail: 'Acme', person: null }],
+        ['clear@acme.com', { status: 'CLEAR', detail: null, person: null }],
+        // 'missing@acme.com' intentionally absent.
+      ]),
+    )
+
+    const result = await ensureSalesforceClear(
+      'org-1',
+      [
+        'lead-override',
+        'lead-fresh-blocked',
+        'lead-fresh-allowed',
+        'lead-lookup-blocked',
+        'lead-lookup-allowed',
+        'lead-lookup-missing-key',
+        'lead-missing-row',
+      ],
+      NOW,
+    )
+
+    const allIds = [...result.allowed, ...result.held, ...result.blocked.keys()]
+    expect(new Set(allIds).size).toBe(allIds.length) // no id appears twice across the three sets
+
+    expect(result.allowed.has('lead-override')).toBe(true)
+    expect(result.blocked.has('lead-fresh-blocked')).toBe(true)
+    expect(result.allowed.has('lead-fresh-allowed')).toBe(true)
+    expect(result.blocked.has('lead-lookup-blocked')).toBe(true)
+    expect(result.allowed.has('lead-lookup-allowed')).toBe(true)
+    expect(result.held.has('lead-lookup-missing-key')).toBe(true)
+    expect(result.held.has('lead-missing-row')).toBe(true)
+  })
+})
+
+describe('ensureSalesforceClear - I2: the lookup failure is logged', () => {
+  it('logs the lookup error once, naming the org', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mockGetConnection.mockResolvedValue(baseConn())
+      mockIsSalesforceActive.mockReturnValue(true)
+      mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+      const boom = new Error('auth expired')
+      mockLookupByEmails.mockRejectedValue(boom)
+      p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-x', sfCheckedAt: daysAgo(3) })])
+
+      await ensureSalesforceClear('org-1', ['lead-x'], NOW)
+
+      expect(errSpy).toHaveBeenCalledWith('[salesforce-check] lookup failed for org org-1:', boom)
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+})
+
+describe('ensureSalesforceClear - M1: sfHeldSince is cleared once decided', () => {
+  it('clears sfHeldSince in one batched updateMany for every lead decided allowed or blocked, but leaves a still-held lead alone', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(false)
+    p.lead.findMany.mockResolvedValue([
+      leadRow({ id: 'lead-override', sfBlockOverride: true, sfHeldSince: daysAgo(2) }),
+      leadRow({ id: 'lead-fresh-blocked', sfCheckStatus: 'CUSTOMER', sfCheckDetail: 'Acme', sfCheckedAt: hoursAgo(1), sfHeldSince: daysAgo(2) }),
+      leadRow({ id: 'lead-still-held', sfCheckedAt: null, sfHeldSince: daysAgo(2) }),
+    ])
+
+    const result = await ensureSalesforceClear('org-1', ['lead-override', 'lead-fresh-blocked', 'lead-still-held'], NOW)
+
+    expect(result.allowed.has('lead-override')).toBe(true)
+    expect(result.blocked.has('lead-fresh-blocked')).toBe(true)
+    expect(result.held.has('lead-still-held')).toBe(true)
+    expect(p.lead.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['lead-override', 'lead-fresh-blocked'] }, sfHeldSince: { not: null } },
+      data: { sfHeldSince: null },
+    })
+  })
+})
+
+describe('ensureSalesforceClear - M2: held-alert failure handling', () => {
+  it('does not stamp heldAlertedAt when sendOrgAlert returns false', async () => {
+    mockGetConnection.mockResolvedValue(baseConn({ heldAlertedAt: null }))
+    mockIsSalesforceActive.mockReturnValue(false)
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-never', sfCheckedAt: null })])
+    p.lead.count.mockResolvedValue(1)
+    mockSendOrgAlert.mockResolvedValue(false)
+
+    await ensureSalesforceClear('org-1', ['lead-never'], NOW)
+
+    expect(mockSendOrgAlert).toHaveBeenCalled()
+    expect(p.salesforceConnection.update).not.toHaveBeenCalled()
+  })
+
+  it('never rejects when the held-alert bookkeeping write fails, and logs it', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mockGetConnection.mockResolvedValue(baseConn({ heldAlertedAt: null }))
+      mockIsSalesforceActive.mockReturnValue(false)
+      p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-never', sfCheckedAt: null })])
+      p.lead.count.mockResolvedValue(1)
+      p.salesforceConnection.update.mockRejectedValue(new Error('row gone (disconnected concurrently)'))
+
+      const result = await ensureSalesforceClear('org-1', ['lead-never'], NOW)
+
+      expect(result.held.has('lead-never')).toBe(true)
+      expect(errSpy).toHaveBeenCalledWith('[salesforce-check] held alert failed for org org-1:', expect.any(Error))
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+})
+
+describe('ensureSalesforceClear - missing leads', () => {
+  it('holds a requested leadId that findMany does not return (wrong org or deleted), never allowing it', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-real', sfCheckStatus: 'CLEAR', sfCheckedAt: hoursAgo(1) })])
+
+    const result = await ensureSalesforceClear('org-1', ['lead-real', 'lead-ghost'], NOW)
+
+    expect(result.allowed.has('lead-real')).toBe(true)
+    expect(result.held.has('lead-ghost')).toBe(true)
+    expect(result.allowed.has('lead-ghost')).toBe(false)
+    expect(result.blocked.has('lead-ghost')).toBe(false)
+  })
+})
+
+describe('ensureSalesforceClear - M3(a): lookup returns a blocking status', () => {
+  it('blocks a lead the lookup finds OPTED_OUT, with the classified reason', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-opt-out', email: 'optout@acme.com', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) })])
+    mockLookupByEmails.mockResolvedValue(new Map([['optout@acme.com', { status: 'OPTED_OUT', detail: null, person: null }]]))
+
+    const result = await ensureSalesforceClear('org-1', ['lead-opt-out'], NOW)
+
+    expect(result.blocked.get('lead-opt-out')).toBe('Salesforce: opted out')
+    expect(result.allowed.has('lead-opt-out')).toBe(false)
+  })
+})
+
+describe('ensureSalesforceClear - M3(b): lookup fails with a stored blocking status', () => {
+  it('stays blocked when the stored status is blocking and under 7 days old', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    mockLookupByEmails.mockRejectedValue(new Error('network timeout'))
+    p.lead.findMany.mockResolvedValue([
+      leadRow({ id: 'lead-stale-customer', sfCheckStatus: 'CUSTOMER', sfCheckDetail: 'Acme', sfCheckedAt: daysAgo(3) }),
+    ])
+
+    const result = await ensureSalesforceClear('org-1', ['lead-stale-customer'], NOW)
+
+    expect(result.blocked.get('lead-stale-customer')).toBe('Salesforce: customer (Acme)')
+    expect(result.allowed.has('lead-stale-customer')).toBe(false)
+  })
+})
+
+describe('ensureSalesforceClear - M3(c): stored NOT_FOUND', () => {
+  it('allows a lead with a fresh (1h) stored NOT_FOUND, with no lookup', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-not-found', sfCheckStatus: 'NOT_FOUND', sfCheckedAt: hoursAgo(1) })])
+
+    const result = await ensureSalesforceClear('org-1', ['lead-not-found'], NOW)
+
+    expect(result.allowed.has('lead-not-found')).toBe(true)
+    expect(mockLookupByEmails).not.toHaveBeenCalled()
+  })
+})
+
+describe('ensureSalesforceClear - M3(d): lookup map missing a key', () => {
+  it('holds a lead whose email the lookup result has no entry for, rather than allowing it', async () => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    mockIsSalesforceActive.mockReturnValue(true)
+    mockGetSalesforceClient.mockReturnValue({ orgId: 'org-1' })
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-x', email: 'x@acme.com', sfCheckedAt: daysAgo(3) })])
+    mockLookupByEmails.mockResolvedValue(new Map())
+
+    const result = await ensureSalesforceClear('org-1', ['lead-x'], NOW)
+
+    expect(result.held.has('lead-x')).toBe(true)
+    expect(result.allowed.has('lead-x')).toBe(false)
   })
 })
 
