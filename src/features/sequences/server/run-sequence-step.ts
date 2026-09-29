@@ -155,15 +155,15 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
 
   // 3c. Salesforce pre-send check — every step, before any AI spend or the
   //     auto-send gates below. A confirmed block stops the enrollment
-  //     outright; an inconclusive check holds this step for a retry rather
-  //     than treating "not blocked" as allowed.
+  //     outright; anything short of an explicit "allowed" holds this step
+  //     for a retry — "not blocked" is never treated as "allowed".
   const sf = await ensureSalesforceClear(enrollment.organizationId, [enrollment.lead.id])
   const sfReason = sf.blocked.get(enrollment.lead.id)
   if (sfReason) {
     await applySalesforceBlock(enrollment.organizationId, enrollment.lead.id, sfReason)
     return 'STOPPED'
   }
-  if (sf.held.has(enrollment.lead.id)) return defer(enrollmentId, SF_HOLD_MS)
+  if (!sf.allowed.has(enrollment.lead.id)) return defer(enrollmentId, SF_HOLD_MS)
 
   const campaign = enrollment.sequence.campaign
   const org = enrollment.organization

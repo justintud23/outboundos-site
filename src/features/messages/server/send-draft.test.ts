@@ -191,7 +191,15 @@ beforeEach(() => {
 
   mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
   mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
-  ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(['lead-1']), held: new Set(), blocked: new Map() })
+  // Defaults to allowing whichever lead id(s) it's asked about, so tests that
+  // vary leadId (e.g. concurrent sends across distinct drafts/leads) aren't
+  // held by a hardcoded 'lead-1'. Tests that exercise the block/hold paths
+  // override this with a fixed mockResolvedValue.
+  ;(ensureSalesforceClear as Fn).mockImplementation(async (_orgId: string, leadIds: string[]) => ({
+    allowed: new Set(leadIds),
+    held: new Set(),
+    blocked: new Map(),
+  }))
 
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
@@ -1021,6 +1029,16 @@ describe('sendDraft — Salesforce pre-send check (Task 7)', () => {
 
   it('held: throws SalesforceCheckUnavailableError, no claim or send', async () => {
     ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(), held: new Set(['lead-1']), blocked: new Map() })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(SalesforceCheckUnavailableError)
+    expect(applySalesforceBlock).not.toHaveBeenCalled()
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  // Fix round 1 — "not blocked and not held" must never be treated as allowed:
+  // only a lead explicitly in `allowed` may proceed.
+  it('neither blocked nor allowed (empty sets): throws SalesforceCheckUnavailableError, no claim or send', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(), held: new Set(), blocked: new Map() })
     await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(SalesforceCheckUnavailableError)
     expect(applySalesforceBlock).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()

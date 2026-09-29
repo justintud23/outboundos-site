@@ -388,7 +388,8 @@ describe('processSendQueue', () => {
 
   // ─── Salesforce pre-send check (Task 7) ──────────────────────
 
-  it('prefetches Salesforce checks for the org\'s due QUEUED leads before processing', async () => {
+  it('prefetches Salesforce checks for the org\'s due QUEUED lead ids before processing', async () => {
+    p.outboundMessage.findMany.mockResolvedValueOnce([{ leadId: 'lead-9' }, { leadId: 'lead-10' }])
     await processSendQueue(NOW)
     expect(p.outboundMessage.findMany).toHaveBeenCalledWith({
       where: { organizationId: 'org-1', status: 'QUEUED', scheduledFor: { lte: NOW } },
@@ -396,11 +397,17 @@ describe('processSendQueue', () => {
       distinct: ['leadId'],
       take: 200,
     })
-    expect(prefetchSalesforceChecks).toHaveBeenCalled()
+    expect(prefetchSalesforceChecks).toHaveBeenCalledWith(['lead-9', 'lead-10'])
   })
 
-  it('a Salesforce prefetch failure does not abort the org tick', async () => {
+  it('a Salesforce prefetch DB read failure does not abort the org tick', async () => {
     p.outboundMessage.findMany.mockRejectedValueOnce(new Error('db down'))
+    const res = await processSendQueue(NOW)
+    expect(res.sent).toBe(1)
+  })
+
+  it('a Salesforce prefetch rejection does not abort the org tick', async () => {
+    ;(prefetchSalesforceChecks as Fn).mockRejectedValueOnce(new Error('salesforce down'))
     const res = await processSendQueue(NOW)
     expect(res.sent).toBe(1)
   })
@@ -439,5 +446,28 @@ describe('processSendQueue', () => {
     const res = await processSendQueue(NOW)
     expect(res.reconciled).toBe(1)
     expect(ensureSalesforceClear).not.toHaveBeenCalled()
+  })
+
+  // Fix round 1 — "not blocked and not held" must never be treated as allowed:
+  // only a lead explicitly in `allowed` may proceed.
+  it('Salesforce check: neither blocked nor allowed (empty sets) holds rather than sending', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(), held: new Set(), blocked: new Map() })
+    const res = await processSendQueue(NOW)
+    expect(res.deferred).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(reserveMailboxSlot).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { processing: false, processingStartedAt: null, scheduledFor: new Date(NOW.getTime() + SF_HOLD_MS) },
+    })
+  })
+
+  it('ensureSalesforceClear rejecting releases the claim and defers, no send', async () => {
+    ;(ensureSalesforceClear as Fn).mockRejectedValue(new Error('db down'))
+    const res = await processSendQueue(NOW)
+    expect(res.deferred).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(reserveMailboxSlot).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { processing: false } })
   })
 })

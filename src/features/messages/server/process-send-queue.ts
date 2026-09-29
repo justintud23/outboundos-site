@@ -235,7 +235,8 @@ async function sendOne(
     // Salesforce pre-send check. Skipped when graphMessageId is already set:
     // a previous attempt may already have sent this message, so crash
     // recovery below must reconcile against Graph rather than being
-    // short-circuited here.
+    // short-circuited here. Anything short of an explicit "allowed" holds —
+    // "not blocked" is never treated as "allowed".
     if (!message.graphMessageId) {
       const sf = await ensureSalesforceClear(message.organizationId, [message.leadId])
       const sfReason = sf.blocked.get(message.leadId)
@@ -247,7 +248,7 @@ async function sendOne(
         })
         return 'cancelled'
       }
-      if (sf.held.has(message.leadId)) {
+      if (!sf.allowed.has(message.leadId)) {
         await prisma.outboundMessage.update({
           where: { id: messageId },
           data: { processing: false, processingStartedAt: null, scheduledFor: new Date(now.getTime() + SF_HOLD_MS) },

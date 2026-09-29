@@ -80,14 +80,16 @@ export async function sendDraft({
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
-  // 2c. Salesforce pre-send check — before any claim or send.
+  // 2c. Salesforce pre-send check — before any claim or send. Anything short
+  //     of an explicit "allowed" refuses — "not blocked" is never treated
+  //     as "allowed".
   const sf = await ensureSalesforceClear(organizationId, [draft.leadId])
   const sfReason = sf.blocked.get(draft.leadId)
   if (sfReason) {
     await applySalesforceBlock(organizationId, draft.leadId, sfReason)
     throw new LeadBlockedBySalesforceError(sfReason)
   }
-  if (sf.held.has(draft.leadId)) {
+  if (!sf.allowed.has(draft.leadId)) {
     throw new SalesforceCheckUnavailableError()
   }
 
