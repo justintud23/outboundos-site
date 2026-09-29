@@ -11,17 +11,26 @@ import { CampaignChart } from '@/features/dashboard/components/campaign-chart'
 import { RecentRepliesCompact } from '@/features/dashboard/components/recent-replies-compact'
 import { ActionCenterModule } from '@/features/dashboard/components/action-center-module'
 import { ViewToggle } from '@/features/team/components/view-toggle'
+import { OwnershipBanner } from '@/features/team/components/ownership-banner'
 import type { ViewMode } from '@/features/team/view'
 import type { DashboardRefreshData } from '@/features/analytics/types'
 import type { NextAction } from '@/features/actions/types'
+
+interface OwnershipBannerData {
+  isAdmin: boolean
+  dismissed: boolean
+  unassignedCampaigns: number
+  unassignedMailboxes: number
+}
 
 interface DashboardClientProps {
   initialData: DashboardRefreshData
   initialActions: NextAction[]
   view: ViewMode
+  banner: OwnershipBannerData
 }
 
-export function DashboardClient({ initialData, initialActions, view }: DashboardClientProps) {
+export function DashboardClient({ initialData, initialActions, view, banner }: DashboardClientProps) {
   const [data, setData] = useState(initialData)
   const [actions, setActions] = useState(initialActions)
   const [dateRange, setDateRange] = useState<'7d' | '30d'>('30d')
@@ -76,6 +85,13 @@ export function DashboardClient({ initialData, initialActions, view }: Dashboard
 
   return (
     <div className="space-y-6">
+      <OwnershipBanner
+        isAdmin={banner.isAdmin}
+        dismissed={banner.dismissed}
+        unassignedCampaigns={banner.unassignedCampaigns}
+        unassignedMailboxes={banner.unassignedMailboxes}
+      />
+
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <SnapshotBar

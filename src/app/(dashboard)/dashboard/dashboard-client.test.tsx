@@ -35,6 +35,8 @@ const emptyData: DashboardRefreshData = {
   recentReplies: [],
 }
 
+const banner = { isAdmin: false, dismissed: true, unassignedCampaigns: 0, unassignedMailboxes: 0 }
+
 const fetchMock = vi.fn()
 
 beforeEach(() => {
@@ -50,7 +52,7 @@ beforeEach(() => {
 
 describe('DashboardClient — refresh honors the view', () => {
   it('includes ?view=mine in the refresh URL when the current view is mine', async () => {
-    render(<DashboardClient initialData={emptyData} initialActions={[]} view="mine" />)
+    render(<DashboardClient initialData={emptyData} initialActions={[]} view="mine" banner={banner} />)
     fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
 
     await waitFor(() => {
@@ -60,7 +62,7 @@ describe('DashboardClient — refresh honors the view', () => {
   })
 
   it('includes ?view=team in the refresh URL when the current view is team', async () => {
-    render(<DashboardClient initialData={emptyData} initialActions={[]} view="team" />)
+    render(<DashboardClient initialData={emptyData} initialActions={[]} view="team" banner={banner} />)
     fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
 
     await waitFor(() => {

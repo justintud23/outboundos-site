@@ -10,6 +10,7 @@ import { getReplies } from '@/features/replies/server/get-replies'
 import { getNextActions } from '@/features/actions/server/get-next-actions'
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { resolveView, ownerFilterFor } from '@/features/team/view'
+import { getTeam } from '@/features/team/server/team-settings'
 
 interface DashboardPageProps {
   searchParams: Promise<{ view?: string | string[] }>
@@ -25,7 +26,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const view = resolveView(ctx.isAdmin, (await searchParams).view)
   const ownerId = ownerFilterFor(view, ctx.member.id)
 
-  const [summary, funnel, activity, classification, campaigns, { replies: recentReplies }, actions] = await Promise.all([
+  const [summary, funnel, activity, classification, campaigns, { replies: recentReplies }, actions, team] = await Promise.all([
     getDashboardSummary({ organizationId: ctx.org.id, ownerId }),
     getFunnelData({ organizationId: ctx.org.id }),
     getDailyActivity({ organizationId: ctx.org.id }),
@@ -33,6 +34,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     getCampaignPerformance({ organizationId: ctx.org.id }),
     getReplies({ organizationId: ctx.org.id, limit: 5, ownerId }),
     getNextActions({ organizationId: ctx.org.id, limit: 5 }),
+    ctx.isAdmin ? getTeam(ctx.org.id) : Promise.resolve(null),
   ])
 
   return (
@@ -43,6 +45,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           initialData={{ summary, funnel, activity, classification, campaigns, recentReplies }}
           initialActions={actions}
           view={view}
+          banner={{
+            isAdmin: ctx.isAdmin,
+            dismissed: team?.bannerDismissed ?? true,
+            unassignedCampaigns: team?.unassignedCampaigns ?? 0,
+            unassignedMailboxes: team?.unassignedMailboxes ?? 0,
+          }}
         />
       </div>
     </>

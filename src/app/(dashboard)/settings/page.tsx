@@ -6,6 +6,7 @@ import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 import { getSendingSettings } from '@/features/settings/server/sending-settings'
 import { getBusinessProfile } from '@/features/business-profile/server/profile'
 import { listMembers } from '@/features/team/server/assign-owner'
+import { getTeam } from '@/features/team/server/team-settings'
 
 export default async function SettingsPage() {
   const ctx = await resolveMember()
@@ -14,12 +15,13 @@ export default async function SettingsPage() {
     redirect('/dashboard')
   }
 
-  const { org, isAdmin } = ctx
-  const [mailboxes, sendingSettings, businessProfile, members] = await Promise.all([
-    getMailboxes(org.id),
-    getSendingSettings(org.id),
-    getBusinessProfile(org.id),
+  const { org, member, isAdmin } = ctx
+  const [mailboxes, sendingSettings, businessProfile, members, team] = await Promise.all([
+    isAdmin ? getMailboxes(org.id) : Promise.resolve([]),
+    isAdmin ? getSendingSettings(org.id) : Promise.resolve(null),
+    isAdmin ? getBusinessProfile(org.id) : Promise.resolve(null),
     isAdmin ? listMembers(org.id) : Promise.resolve([]),
+    getTeam(org.id),
   ])
 
   return (
@@ -32,6 +34,13 @@ export default async function SettingsPage() {
           businessProfile={businessProfile}
           isAdmin={isAdmin}
           members={members}
+          team={team}
+          currentMember={{
+            id: member.id,
+            escalationEmail: member.escalationEmail,
+            senderFirstName: member.senderFirstName,
+            senderLastName: member.senderLastName,
+          }}
         />
       </div>
     </>
