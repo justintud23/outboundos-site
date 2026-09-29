@@ -9,7 +9,7 @@ vi.mock('./connection', () => ({
 
 import { getAccessToken, invalidateAccessToken, markNeedsReconnect, markRateLimited } from './connection'
 import { SalesforceApiError, SalesforceAuthError, SalesforceRateLimitError } from './errors'
-import { soqlString, chunk, getSalesforceClient } from './client'
+import { soqlString, chunk, getSalesforceClient, SF_FETCH_TIMEOUT_MS } from './client'
 
 type Fn = ReturnType<typeof vi.fn>
 const mockGetAccessToken = getAccessToken as unknown as Fn
@@ -77,6 +77,18 @@ describe('getSalesforceClient / query', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe(`${INSTANCE_URL}/services/data/v62.0/query?q=${encodeURIComponent('SELECT Id FROM Lead')}`)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer t1')
+  })
+
+  it('passes an AbortSignal timeout in the fetch init', async () => {
+    const fetchMock = global.fetch as Fn
+    fetchMock.mockResolvedValueOnce(jsonResponse({ records: [], done: true }))
+
+    const client = getSalesforceClient('org-1')
+    await client.query('SELECT Id FROM Lead')
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+    expect(SF_FETCH_TIMEOUT_MS).toBe(10_000)
   })
 
   it('follows nextRecordsUrl until done: true, concatenating records', async () => {

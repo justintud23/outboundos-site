@@ -3,6 +3,7 @@ import { getAccessToken, invalidateAccessToken, markNeedsReconnect, markRateLimi
 import { SalesforceApiError, SalesforceAuthError, SalesforceRateLimitError } from './errors'
 
 const RATE_LIMIT_THRESHOLD = 0.8
+export const SF_FETCH_TIMEOUT_MS = 10_000
 
 export function soqlString(v: string): string {
   const escaped = v.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')
@@ -52,6 +53,7 @@ export function getSalesforceClient(orgId: string): SfClient {
         Accept: 'application/json',
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       },
+      signal: AbortSignal.timeout(SF_FETCH_TIMEOUT_MS),
     })
 
     const usage = res.headers.get('Sforce-Limit-Info')?.match(/api-usage=(\d+)\/(\d+)/)
