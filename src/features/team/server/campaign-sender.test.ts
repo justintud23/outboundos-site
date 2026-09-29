@@ -16,7 +16,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('getCampaignSender', () => {
   it('returns sender fields from the campaign owner', async () => {
-    mockFindFirst.mockResolvedValue({ owner: { senderFirstName: 'Mike', senderLastName: 'Rossi', name: 'Michael Rossi' } })
+    mockFindFirst.mockResolvedValue({ owner: { senderFirstName: 'Mike', senderLastName: 'Rossi' } })
     const result = await getCampaignSender('org-1', 'camp-1')
     expect(result).toEqual({ senderFirstName: 'Mike', senderName: 'Mike Rossi' })
   })
@@ -33,18 +33,24 @@ describe('getCampaignSender', () => {
     expect(result).toEqual({ senderFirstName: null, senderName: null })
   })
 
-  it('derives senderFirstName and senderName from name when senderFirstName/senderLastName are unset', async () => {
+  it('R-J: no Clerk-name fallback — nulls when senderFirstName/senderLastName are unset, even if the owner has a Clerk name', async () => {
     mockFindFirst.mockResolvedValue({ owner: { senderFirstName: null, senderLastName: null, name: 'Michael Rossi' } })
     const result = await getCampaignSender('org-1', 'camp-1')
-    expect(result).toEqual({ senderFirstName: 'Michael', senderName: 'Michael Rossi' })
+    expect(result).toEqual({ senderFirstName: null, senderName: null })
   })
 
-  it('scopes the query to the campaign id and organization id', async () => {
+  it('trims whitespace-only sender names to null', async () => {
+    mockFindFirst.mockResolvedValue({ owner: { senderFirstName: '  ', senderLastName: '  ' } })
+    const result = await getCampaignSender('org-1', 'camp-1')
+    expect(result).toEqual({ senderFirstName: null, senderName: null })
+  })
+
+  it('scopes the query to the campaign id and organization id, and no longer selects the Clerk name', async () => {
     mockFindFirst.mockResolvedValue({ owner: null })
     await getCampaignSender('org-1', 'camp-1')
     expect(mockFindFirst).toHaveBeenCalledWith({
       where: { id: 'camp-1', organizationId: 'org-1' },
-      select: { owner: { select: { senderFirstName: true, senderLastName: true, name: true } } },
+      select: { owner: { select: { senderFirstName: true, senderLastName: true } } },
     })
   })
 })
