@@ -111,7 +111,7 @@ Each returns `{ code: 'NOT_CONNECTED' }` 409 when not connected.
 **Lead fields (migration):**
 - `salesforceId String?`, `salesforceType SalesforceObject?` (enum `LEAD | CONTACT`), `salesforceAccountId String?`
 - `sfCheckStatus SfCheckStatus?` (enum `CLEAR | CUSTOMER | OPEN_OPPORTUNITY | OPTED_OUT | CONVERTED | NOT_FOUND`), `sfCheckedAt DateTime?`, `sfCheckDetail String?` (e.g. the account name)
-- `sfBlockOverride Boolean @default(false)`
+- `sfBlockOverride Boolean @default(false)`, `sfHeldSince DateTime?`
 - `@@index([organizationId, salesforceId])`
 
 ## 4. Activity logging
