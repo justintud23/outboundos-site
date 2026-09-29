@@ -92,7 +92,7 @@ describe('SalesforceCard', () => {
 
     render(<SalesforceCard status={connected} isAdmin />)
 
-    expect(screen.getByText('Connected as admin@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Connected as admin@example.com (my.salesforce.com)')).toBeInTheDocument()
 
     const input = screen.getByLabelText('Account types that count as customers')
     fireEvent.change(input, { target: { value: 'Customer, Key Account' } })
@@ -144,6 +144,16 @@ describe('SalesforceCard', () => {
     expect(screen.getByRole('link', { name: 'Reconnect' })).toBeInTheDocument()
   })
 
+  it('falls back to the username alone when instanceUrl is not a valid URL (M4)', () => {
+    render(<SalesforceCard status={{ ...connected, instanceUrl: 'not a url' }} isAdmin={false} />)
+    expect(screen.getByText('Connected as admin@example.com')).toBeInTheDocument()
+  })
+
+  it('falls back to the username alone when instanceUrl is null (M4)', () => {
+    render(<SalesforceCard status={{ ...connected, instanceUrl: null }} isAdmin={false} />)
+    expect(screen.getByText('Connected as admin@example.com')).toBeInTheDocument()
+  })
+
   it('Reconnect for a production connection uses env=production', () => {
     render(<SalesforceCard status={{ ...connected, status: 'NEEDS_RECONNECT' }} isAdmin />)
     expect(screen.getByRole('link', { name: 'Reconnect' })).toHaveAttribute(
@@ -186,8 +196,8 @@ describe('SalesforceCard', () => {
   it('a member sees the status line and health counts but no buttons, form, or retry', () => {
     render(<SalesforceCard status={connected} isAdmin={false} />)
 
-    expect(screen.getByText('Connected as admin@example.com')).toBeInTheDocument()
-    expect(screen.getByText('Last 24 hours: 4 synced, 2 pending, 1 failed')).toBeInTheDocument()
+    expect(screen.getByText('Connected as admin@example.com (my.salesforce.com)')).toBeInTheDocument()
+    expect(screen.getByText('Last 24 hours: 4 synced. 2 pending, 1 failed.')).toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()

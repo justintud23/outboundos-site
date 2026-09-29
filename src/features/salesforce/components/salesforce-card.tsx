@@ -49,12 +49,23 @@ const STATUS_BADGE: Record<string, { label: string; variant: 'success' | 'warnin
   RATE_LIMITED: { label: 'Rate limited', variant: 'warning' },
 }
 
+/** The instance's host (e.g. acme.my.salesforce.com), or null for a missing or malformed URL. */
+function hostOf(instanceUrl: string | null): string | null {
+  if (!instanceUrl) return null
+  try {
+    return new URL(instanceUrl).host || null
+  } catch {
+    return null
+  }
+}
+
 export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const statusMessage = getStatusMessage(searchParams)
 
   const accountTypesId = useId()
+  const instanceHost = hostOf(status.instanceUrl)
   // Reconnect through the same login host the connection was made with, so a
   // sandbox connection isn't sent to the production login page.
   const reconnectEnv = status.loginHost === loginHostFor('sandbox') ? 'sandbox' : 'production'
@@ -215,7 +226,9 @@ export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
         )
       ) : (
         <div className="space-y-3">
-          <p className="text-[var(--text-secondary)] text-sm">Connected as {status.username}</p>
+          <p className="text-[var(--text-secondary)] text-sm">
+            {`Connected as ${status.username ?? ''}${instanceHost ? ` (${instanceHost})` : ''}`}
+          </p>
           {isAdmin && (
             <Button variant="outline" size="sm" onClick={() => void handleDisconnect()} disabled={disconnecting}>
               {disconnecting ? 'Disconnecting…' : 'Disconnect'}
@@ -261,8 +274,7 @@ export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
 
       <div className="space-y-2 border-t border-[var(--border-subtle)] pt-3">
         <p className="text-[var(--text-secondary)] text-xs">
-          Last 24 hours: {status.counts.synced24h} synced, {status.counts.pending} pending, {status.counts.failed}{' '}
-          failed
+          {`Last 24 hours: ${status.counts.synced24h} synced. ${status.counts.pending} pending, ${status.counts.failed} failed.`}
         </p>
         {isAdmin && status.recentFailures.length > 0 && (
           <div className="space-y-1">
