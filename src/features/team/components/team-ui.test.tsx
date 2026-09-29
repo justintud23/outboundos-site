@@ -2,6 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
+const openOrganizationProfile = vi.fn()
+vi.mock('@clerk/nextjs', () => ({ useClerk: () => ({ openOrganizationProfile }) }))
+
 import { TeamSection } from './team-section'
 import { MySettings } from './my-settings'
 import { OwnershipBanner } from './ownership-banner'
@@ -50,6 +53,17 @@ describe('TeamSection', () => {
   it('shows the "Roles are managed in Clerk" note', () => {
     render(<TeamSection team={team} isAdmin />)
     expect(screen.getByText(/Roles are managed in Clerk/)).toBeInTheDocument()
+  })
+
+  it('admins see a "Manage roles in Clerk" button that opens the Clerk org profile', () => {
+    render(<TeamSection team={team} isAdmin />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage roles in Clerk' }))
+    expect(openOrganizationProfile).toHaveBeenCalled()
+  })
+
+  it('members do not see the "Manage roles in Clerk" button', () => {
+    render(<TeamSection team={team} isAdmin={false} />)
+    expect(screen.queryByRole('button', { name: 'Manage roles in Clerk' })).not.toBeInTheDocument()
   })
 
   it('the copy toggle PATCHes /api/team/settings', async () => {

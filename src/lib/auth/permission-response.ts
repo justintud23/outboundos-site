@@ -13,10 +13,14 @@ export function permissionErrorResponse(err: unknown): NextResponse | null {
  * found in this org, so we return null and let the route's own 404 path
  * handle it rather than leaking existence via a 403.
  */
-export function denyUnlessCanAct(ctx: PermissionContext, ownerId: string | null | undefined): NextResponse | null {
+export function denyUnlessCanAct(
+  ctx: PermissionContext,
+  ownerId: string | null | undefined,
+  message = 'You can only change your own campaigns and leads.',
+): NextResponse | null {
   if (ownerId === undefined) return null
   if (canAct(ctx, ownerId)) return null
-  return NextResponse.json({ code: 'NOT_OWNER', error: 'You can only change your own campaigns and leads.' }, { status: 403 })
+  return NextResponse.json({ code: 'NOT_OWNER', error: message }, { status: 403 })
 }
 
 /** Route guard for admin-only actions (settings, mailboxes, deliverability). */

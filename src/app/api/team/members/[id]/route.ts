@@ -20,7 +20,7 @@ export async function PATCH(
   // path (denyUnlessCanAct returns null for an undefined ownerId, whether
   // or not the caller is an admin) so existence is never leaked via a 403.
   const exists = await prisma.orgMember.findFirst({ where: { id, organizationId: ctx.org.id }, select: { id: true } })
-  const denied = denyUnlessCanAct(ctx, exists ? id : undefined)
+  const denied = denyUnlessCanAct(ctx, exists ? id : undefined, 'You can only change your own settings.')
   if (denied) return denied
   if (!exists) {
     return NextResponse.json({ error: 'Member not found.' }, { status: 404 })

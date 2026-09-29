@@ -55,8 +55,10 @@ describe('PATCH /api/team/members/[id]', () => {
     vi.mocked(resolveMember).mockResolvedValue(rep as never)
     vi.mocked(prisma.orgMember.findFirst as never).mockResolvedValue({ id: 'm-other' })
     const res = await call('m-other')
+    const data = await res.json()
     expect(res.status).toBe(403)
-    expect((await res.json()).code).toBe('NOT_OWNER')
+    expect(data.code).toBe('NOT_OWNER')
+    expect(data.error).toBe('You can only change your own settings.')
     expect(updateMember).not.toHaveBeenCalled()
   })
 

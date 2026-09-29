@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useClerk } from '@clerk/nextjs'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -113,6 +114,7 @@ function ReadOnlyMemberRow({ member }: { member: TeamMemberDTO }) {
 
 /** Team roster: editable rows for admins, a read-only list for members. Admins also get the reply-copy toggle. */
 export function TeamSection({ team, isAdmin }: TeamSectionProps) {
+  const { openOrganizationProfile } = useClerk()
   const [copyAdminOnReplies, setCopyAdminOnReplies] = useState(team.copyAdminOnReplies)
   const [toggleBusy, setToggleBusy] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
@@ -148,6 +150,17 @@ export function TeamSection({ team, isAdmin }: TeamSectionProps) {
         <p className="text-[var(--text-muted)] text-xs">
           Roles are managed in Clerk. Invite or promote teammates from your Clerk organization settings.
         </p>
+        {isAdmin && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => openOrganizationProfile()}
+          >
+            Manage roles in Clerk
+          </Button>
+        )}
       </div>
 
       {isAdmin && (

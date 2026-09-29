@@ -50,6 +50,23 @@ describe('denyUnlessCanAct', () => {
     expect(res).not.toBeNull()
     expect(res!.status).toBe(403)
   })
+
+  it('uses the default message when no override is given', async () => {
+    const res = denyUnlessCanAct(rep, 'm-other')
+    expect(await res!.json()).toEqual({ code: 'NOT_OWNER', error: 'You can only change your own campaigns and leads.' })
+  })
+
+  it('uses a custom message when one is given', async () => {
+    const res = denyUnlessCanAct(rep, 'm-other', 'You can only change your own settings.')
+    expect(res).not.toBeNull()
+    expect(res!.status).toBe(403)
+    expect(await res!.json()).toEqual({ code: 'NOT_OWNER', error: 'You can only change your own settings.' })
+  })
+
+  it('does not apply the custom message when the caller can act', () => {
+    expect(denyUnlessCanAct(rep, 'm-rep', 'You can only change your own settings.')).toBeNull()
+    expect(denyUnlessCanAct(admin, 'm-other', 'You can only change your own settings.')).toBeNull()
+  })
 })
 
 describe('denyUnlessAdmin', () => {
