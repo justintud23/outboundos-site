@@ -16,6 +16,24 @@ import { BLOCKING, blockReason, type SfStatus } from '../classify'
 export const SF_FRESH_MS = 24 * 60 * 60 * 1000 // a cached check this recent decides outright
 export const SF_STALE_OK_MS = 7 * 24 * 60 * 60 * 1000 // a cached check this recent still decides when Salesforce is unreachable
 export const SF_HOLD_MS = 10 * 60 * 1000 // minimum wait before retrying a held send
+export const SF_LOOKUP_BACKOFF_MS = 60 * 1000 // after a failed lookup, skip lookups for the org this long
+
+// Per-instance memo of the last failed lookup per org (orgId -> failedAtMs).
+// While an org's Salesforce is failing, every held lead would otherwise pay
+// a full lookup timeout again, and the serial crons would spend their shared
+// budget on that one org. Skipping straight to the stale/hold rule keeps one
+// org's outage from slowing other tenants.
+const lookupFailedAt = new Map<string, number>()
+
+/** Test helper: forget every recorded lookup failure. */
+export function resetLookupFailureMemoForTests(): void {
+  lookupFailedAt.clear()
+}
+
+function inLookupBackoff(organizationId: string, now: Date): boolean {
+  const failedAt = lookupFailedAt.get(organizationId)
+  return failedAt !== undefined && now.getTime() - failedAt < SF_LOOKUP_BACKOFF_MS
+}
 
 export interface ClearResult {
   allowed: Set<string>
@@ -80,10 +98,15 @@ export async function ensureSalesforceClear(organizationId: string, leadIds: str
   }
 
   if (needsLookup.length > 0) {
-    if (isSalesforceActive(conn, now)) {
+    if (isSalesforceActive(conn, now) && !inLookupBackoff(organizationId, now)) {
       const looked = await tryLookup(organizationId, conn, needsLookup)
-      if (looked) await decideAndPersist(needsLookup, looked, now, result)
-      else await holdOrDecideFromStale(needsLookup, now, result)
+      if (looked) {
+        lookupFailedAt.delete(organizationId)
+        await decideAndPersist(needsLookup, looked, now, result)
+      } else {
+        lookupFailedAt.set(organizationId, now.getTime())
+        await holdOrDecideFromStale(needsLookup, now, result)
+      }
     } else {
       await holdOrDecideFromStale(needsLookup, now, result)
     }

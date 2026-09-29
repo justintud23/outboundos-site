@@ -20,7 +20,10 @@ import { getConnection, isSalesforceActive } from './connection'
 import { getSalesforceClient } from './client'
 import { lookupByEmails } from './records'
 import { sendOrgAlert } from '@/features/replies/server/notify'
-import { ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, SF_FRESH_MS, SF_STALE_OK_MS } from './check'
+import {
+  ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, resetLookupFailureMemoForTests,
+  SF_FRESH_MS, SF_STALE_OK_MS, SF_LOOKUP_BACKOFF_MS,
+} from './check'
 
 type Fn = ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
@@ -88,6 +91,7 @@ function leadRow(overrides: LeadOverrides = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetLookupFailureMemoForTests()
   mockIsSalesforceActive.mockReturnValue(true)
   p.lead.update.mockResolvedValue({})
   p.lead.updateMany.mockResolvedValue({ count: 0 })
@@ -594,6 +598,79 @@ describe('ensureSalesforceClear - M3(d): lookup map missing a key', () => {
 })
 
 // sanity: constants used by callers elsewhere are exported with the documented values
+describe('ensureSalesforceClear - per-org lookup failure memo (I2)', () => {
+  const secondsLater = (s: number) => new Date(NOW.getTime() + s * 1000)
+
+  beforeEach(() => {
+    mockGetConnection.mockResolvedValue(baseConn())
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-1', email: 'a@acme.com' })])
+  })
+
+  it('backs off for 60 seconds', () => {
+    expect(SF_LOOKUP_BACKOFF_MS).toBe(60_000)
+  })
+
+  it('two calls within 60s after a failure look up once; the second holds without a lookup', async () => {
+    mockLookupByEmails.mockRejectedValue(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const first = await ensureSalesforceClear('org-1', ['lead-1'], NOW)
+    const second = await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(59))
+
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(1)
+    expect(first.held.has('lead-1')).toBe(true)
+    expect(second.held.has('lead-1')).toBe(true)
+  })
+
+  it('during the backoff a stale-but-recent stored check still decides', async () => {
+    mockLookupByEmails.mockRejectedValue(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await ensureSalesforceClear('org-1', ['lead-1'], NOW)
+
+    p.lead.findMany.mockResolvedValue([leadRow({ id: 'lead-1', sfCheckStatus: 'CLEAR', sfCheckedAt: daysAgo(3) })])
+    const result = await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(30))
+
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(1)
+    expect(result.allowed.has('lead-1')).toBe(true)
+  })
+
+  it('the memo is per org', async () => {
+    mockLookupByEmails.mockRejectedValue(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await ensureSalesforceClear('org-1', ['lead-1'], NOW)
+    await ensureSalesforceClear('org-2', ['lead-1'], secondsLater(1))
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(2)
+  })
+
+  it('after 60s the lookup runs again', async () => {
+    mockLookupByEmails.mockRejectedValue(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await ensureSalesforceClear('org-1', ['lead-1'], NOW)
+    await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(60))
+
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(2)
+  })
+
+  it('a successful lookup clears the memo', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockLookupByEmails
+      .mockRejectedValueOnce(new Error('timeout')) // t=0 fails, memo set
+      .mockResolvedValueOnce(new Map([['a@acme.com', { status: 'CLEAR', detail: null, person: null }]])) // t=61 succeeds
+      .mockRejectedValueOnce(new Error('timeout')) // t=62 fails again
+      .mockRejectedValue(new Error('should not be called'))
+
+    await ensureSalesforceClear('org-1', ['lead-1'], NOW)
+    await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(61))
+    // Success cleared the memo, so a call right after runs a lookup again.
+    await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(62))
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(3)
+    // ...and that failure sets the memo afresh.
+    await ensureSalesforceClear('org-1', ['lead-1'], secondsLater(63))
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(3)
+  })
+})
+
 describe('constants', () => {
   it('SF_FRESH_MS is 24 hours and SF_STALE_OK_MS is 7 days', () => {
     expect(SF_FRESH_MS).toBe(24 * 60 * 60 * 1000)
