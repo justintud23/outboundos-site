@@ -156,8 +156,11 @@ describe('enrollLead — ownership assignment', () => {
 
   it('guards the update so an already-owned lead is left unchanged', async () => {
     setup('m-rep')
+    mockLeadFind.mockResolvedValue({ ...baseLead, ownerId: 'm-other' })
     await enrollLead(BASE_INPUT)
-    // The update is scoped to ownerId: null, so it's a no-op for a lead that already has an owner.
+    // The DB guard (where: ownerId: null) is what actually protects an
+    // already-owned lead from being reassigned; assert the code relies on it
+    // rather than on any in-memory check of the lead's current owner.
     expect(txLeadUpdateMany).toHaveBeenCalledWith({
       where: { id: 'lead-1', ownerId: null },
       data: { ownerId: 'm-rep' },
