@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { formatEnumLabel } from '@/lib/format'
+import { OwnerBadge } from '@/features/team/components/owner-badge'
 import type { CampaignSummaryDTO, CampaignStatus } from '@/features/campaigns/server/get-campaigns'
 
 const STATUS_VARIANT: Record<CampaignStatus, 'default' | 'success' | 'warning' | 'danger' | 'muted'> = {
@@ -59,6 +60,8 @@ export function CampaignCard({ campaign }: { campaign: CampaignSummaryDTO }) {
       <div className="flex items-center justify-between">
         <span className="text-[var(--text-muted)] text-xs">
           Created {campaign.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          <span className="mx-1.5">&middot;</span>
+          <OwnerBadge name={campaign.ownerName} />
         </span>
         <Link
           href={`/campaigns/${campaign.id}`}

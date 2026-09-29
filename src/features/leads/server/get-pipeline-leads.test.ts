@@ -84,4 +84,26 @@ describe('getPipelineLeads', () => {
     expect(mockMessageGroupBy).not.toHaveBeenCalled()
     expect(mockReplyGroupBy).not.toHaveBeenCalled()
   })
+
+  describe('owner filter', () => {
+    it('filters by ownerId when provided', async () => {
+      mockLeadFindMany.mockResolvedValue([])
+
+      await getPipelineLeads({ organizationId: ORG, ownerId: 'm1' })
+
+      expect(mockLeadFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: ORG, ownerId: 'm1' } }),
+      )
+    })
+
+    it('leaves the where clause unchanged when ownerId is absent', async () => {
+      mockLeadFindMany.mockResolvedValue([])
+
+      await getPipelineLeads({ organizationId: ORG })
+
+      expect(mockLeadFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: ORG } }),
+      )
+    })
+  })
 })

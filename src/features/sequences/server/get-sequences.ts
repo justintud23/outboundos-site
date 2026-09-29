@@ -4,15 +4,18 @@ import type { SequenceDTO } from '../types'
 interface GetSequencesInput {
   organizationId: string
   campaignId?: string
+  ownerId?: string
 }
 
 export async function getSequences({
   organizationId,
   campaignId,
+  ownerId,
 }: GetSequencesInput): Promise<{ sequences: SequenceDTO[]; total: number }> {
   const where = {
     organizationId,
     ...(campaignId && { campaignId }),
+    ...(ownerId && { campaign: { ownerId } }),
   }
 
   const rows = await prisma.sequence.findMany({

@@ -1,24 +1,27 @@
-import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { SettingsClient } from './settings-client'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { getMailboxes } from '@/features/mailboxes/server/get-mailboxes'
 import { getSendingSettings } from '@/features/settings/server/sending-settings'
 import { getBusinessProfile } from '@/features/business-profile/server/profile'
+import { listMembers } from '@/features/team/server/assign-owner'
+import { getTeam } from '@/features/team/server/team-settings'
 
 export default async function SettingsPage() {
-  const { orgId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId) {
+  if (!ctx) {
     redirect('/dashboard')
   }
 
-  const org = await resolveOrganization(orgId)
-  const [mailboxes, sendingSettings, businessProfile] = await Promise.all([
-    getMailboxes(org.id),
-    getSendingSettings(org.id),
-    getBusinessProfile(org.id),
+  const { org, member, isAdmin } = ctx
+  const [mailboxes, sendingSettings, businessProfile, members, team] = await Promise.all([
+    isAdmin ? getMailboxes(org.id) : Promise.resolve([]),
+    isAdmin ? getSendingSettings(org.id) : Promise.resolve(null),
+    isAdmin ? getBusinessProfile(org.id) : Promise.resolve(null),
+    isAdmin ? listMembers(org.id) : Promise.resolve([]),
+    getTeam(org.id),
   ])
 
   return (
@@ -29,6 +32,15 @@ export default async function SettingsPage() {
           initialMailboxes={mailboxes}
           sendingSettings={sendingSettings}
           businessProfile={businessProfile}
+          isAdmin={isAdmin}
+          members={members}
+          team={team}
+          currentMember={{
+            id: member.id,
+            escalationEmail: member.escalationEmail,
+            senderFirstName: member.senderFirstName,
+            senderLastName: member.senderLastName,
+          }}
         />
       </div>
     </>

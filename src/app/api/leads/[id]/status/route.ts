@@ -1,7 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { updateLeadStatus } from '@/features/leads/server/update-lead-status'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getLeadOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { LeadNotFoundError } from '@/features/leads/types'
 
 const VALID_STATUSES = [
@@ -19,13 +20,16 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId || !userId) {
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id: leadId } = await params
+
+  const denied = denyUnlessCanAct(ctx, await getLeadOwnerId(ctx.org.id, leadId))
+  if (denied) return denied
 
   let body: { status?: string }
   try {
@@ -41,14 +45,12 @@ export async function PATCH(
     )
   }
 
-  const org = await resolveOrganization(orgId)
-
   try {
     const result = await updateLeadStatus({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       leadId,
       newStatus: body.status,
-      actorClerkId: userId,
+      actorClerkId: ctx.member.clerkUserId,
     })
 
     return NextResponse.json(result)

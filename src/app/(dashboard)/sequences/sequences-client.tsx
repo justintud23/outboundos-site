@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { SequenceCard } from '@/features/sequences/components/sequence-card'
 import { CreateSequenceForm } from '@/features/sequences/components/create-sequence-form'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { SequenceDTO } from '@/features/sequences/types'
 import type { StarterSequence } from '@/features/business-profile/starter-sequences'
 
@@ -12,9 +14,10 @@ interface SequencesClientProps {
   blockedPhrases: string[]
   allowedWords: string[]
   starterSequences: StarterSequence[]
+  view: ViewMode
 }
 
-export function SequencesClient({ initialSequences, campaigns, blockedPhrases, allowedWords, starterSequences }: SequencesClientProps) {
+export function SequencesClient({ initialSequences, campaigns, blockedPhrases, allowedWords, starterSequences, view }: SequencesClientProps) {
   const [sequences] = useState(initialSequences)
   const [showCreate, setShowCreate] = useState(false)
 
@@ -29,12 +32,15 @@ export function SequencesClient({ initialSequences, campaigns, blockedPhrases, a
         <p className="text-[var(--text-secondary)] text-sm">
           {sequences.length} sequence{sequences.length !== 1 ? 's' : ''}
         </p>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-[var(--text-inverse)] hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
-        >
-          {showCreate ? 'Cancel' : 'Create Sequence'}
-        </button>
+        <div className="flex items-center gap-3">
+          <ViewToggle view={view} />
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="text-xs px-3 py-1.5 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] text-[var(--text-inverse)] hover:bg-[var(--accent-indigo-hover)] transition-colors font-medium"
+          >
+            {showCreate ? 'Cancel' : 'Create Sequence'}
+          </button>
+        </div>
       </div>
 
       {showCreate && campaigns.length > 0 && (

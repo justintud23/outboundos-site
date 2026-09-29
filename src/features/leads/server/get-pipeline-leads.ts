@@ -3,14 +3,16 @@ import type { PipelineLeadDTO } from '../types'
 
 interface GetPipelineLeadsInput {
   organizationId: string
+  ownerId?: string
 }
 
 export async function getPipelineLeads({
   organizationId,
+  ownerId,
 }: GetPipelineLeadsInput): Promise<PipelineLeadDTO[]> {
   // 1. Fetch all leads for org
   const leads = await prisma.lead.findMany({
-    where: { organizationId },
+    where: { organizationId, ...(ownerId && { ownerId }) },
     select: {
       id: true,
       firstName: true,

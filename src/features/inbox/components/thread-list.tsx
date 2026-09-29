@@ -4,6 +4,9 @@ import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatEnumLabel } from '@/lib/format'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import { OwnerBadge } from '@/features/team/components/owner-badge'
+import type { ViewMode } from '@/features/team/view'
 import type { InboxThreadDTO, InboxFilter } from '../types'
 import type { ReplyClassification } from '@prisma/client'
 
@@ -43,6 +46,7 @@ interface ThreadListProps {
   filter: InboxFilter
   onSelectThread: (leadId: string) => void
   onFilterChange: (filter: InboxFilter) => void
+  view: ViewMode
 }
 
 export function ThreadList({
@@ -51,24 +55,28 @@ export function ThreadList({
   filter,
   onSelectThread,
   onFilterChange,
+  view,
 }: ThreadListProps) {
   return (
     <div className="flex flex-col h-full">
-      <div className="flex gap-1 px-4 py-3 border-b border-[var(--border-default)]">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => onFilterChange(f.key)}
-            className={[
-              'px-3 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors duration-[var(--transition-base)]',
-              filter === f.key
-                ? 'bg-[var(--bg-surface-raised)] text-[var(--text-primary)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
-            ].join(' ')}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-default)]">
+        <div className="flex gap-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => onFilterChange(f.key)}
+              className={[
+                'px-3 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors duration-[var(--transition-base)]',
+                filter === f.key
+                  ? 'bg-[var(--bg-surface-raised)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
+              ].join(' ')}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <ViewToggle view={view} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -117,6 +125,9 @@ export function ThreadList({
                 {thread.leadCompany && (
                   <p className="text-[var(--text-muted)] text-xs truncate mt-0.5">{thread.leadCompany}</p>
                 )}
+                <p className="text-xs truncate mt-0.5 hidden md:block">
+                  <OwnerBadge name={thread.ownerName} />
+                </p>
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <span className="text-[var(--text-muted)] text-xs">

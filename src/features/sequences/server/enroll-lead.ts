@@ -41,6 +41,7 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
     where: { id: sequenceId, organizationId },
     include: {
       steps: { orderBy: { stepNumber: 'asc' }, select: { stepNumber: true, delayDays: true } },
+      campaign: { select: { ownerId: true } },
     },
   })
 
@@ -97,6 +98,15 @@ export async function enrollLead(input: EnrollLeadInput): Promise<SequenceEnroll
     // configured — otherwise the lead would show "Verifying" forever.
     if (isVerificationConfigured() && !isFreshResult(lead, now)) {
       await queueLeadForVerification(tx, leadId)
+    }
+
+    // Rep ownership: an unowned lead inherits the campaign owner on enrollment.
+    // A no-op when the lead already has an owner or the campaign has none.
+    if (sequence.campaign.ownerId) {
+      await tx.lead.updateMany({
+        where: { id: leadId, ownerId: null },
+        data: { ownerId: sequence.campaign.ownerId },
+      })
     }
 
     return created

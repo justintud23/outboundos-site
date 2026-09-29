@@ -10,13 +10,19 @@ export class CampaignNotFoundError extends Error {
   }
 }
 
-export async function createCampaign(input: { organizationId: string; name: string; description?: string | null }) {
+export async function createCampaign(input: {
+  organizationId: string
+  name: string
+  description?: string | null
+  ownerId?: string | null
+}) {
   return prisma.campaign.create({
     data: {
       organizationId: input.organizationId,
       name: input.name.trim(),
       description: input.description?.trim() || null,
       status: 'ACTIVE',
+      ownerId: input.ownerId,
     },
     select: { id: true, name: true },
   })

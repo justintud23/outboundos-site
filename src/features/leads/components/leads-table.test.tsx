@@ -6,7 +6,7 @@ import type { LeadDTO } from '../types'
 const base: LeadDTO = {
   id: 'lead-1', email: 'jane@acmepm.com', firstName: 'Jane', lastName: 'Doe', company: 'Acme PM', title: null,
   source: 'CSV', status: 'NEW', score: null, scoreReason: null, scoredAt: null, createdAt: new Date('2026-09-01'),
-  emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null,
+  emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null, ownerName: null,
 }
 
 describe('LeadsTable — CASL', () => {
@@ -19,5 +19,17 @@ describe('LeadsTable — CASL', () => {
   it('shows no exclusion label for other leads', () => {
     render(<LeadsTable leads={[{ ...base, canadaExclusion: null }]} />)
     expect(screen.queryByText('Excluded: Canada (CASL)')).not.toBeInTheDocument()
+  })
+})
+
+describe('LeadsTable — Owner', () => {
+  it("shows the owner's name in the Owner column", () => {
+    render(<LeadsTable leads={[{ ...base, ownerName: 'Dana Lee' }]} />)
+    expect(screen.getByText('Dana Lee')).toBeInTheDocument()
+  })
+
+  it('shows Unassigned when the lead has no owner', () => {
+    render(<LeadsTable leads={[{ ...base, ownerName: null }]} />)
+    expect(screen.getByText('Unassigned')).toBeInTheDocument()
   })
 })

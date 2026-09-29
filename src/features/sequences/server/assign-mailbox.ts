@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
 import { isDomainUsable } from '@/features/deliverability/readiness'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 
 /**
  * Sticky, least-loaded mailbox assignment: a lead hears from ONE mailbox for
@@ -10,12 +11,21 @@ import { isDomainUsable } from '@/features/deliverability/readiness'
 export async function assignEnrollmentMailbox(organizationId: string, enrollmentId: string): Promise<string | null> {
   // A Microsoft 365 org only sends from (and only monitors) Graph mailboxes.
   const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { msTenantId: true } })
+
+  // The campaign owner's mailboxes only, when they own any; shared otherwise.
+  const enrollment = await prisma.sequenceEnrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { sequence: { select: { campaign: { select: { ownerId: true } } } } },
+  })
+  const ownerFilter = await mailboxOwnerFilter(organizationId, enrollment?.sequence.campaign.ownerId ?? null)
+
   const mailboxes = await prisma.mailbox.findMany({
     where: {
       organizationId,
       isActive: true,
       autoPaused: false,
       ...(org?.msTenantId && { provider: 'MICROSOFT_GRAPH' as const }),
+      ...ownerFilter,
     },
     select: { id: true, email: true, _count: { select: { enrollments: { where: { status: 'ACTIVE' } } } } },
   })

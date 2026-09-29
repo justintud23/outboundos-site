@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Users, FileUp } from 'lucide-react'
 import { formatEnumLabel } from '@/lib/format'
 import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
+import { OwnerBadge } from '@/features/team/components/owner-badge'
 import type { LeadDTO } from '../types'
 
 interface LeadsTableProps {
@@ -71,6 +72,7 @@ export function LeadsTable({
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Status</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Score</th>
             <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Score Reason</th>
+            <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider hidden md:table-cell">Owner</th>
             {showActions && (
               <th className="text-left py-3 px-4 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">Actions</th>
             )}
@@ -110,6 +112,9 @@ export function LeadsTable({
                 <td className="py-3 px-4"><ScoreBadge score={lead.score} /></td>
                 <td className="py-3 px-4 text-[var(--text-muted)] text-xs hidden lg:table-cell max-w-xs truncate">
                   {lead.scoreReason ?? '\u2014'}
+                </td>
+                <td className="py-3 px-4 text-xs hidden md:table-cell">
+                  <OwnerBadge name={lead.ownerName} />
                 </td>
                 {showActions && (
                   <td className="py-3 px-4">

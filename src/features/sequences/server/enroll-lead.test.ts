@@ -83,7 +83,7 @@ describe('enrollLead — email verification queueing', () => {
 
   function setup(leadOverrides: Record<string, unknown>) {
     mockLeadFind.mockResolvedValue({ ...baseLead, ...leadOverrides })
-    mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [{ stepNumber: 1, delayDays: 0 }] })
+    mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [{ stepNumber: 1, delayDays: 0 }], campaign: { ownerId: null } })
     mockEnrollFind.mockResolvedValue(null)
     txLeadUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
     mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
@@ -122,6 +122,53 @@ describe('enrollLead — email verification queueing', () => {
   it('does nothing when verification is not configured', async () => {
     delete process.env.MILLIONVERIFIER_API_KEY
     setup({ emailCheck: 'UNCHECKED', emailCheckResult: null, emailCheckedAt: null })
+    await enrollLead(BASE_INPUT)
+    expect(txLeadUpdateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('enrollLead — ownership assignment', () => {
+  const baseLead = { id: 'lead-1', status: 'NEW', email: 'a@acme.com', phone: null, country: null, customFields: null, organization: { allowCanadianRecipients: false } }
+  let txLeadUpdateMany: ReturnType<typeof vi.fn>
+
+  function setup(campaignOwnerId: string | null) {
+    mockLeadFind.mockResolvedValue(baseLead)
+    mockSeqFind.mockResolvedValue({ id: 'seq-1', steps: [{ stepNumber: 1, delayDays: 0 }], campaign: { ownerId: campaignOwnerId } })
+    mockEnrollFind.mockResolvedValue(null)
+    txLeadUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+    mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
+      fn({
+        sequenceEnrollment: { create: vi.fn().mockResolvedValue({ id: 'enr-1' }) },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+        lead: { updateMany: txLeadUpdateMany },
+      }),
+    )
+  }
+
+  it('assigns the campaign owner to an unowned lead', async () => {
+    setup('m-rep')
+    await enrollLead(BASE_INPUT)
+    expect(txLeadUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'lead-1', ownerId: null },
+      data: { ownerId: 'm-rep' },
+    })
+  })
+
+  it('guards the update so an already-owned lead is left unchanged', async () => {
+    setup('m-rep')
+    mockLeadFind.mockResolvedValue({ ...baseLead, ownerId: 'm-other' })
+    await enrollLead(BASE_INPUT)
+    // The DB guard (where: ownerId: null) is what actually protects an
+    // already-owned lead from being reassigned; assert the code relies on it
+    // rather than on any in-memory check of the lead's current owner.
+    expect(txLeadUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'lead-1', ownerId: null },
+      data: { ownerId: 'm-rep' },
+    })
+  })
+
+  it('does not assign an owner when the campaign is unowned', async () => {
+    setup(null)
     await enrollLead(BASE_INPUT)
     expect(txLeadUpdateMany).not.toHaveBeenCalled()
   })

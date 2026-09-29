@@ -45,6 +45,9 @@ export interface CampaignDetailDTO {
   draftApprovedCount: number
   replyCount: number
   positiveReplyCount: number
+  // Rep ownership
+  ownerId: string | null
+  ownerName: string | null
   // Display lists (limited)
   drafts: CampaignDetailDraftDTO[]
   replies: CampaignDetailReplyDTO[]
@@ -60,6 +63,7 @@ export async function getCampaignDetail({
   // Fetch campaign first — return null immediately if not found or wrong org
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId },
+    include: { owner: { select: { name: true, email: true } } },
   })
 
   if (!campaign) return null
@@ -151,6 +155,8 @@ export async function getCampaignDetail({
     draftApprovedCount: countByStatus.get('APPROVED') ?? 0,
     replyCount,
     positiveReplyCount,
+    ownerId: campaign.ownerId,
+    ownerName: campaign.owner?.name ?? campaign.owner?.email ?? null,
     drafts: drafts.map((d) => ({
       id: d.id,
       subject: d.subject,

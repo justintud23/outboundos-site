@@ -139,6 +139,7 @@ export async function importCsv({
         emailCheck: lead.emailCheck,
         emailCheckResult: lead.emailCheckResult,
         emailCheckedAt: lead.emailCheckedAt,
+        ownerName: null,
       })
     } catch (err) {
       errors.push({

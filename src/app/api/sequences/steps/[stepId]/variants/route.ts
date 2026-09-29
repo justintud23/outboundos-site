@@ -1,6 +1,9 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getStepOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import { createSubjectVariant } from '@/features/sequences/server/manage-subject-variants'
 import { getSubjectVariantStats } from '@/features/sequences/server/get-subject-variant-stats'
 import {
@@ -29,11 +32,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ stepId: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { stepId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getStepOwnerId(ctx.org.id, stepId))
+  if (denied) return denied
 
   let body: { subject?: string }
   try {
@@ -48,7 +53,7 @@ export async function POST(
   }
 
   try {
-    const variant = await createSubjectVariant({ organizationId: org.id, sequenceStepId: stepId, subject })
+    const variant = await createSubjectVariant({ organizationId: ctx.org.id, sequenceStepId: stepId, subject })
     return NextResponse.json(variant, { status: 201 })
   } catch (err) {
     if (err instanceof SubjectVariantStepNotFoundError) {

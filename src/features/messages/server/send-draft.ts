@@ -25,6 +25,7 @@ import { isDomainUsable } from '@/features/deliverability/readiness'
 import { generateMessageId, buildThreadHeaders, buildReplySubject } from '../threading'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 import { verificationGate } from '@/features/verification/gate'
 import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
 import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
@@ -55,8 +56,10 @@ export async function sendDraft({
           emailCheck: true,
           emailCheckResult: true,
           emailCheckedAt: true,
+          ownerId: true,
         },
       },
+      campaign: { select: { ownerId: true } },
     },
   })
 
@@ -199,8 +202,19 @@ export async function sendDraft({
     }
     mailboxes = [pinned]
   } else {
+    // Rep ownership: rotation keys on the draft's campaign owner when it has a
+    // campaign, else the lead owner (matches getDraftOwnerId, the same rule
+    // the send route's authorization check uses).
+    const rotationOwnerId = draft.campaign ? draft.campaign.ownerId : (draft.lead.ownerId ?? null)
+    const ownerFilter = await mailboxOwnerFilter(organizationId, rotationOwnerId)
     mailboxes = await prisma.mailbox.findMany({
-      where: { organizationId, isActive: true, autoPaused: false, ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }) },
+      where: {
+        organizationId,
+        isActive: true,
+        autoPaused: false,
+        ...(graphOnly && { provider: 'MICROSOFT_GRAPH' as const }),
+        ...ownerFilter,
+      },
     })
     if (mailboxes.length === 0) {
       throw new NoActiveMailboxError()

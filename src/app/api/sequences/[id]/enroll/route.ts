@@ -1,7 +1,10 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { enrollLead } from '@/features/sequences/server/enroll-lead'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getSequenceOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
+import { canAct } from '@/features/team/permissions'
+import { prisma } from '@/lib/db/prisma'
 import { LeadInTerminalStateError, LeadExcludedCanadaError } from '@/features/leads/types'
 import { AlreadyEnrolledError, SequenceHasNoStepsError } from '@/features/sequences/types'
 
@@ -9,13 +12,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id: sequenceId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getSequenceOwnerId(ctx.org.id, sequenceId))
+  if (denied) return denied
 
   let body: { leadIds?: string[] }
   try {
@@ -28,15 +33,34 @@ export async function POST(
     return NextResponse.json({ error: 'leadIds array is required' }, { status: 400 })
   }
 
-  const results: { leadId: string; success: boolean; error?: string; enrollmentId?: string }[] = []
+  const results: { leadId: string; success: boolean; error?: string; code?: string; enrollmentId?: string }[] = []
+
+  // Rep ownership: a non-admin may only enroll leads they own or that are
+  // unowned. Unowned leads stay enrollable (they inherit the campaign owner
+  // in enrollLead). Admins bypass this check entirely.
+  let ownerByLeadId = new Map<string, string | null>()
+  if (!ctx.isAdmin) {
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: body.leadIds }, organizationId: ctx.org.id },
+      select: { id: true, ownerId: true },
+    })
+    ownerByLeadId = new Map(leads.map((lead) => [lead.id, lead.ownerId]))
+  }
 
   for (const leadId of body.leadIds) {
+    if (!ctx.isAdmin) {
+      const ownerId = ownerByLeadId.get(leadId) ?? null
+      if (ownerId !== null && !canAct(ctx, ownerId)) {
+        results.push({ leadId, success: false, error: 'You can only enroll your own leads.', code: 'NOT_OWNER' })
+        continue
+      }
+    }
     try {
       const enrollment = await enrollLead({
-        organizationId: org.id,
+        organizationId: ctx.org.id,
         sequenceId,
         leadId,
-        actorClerkId: userId,
+        actorClerkId: ctx.member.clerkUserId,
       })
       results.push({ leadId, success: true, enrollmentId: enrollment.id })
     } catch (err) {

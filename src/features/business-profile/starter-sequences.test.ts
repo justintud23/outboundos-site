@@ -28,5 +28,6 @@ describe('snow & paving starter sequences', () => {
     expect(words(step.body)).toBeGreaterThanOrEqual(50)
     expect(words(step.body)).toBeLessThanOrEqual(125)
     expect(step.body).not.toMatch(/https?:\/\/|www\./)
+    expect(step.body).toMatch(/Thanks,\n\{senderFirstName\|\}$/)
   })
 })

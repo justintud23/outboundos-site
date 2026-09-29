@@ -4,6 +4,7 @@ import { effectiveDailyLimit, warmupDay, isWarmingUp } from './warmup'
 export interface MailboxDTO {
   id: string
   organizationId: string
+  ownerId: string | null
   email: string
   displayName: string
   isActive: boolean
@@ -28,6 +29,7 @@ export function toMailboxDTO(m: Mailbox, now: Date = new Date()): MailboxDTO {
   return {
     id: m.id,
     organizationId: m.organizationId,
+    ownerId: m.ownerId,
     email: m.email,
     displayName: m.displayName,
     isActive: m.isActive,

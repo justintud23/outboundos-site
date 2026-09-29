@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { updateTemplate } from '@/features/templates/server/update-template'
 import { setActiveTemplate } from '@/features/templates/server/set-active-template'
 import { duplicateTemplate } from '@/features/templates/server/duplicate-template'
@@ -10,13 +10,15 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId } = await auth()
-  if (!orgId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
+
   const { id } = await params
-  const org = await resolveOrganization(orgId)
 
   let body: { name?: string; body?: string; notes?: string | null; action?: string }
   try {
@@ -27,17 +29,17 @@ export async function PATCH(
 
   try {
     if (body.action === 'activate') {
-      const template = await setActiveTemplate({ organizationId: org.id, templateId: id })
+      const template = await setActiveTemplate({ organizationId: ctx.org.id, templateId: id })
       return NextResponse.json(template)
     }
 
     if (body.action === 'duplicate') {
-      const template = await duplicateTemplate({ organizationId: org.id, templateId: id })
+      const template = await duplicateTemplate({ organizationId: ctx.org.id, templateId: id })
       return NextResponse.json(template, { status: 201 })
     }
 
     const template = await updateTemplate({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       templateId: id,
       name: body.name,
       body: body.body,

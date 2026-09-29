@@ -8,6 +8,8 @@ vi.mock('@/lib/auth/resolve-organization', () => ({
   resolveOrganization: vi.fn(),
 }))
 
+vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
+
 vi.mock('@/features/settings/server/sending-settings', async () => {
   const actual = await vi.importActual<typeof import('@/features/settings/server/sending-settings')>(
     '@/features/settings/server/sending-settings',
@@ -21,6 +23,7 @@ vi.mock('@/features/settings/server/sending-settings', async () => {
 
 import { auth } from '@clerk/nextjs/server'
 import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { getSendingSettings, updateSendingSettings, SettingsValidationError } from '@/features/settings/server/sending-settings'
 import { GET, PATCH } from './route'
 
@@ -30,6 +33,8 @@ const mockGetSendingSettings = getSendingSettings as unknown as ReturnType<typeo
 const mockUpdateSendingSettings = updateSendingSettings as unknown as ReturnType<typeof vi.fn>
 
 const org = { id: 'internal-org-id', clerkId: 'clerk-org-id' }
+const rep = { org, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
+const admin = { org, member: { id: 'm-admin', clerkUserId: 'user_admin' }, isAdmin: true }
 
 const dto = {
   timezone: 'America/New_York',
@@ -55,6 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
   mockResolveOrganization.mockResolvedValue(org)
+  vi.mocked(resolveMember).mockResolvedValue(admin as never)
 })
 
 describe('GET /api/settings/sending', () => {
@@ -79,11 +85,21 @@ describe('GET /api/settings/sending', () => {
 
 describe('PATCH /api/settings/sending', () => {
   it('returns 403 when there is no active organization', async () => {
-    mockAuth.mockResolvedValue({ orgId: null })
+    vi.mocked(resolveMember).mockResolvedValue(null)
 
     const res = await PATCH(patchRequest({ sendingPaused: true }))
 
     expect(res.status).toBe(403)
+    expect(mockUpdateSendingSettings).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 ADMIN_ONLY for a non-admin member', async () => {
+    vi.mocked(resolveMember).mockResolvedValue(rep as never)
+
+    const res = await PATCH(patchRequest({ sendingPaused: true }))
+
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('ADMIN_ONLY')
     expect(mockUpdateSendingSettings).not.toHaveBeenCalled()
   })
 
@@ -103,7 +119,7 @@ describe('PATCH /api/settings/sending', () => {
     expect(await res.json()).toEqual({ error: 'Unknown timezone' })
   })
 
-  it('returns 200 with the updated DTO on a valid PATCH', async () => {
+  it('returns 200 with the updated DTO on a valid PATCH by an admin', async () => {
     mockUpdateSendingSettings.mockResolvedValue({ ...dto, sendingPaused: true, pausedReason: 'Paused manually from Settings.' })
 
     const res = await PATCH(patchRequest({ sendingPaused: true }))

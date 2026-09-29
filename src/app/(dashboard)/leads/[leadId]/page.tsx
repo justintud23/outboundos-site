@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server'
 import { redirect, notFound } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { LeadCommandCenter } from './lead-client'
@@ -7,7 +6,8 @@ import { getLeadTimeline } from '@/features/leads/server/get-lead-timeline'
 import { getThreadDetail } from '@/features/inbox/server/get-thread-detail'
 import { getLeadSequence } from '@/features/leads/server/get-lead-sequence'
 import { getNextActions } from '@/features/actions/server/get-next-actions'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { listMembers } from '@/features/team/server/assign-owner'
 import { LeadNotFoundError } from '@/features/leads/types'
 
 export default async function LeadDetailPage({
@@ -15,13 +15,13 @@ export default async function LeadDetailPage({
 }: {
   params: Promise<{ leadId: string }>
 }) {
-  const { orgId } = await auth()
-  if (!orgId) {
+  const ctx = await resolveMember()
+  if (!ctx) {
     redirect('/dashboard')
   }
 
   const { leadId } = await params
-  const org = await resolveOrganization(orgId)
+  const { org, isAdmin } = ctx
 
   let lead
   try {
@@ -33,11 +33,12 @@ export default async function LeadDetailPage({
     throw error
   }
 
-  const [timeline, threadDetail, sequence, actions] = await Promise.all([
+  const [timeline, threadDetail, sequence, actions, members] = await Promise.all([
     getLeadTimeline({ organizationId: org.id, leadId }),
     getThreadDetail({ organizationId: org.id, leadId }),
     getLeadSequence({ organizationId: org.id, leadId }),
     getNextActions({ organizationId: org.id, leadId, limit: 5 }),
+    isAdmin ? listMembers(org.id) : Promise.resolve([]),
   ])
 
   const name =
@@ -53,6 +54,8 @@ export default async function LeadDetailPage({
           messages={threadDetail.messages}
           sequence={sequence}
           actions={actions}
+          isAdmin={isAdmin}
+          members={members}
         />
       </div>
     </>

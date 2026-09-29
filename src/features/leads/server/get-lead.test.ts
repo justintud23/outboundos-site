@@ -36,6 +36,8 @@ const baseLead = {
   customFields: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2025-01-05'),
+  ownerId: null,
+  owner: null,
 }
 
 beforeEach(() => {
@@ -93,5 +95,31 @@ describe('getLead', () => {
     await expect(
       getLead({ organizationId: 'other-org', leadId: LEAD_ID }),
     ).rejects.toThrow(LeadNotFoundError)
+  })
+
+  it('returns null ownerId/ownerName when the lead is unowned', async () => {
+    mockLeadFindFirst.mockResolvedValue(baseLead)
+    mockOutboundFindFirst.mockResolvedValue(null)
+    mockInboundFindFirst.mockResolvedValue(null)
+
+    const result = await getLead({ organizationId: ORG_ID, leadId: LEAD_ID })
+
+    expect(result.ownerId).toBeNull()
+    expect(result.ownerName).toBeNull()
+  })
+
+  it('returns ownerName from the owner relation, falling back to email', async () => {
+    mockLeadFindFirst.mockResolvedValue({
+      ...baseLead,
+      ownerId: 'm-1',
+      owner: { name: null, email: 'owner@x.com' },
+    })
+    mockOutboundFindFirst.mockResolvedValue(null)
+    mockInboundFindFirst.mockResolvedValue(null)
+
+    const result = await getLead({ organizationId: ORG_ID, leadId: LEAD_ID })
+
+    expect(result.ownerId).toBe('m-1')
+    expect(result.ownerName).toBe('owner@x.com')
   })
 })

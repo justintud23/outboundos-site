@@ -5,7 +5,7 @@ vi.mock('@/lib/db/prisma', () => ({
     organization: { findUnique: vi.fn() },
     campaign: { findFirst: vi.fn() },
     sequence: { findFirst: vi.fn() },
-    mailbox: { findFirst: vi.fn() },
+    mailbox: { findFirst: vi.fn(), count: vi.fn() },
     lead: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
     draft: { create: vi.fn(), update: vi.fn() },
@@ -39,6 +39,9 @@ vi.mock('@/features/mailboxes/server/mailbox-slots', () => ({
 const { getLeadContext } = vi.hoisted(() => ({ getLeadContext: vi.fn() }))
 vi.mock('@/features/business-profile/server/lead-context', () => ({ getLeadContext }))
 
+const { getCampaignSender } = vi.hoisted(() => ({ getCampaignSender: vi.fn() }))
+vi.mock('@/features/team/server/campaign-sender', () => ({ getCampaignSender }))
+
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { getAIProvider } from '@/lib/ai'
@@ -51,7 +54,7 @@ const mockPrisma = prisma as unknown as {
   organization: { findUnique: Fn }
   campaign: { findFirst: Fn }
   sequence: { findFirst: Fn }
-  mailbox: { findFirst: Fn }
+  mailbox: { findFirst: Fn; count: Fn }
   lead: { findFirst: Fn }
   auditLog: { create: Fn }
   draft: { create: Fn; update: Fn }
@@ -86,7 +89,7 @@ const fakeOrg = {
   guardrailAllowedWords: [] as string[],
 }
 
-const fakeCampaign = { id: 'camp-1', organizationId: 'org-1' }
+const fakeCampaign = { id: 'camp-1', organizationId: 'org-1', ownerId: null as string | null }
 
 const fakeStep = {
   id: 'step-1',
@@ -117,6 +120,7 @@ const fakeMailbox = {
   warmupEnabled: false,
   warmupStartedAt: new Date(),
   rampPreset: 'CONSERVATIVE',
+  ownerId: null as string | null,
 }
 
 beforeEach(() => {
@@ -132,6 +136,7 @@ beforeEach(() => {
   mockPrisma.campaign.findFirst.mockResolvedValue(fakeCampaign)
   mockPrisma.sequence.findFirst.mockResolvedValue(fakeSequence)
   mockPrisma.mailbox.findFirst.mockResolvedValue({ ...fakeMailbox })
+  mockPrisma.mailbox.count.mockResolvedValue(0)
   mockPrisma.lead.findFirst.mockResolvedValue(null)
   mockPrisma.auditLog.create.mockResolvedValue({})
 
@@ -143,6 +148,7 @@ beforeEach(() => {
   mockReleaseMailboxSlot.mockResolvedValue(undefined)
 
   getLeadContext.mockResolvedValue({ profile: null, facts: NO_PROFILE_FACTS, distanceMiles: null })
+  getCampaignSender.mockResolvedValue({ senderFirstName: null, senderName: null })
 })
 
 describe('sendPlacementTest — seed validation', () => {
@@ -253,6 +259,39 @@ describe('sendPlacementTest — mailbox gates', () => {
     const err = await sendPlacementTest(INPUT).catch((e: unknown) => e)
     expect((err as PlacementTestError).code).toBe('DOMAIN_NOT_HEALTHY')
     expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe('sendPlacementTest — rep ownership (mailboxOwnerFilter)', () => {
+  it('MAILBOX_UNAVAILABLE when the campaign is owned by a rep and the mailbox is someone else\'s', async () => {
+    mockPrisma.campaign.findFirst.mockResolvedValue({ ...fakeCampaign, ownerId: 'm-rep' })
+    mockPrisma.mailbox.count.mockResolvedValue(1) // m-rep owns at least one mailbox
+    mockPrisma.mailbox.findFirst.mockResolvedValue({ ...fakeMailbox, ownerId: 'm-other' })
+    const err = await sendPlacementTest(INPUT).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PlacementTestError)
+    expect((err as PlacementTestError).code).toBe('MAILBOX_UNAVAILABLE')
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('allows the campaign owner\'s own mailbox', async () => {
+    mockPrisma.campaign.findFirst.mockResolvedValue({ ...fakeCampaign, ownerId: 'm-rep' })
+    mockPrisma.mailbox.count.mockResolvedValue(1)
+    mockPrisma.mailbox.findFirst.mockResolvedValue({ ...fakeMailbox, ownerId: 'm-rep' })
+    await expect(sendPlacementTest(INPUT)).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('a rep-owned campaign whose owner has no mailboxes: falls back to a shared (ownerId: null) mailbox', async () => {
+    mockPrisma.campaign.findFirst.mockResolvedValue({ ...fakeCampaign, ownerId: 'm-rep' })
+    mockPrisma.mailbox.count.mockResolvedValue(0) // m-rep owns no mailboxes
+    mockPrisma.mailbox.findFirst.mockResolvedValue({ ...fakeMailbox, ownerId: null })
+    await expect(sendPlacementTest(INPUT)).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('an unowned campaign only accepts a shared mailbox', async () => {
+    mockPrisma.campaign.findFirst.mockResolvedValue({ ...fakeCampaign, ownerId: null })
+    mockPrisma.mailbox.findFirst.mockResolvedValue({ ...fakeMailbox, ownerId: 'm-rep' })
+    const err = await sendPlacementTest(INPUT).catch((e: unknown) => e)
+    expect((err as PlacementTestError).code).toBe('MAILBOX_UNAVAILABLE')
   })
 })
 
@@ -386,6 +425,16 @@ describe('sendPlacementTest — happy path', () => {
     expect(mockPrisma.draft.update).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
     expect(mockPrisma.outboundMessage.update).not.toHaveBeenCalled()
+  })
+
+  it('renders {senderFirstName} in the sent body from the campaign owner', async () => {
+    getCampaignSender.mockResolvedValue({ senderFirstName: 'Mike', senderName: 'Mike Rossi' })
+    mockPrisma.sequence.findFirst.mockResolvedValue({
+      ...fakeSequence,
+      steps: [{ ...fakeStep, body: 'Hello {firstName|there}\n\nThanks,\n{senderFirstName|}' }],
+    })
+    await sendPlacementTest(INPUT)
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ body: 'Hello Jane\n\nThanks,\nMike' }))
   })
 })
 

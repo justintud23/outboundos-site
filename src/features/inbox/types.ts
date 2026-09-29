@@ -14,6 +14,7 @@ export interface InboxThreadDTO {
   replyCount: number
   latestClassification: ReplyClassification | null
   latestPreview: string
+  ownerName: string | null
 }
 
 export type InboxFilter = 'all' | 'unread' | 'interested' | 'unsubscribed' | 'recent'

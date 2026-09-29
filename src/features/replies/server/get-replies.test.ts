@@ -88,4 +88,34 @@ describe('getReplies', () => {
 
     expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 50 }))
   })
+
+  describe('owner filter', () => {
+    it('filters by lead.ownerId when provided', async () => {
+      mockFindMany.mockResolvedValue([])
+      mockCount.mockResolvedValue(0)
+
+      await getReplies({ organizationId: 'org-1', ownerId: 'm1' })
+
+      expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { organizationId: 'org-1', lead: { ownerId: 'm1' } },
+      }))
+      expect(mockCount).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', lead: { ownerId: 'm1' } },
+      })
+    })
+
+    it('leaves the where clause unchanged when ownerId is absent', async () => {
+      mockFindMany.mockResolvedValue([])
+      mockCount.mockResolvedValue(0)
+
+      await getReplies({ organizationId: 'org-1' })
+
+      expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { organizationId: 'org-1' },
+      }))
+      expect(mockCount).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+      })
+    })
+  })
 })

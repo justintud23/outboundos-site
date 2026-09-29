@@ -148,4 +148,40 @@ describe('getDrafts', () => {
 
     expect(result.drafts[0]?.guardrailFlags).toBeNull()
   })
+
+  describe('owner filter', () => {
+    const expectedWhere = {
+      organizationId: 'org-1',
+      status: { in: ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'] },
+      OR: [{ campaign: { ownerId: 'm1' } }, { campaignId: null, lead: { ownerId: 'm1' } }],
+    }
+
+    it('filters by campaign/lead ownerId when provided', async () => {
+      mockPrisma.draft.findMany.mockResolvedValue([])
+      mockPrisma.draft.count.mockResolvedValue(0)
+
+      await getDrafts({ organizationId: 'org-1', ownerId: 'm1' })
+
+      expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expectedWhere }),
+      )
+      expect(mockPrisma.draft.count).toHaveBeenCalledWith({ where: expectedWhere })
+    })
+
+    it('leaves the where clause unchanged when ownerId is absent', async () => {
+      mockPrisma.draft.findMany.mockResolvedValue([])
+      mockPrisma.draft.count.mockResolvedValue(0)
+
+      await getDrafts({ organizationId: 'org-1' })
+
+      expect(mockPrisma.draft.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { organizationId: 'org-1', status: { in: ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'] } },
+        }),
+      )
+      expect(mockPrisma.draft.count).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', status: { in: ['PENDING_REVIEW', 'APPROVED', 'BLOCKED'] } },
+      })
+    })
+  })
 })

@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
@@ -10,7 +9,10 @@ import { getCampaignContentStatus } from '@/features/content-check/server/conten
 import { CampaignContentPanel } from '@/features/content-check/components/campaign-content-panel'
 import { getPlacementTestOptions } from '@/features/placement-test/server/get-placement-test-options'
 import { PlacementTestCard } from '@/features/placement-test/components/placement-test-card'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { OwnerSelect } from '@/features/team/components/owner-select'
+import { OwnerBadge } from '@/features/team/components/owner-badge'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { listMembers } from '@/features/team/server/assign-owner'
 import { formatEnumLabel } from '@/lib/format'
 import type { CampaignStatus, DraftStatus, ReplyClassification } from '@prisma/client'
 import type { CampaignDetailDraftDTO, CampaignDetailReplyDTO } from '@/features/campaigns/server/get-campaign-detail'
@@ -160,19 +162,21 @@ function RepliesSection({ replies, replyCount }: { replies: CampaignDetailReplyD
 }
 
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { orgId } = await auth()
-  if (!orgId) redirect('/dashboard')
+  const ctx = await resolveMember()
+  if (!ctx) redirect('/dashboard')
 
   const { id: campaignId } = await params
-  const org = await resolveOrganization(orgId)
+  const { org, isAdmin } = ctx
   const campaign = await getCampaignDetail({ organizationId: org.id, campaignId })
   if (!campaign) notFound()
   const contentStatus = await getCampaignContentStatus(org.id, campaign.id)
   const placementTestOptions = await getPlacementTestOptions({
     organizationId: org.id,
     campaignId: campaign.id,
+    campaignOwnerId: campaign.ownerId,
     hasMsTenant: !!org.msTenantId,
   })
+  const members = isAdmin ? await listMembers(org.id) : []
 
   const positiveRate = campaign.replyCount > 0 ? `${((campaign.positiveReplyCount / campaign.replyCount) * 100).toFixed(0)}% positive` : null
 
@@ -191,6 +195,18 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               {campaign.description && <p className="text-[var(--text-secondary)] text-sm mt-1">{campaign.description}</p>}
               <p className="text-[var(--text-muted)] text-xs mt-1">Created {campaign.createdAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
             </div>
+            {isAdmin ? (
+              <div className="w-56 shrink-0">
+                <OwnerSelect
+                  endpoint={`/api/campaigns/${campaign.id}/owner`}
+                  members={members}
+                  value={campaign.ownerId}
+                  note="Existing sequences keep sending from their current mailbox."
+                />
+              </div>
+            ) : (
+              <OwnerBadge name={campaign.ownerName} />
+            )}
           </div>
         </div>
 

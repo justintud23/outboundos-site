@@ -1,6 +1,7 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getVariantOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 import {
   updateSubjectVariant,
   archiveSubjectVariant,
@@ -13,11 +14,13 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ variantId: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { variantId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getVariantOwnerId(ctx.org.id, variantId))
+  if (denied) return denied
 
   let body: { subject?: string }
   try {
@@ -32,7 +35,7 @@ export async function PATCH(
   }
 
   try {
-    const variant = await updateSubjectVariant({ organizationId: org.id, variantId, subject })
+    const variant = await updateSubjectVariant({ organizationId: ctx.org.id, variantId, subject })
     return NextResponse.json(variant)
   } catch (err) {
     if (err instanceof SubjectVariantNotFoundError) {
@@ -50,14 +53,16 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ variantId: string }> },
 ) {
-  const { orgId, userId } = await auth()
-  if (!orgId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { variantId } = await params
-  const org = await resolveOrganization(orgId)
+
+  const denied = denyUnlessCanAct(ctx, await getVariantOwnerId(ctx.org.id, variantId))
+  if (denied) return denied
 
   try {
-    await archiveSubjectVariant({ organizationId: org.id, variantId })
+    await archiveSubjectVariant({ organizationId: ctx.org.id, variantId })
     return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof SubjectVariantNotFoundError) {

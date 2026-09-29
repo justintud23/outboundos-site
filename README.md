@@ -330,6 +330,50 @@ Organizations without a business profile use the original generic AI scoring (ba
 
 ---
 
+## Team & rep ownership
+
+**Roles & Visibility**
+
+Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members. Connecting Microsoft 365 (Settings → Connect Microsoft 365) is admin-only.
+
+All team members can view every campaign, lead, sequence, and reply, but reps can only change work they own. Unassigned items and admin-only settings are restricted to admins.
+
+**Ownership Model**
+
+- **Campaigns** are owned by whoever creates them. Reassigning a campaign (Campaign page, admin only) doesn't move sequences already in progress — they keep their original mailbox.
+- **Leads** are automatically owned by their campaign owner when first enrolled (never overwriting an existing owner). Admins can reassign leads (Lead page).
+- **Mailboxes** are assigned by an admin via the **Owner** dropdown in Settings (mailbox list). Unassigned mailboxes are shared across the team.
+
+Admins see a banner until every campaign and mailbox has an owner (dismissible).
+
+**Sending as a Rep**
+
+When a rep owns a campaign:
+- Emails send from that rep's own mailboxes. If the rep owns none, emails use shared (unassigned) mailboxes.
+- If the rep's mailboxes are all paused or on failing domains, the email waits in queue — never falls back to shared or another rep's mailbox.
+- Manual send (Drafts page) applies the same rules, keyed on the draft's campaign owner (or the lead owner when the draft has no campaign).
+
+**Sender Fields & Templates**
+
+Merge fields `{senderFirstName}` and `{senderName}` (first + last, trimmed) pull from the campaign owner's sender name (Settings → My settings). Custom fields with these names always win.
+
+Starter templates automatically sign off with `Thanks,\n{senderFirstName|}` on each step.
+
+**Reply Alerts**
+
+Reply emails are sent to:
+1. The lead owner's escalation email (Settings → My settings; defaults to their login email)
+2. Falls back to the mailbox owner's escalation email
+3. Falls back to the organization's escalation email
+
+Additionally, if **Copy admin on reps' replies** is on (Settings → Team, on by default), the organization escalation email is CC'd. System alerts (domain health, verification, scheduler) always go to the organization escalation email only.
+
+**Views & Preferences**
+
+Use the **Mine / Team toggle** on Leads, Pipeline, Campaigns, Sequences, Drafts, Inbox, Replies, and Dashboard to switch between your work and the full team view. Your last choice is remembered. Reps default to Mine; admins default to Team.
+
+---
+
 ## Deliverability
 
 The **Deliverability** page (available only when Microsoft 365 is connected) monitors domain health, enforces sending ramps, and protects your reputation through automated checks and alerts.

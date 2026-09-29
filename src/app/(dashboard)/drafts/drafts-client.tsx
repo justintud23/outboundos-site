@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react'
 import { DraftsTable } from '@/features/drafts/components/drafts-table'
 import { DraftReviewDrawer } from '@/features/drafts/components/draft-review-drawer'
+import { ViewToggle } from '@/features/team/components/view-toggle'
+import type { ViewMode } from '@/features/team/view'
 import type { DraftWithLeadDTO, DraftDTO } from '@/features/drafts/types'
 
 type StatusFilter = 'all' | 'pending' | 'approved'
@@ -10,9 +12,10 @@ type StatusFilter = 'all' | 'pending' | 'approved'
 interface DraftsClientProps {
   initialDrafts: DraftWithLeadDTO[]
   initialTotal: number
+  view: ViewMode
 }
 
-export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps) {
+export function DraftsClient({ initialDrafts, initialTotal, view }: DraftsClientProps) {
   const [drafts, setDrafts] = useState<DraftWithLeadDTO[]>(initialDrafts)
   const [total, setTotal] = useState(initialTotal)
   const [reviewingDraft, setReviewingDraft] = useState<DraftWithLeadDTO | null>(null)
@@ -119,6 +122,7 @@ export function DraftsClient({ initialDrafts, initialTotal }: DraftsClientProps)
               count={approvedCount}
             />
           </div>
+          <ViewToggle view={view} />
         </div>
 
         {sendError && (

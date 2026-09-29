@@ -114,7 +114,16 @@ describe('createCampaign', () => {
     p.campaign.create.mockResolvedValue({ id: 'c9', name: 'Buffalo HOAs' })
     await createCampaign({ organizationId: 'org-1', name: '  Buffalo HOAs ' })
     expect(p.campaign.create).toHaveBeenCalledWith({
-      data: { organizationId: 'org-1', name: 'Buffalo HOAs', description: null, status: 'ACTIVE' },
+      data: { organizationId: 'org-1', name: 'Buffalo HOAs', description: null, status: 'ACTIVE', ownerId: undefined },
+      select: { id: true, name: true },
+    })
+  })
+
+  it('persists the given ownerId', async () => {
+    p.campaign.create.mockResolvedValue({ id: 'c9', name: 'Buffalo HOAs' })
+    await createCampaign({ organizationId: 'org-1', name: 'Buffalo HOAs', ownerId: 'm-rep' })
+    expect(p.campaign.create).toHaveBeenCalledWith({
+      data: { organizationId: 'org-1', name: 'Buffalo HOAs', description: null, status: 'ACTIVE', ownerId: 'm-rep' },
       select: { id: true, name: true },
     })
   })

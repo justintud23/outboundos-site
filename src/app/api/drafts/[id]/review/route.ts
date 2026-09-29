@@ -1,16 +1,17 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { reviewDraft } from '@/features/drafts/server/review-draft'
 import { DraftNotFoundError, DraftNotPendingError } from '@/features/drafts/types'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { getDraftOwnerId } from '@/features/team/server/owners'
+import { denyUnlessCanAct } from '@/lib/auth/permission-response'
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { orgId, userId } = await auth()
+  const ctx = await resolveMember()
 
-  if (!orgId || !userId) {
+  if (!ctx) {
     return NextResponse.json(
       { error: 'No active organization. Select an organization to continue.' },
       { status: 403 },
@@ -18,6 +19,9 @@ export async function PATCH(
   }
 
   const { id: draftId } = await params
+
+  const denied = denyUnlessCanAct(ctx, await getDraftOwnerId(ctx.org.id, draftId))
+  if (denied) return denied
 
   let body: unknown
   try {
@@ -49,13 +53,11 @@ export async function PATCH(
     )
   }
 
-  const org = await resolveOrganization(orgId)
-
   try {
     const draft = await reviewDraft({
-      organizationId: org.id,
+      organizationId: ctx.org.id,
       draftId,
-      clerkUserId: userId,
+      clerkUserId: ctx.member.clerkUserId,
       action,
       ...(typeof subject === 'string' && { subject }),
       ...(typeof emailBody === 'string' && { body: emailBody }),

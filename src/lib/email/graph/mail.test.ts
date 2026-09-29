@@ -91,6 +91,23 @@ describe('Graph mail operations', () => {
     })
   })
 
+  it('sendMailAsText adds ccRecipients when cc is set', async () => {
+    gf.mockResolvedValueOnce(undefined)
+    await sendMailAsText('t', 'alerts@x.com', 'boss@work.com', 'Subj', 'Text', 'admin@work.com')
+    expect(gf).toHaveBeenCalledWith('t', '/users/alerts%40x.com/sendMail', {
+      method: 'POST',
+      body: {
+        message: {
+          subject: 'Subj',
+          body: { contentType: 'Text', content: 'Text' },
+          toRecipients: [{ emailAddress: { address: 'boss@work.com' } }],
+          ccRecipients: [{ emailAddress: { address: 'admin@work.com' } }],
+        },
+        saveToSentItems: false,
+      },
+    })
+  })
+
   it('listTenantUsers keeps users with a mail address, following pages', async () => {
     gf.mockResolvedValueOnce({
       value: [{ id: 'u1', mail: 'mike@x.com', displayName: 'Mike' }, { id: 'u2', mail: null, displayName: 'Room' }],

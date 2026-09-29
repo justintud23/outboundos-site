@@ -13,9 +13,12 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmailCheckBadge } from '@/features/verification/components/email-check-badge'
+import { OwnerSelect } from '@/features/team/components/owner-select'
+import { OwnerBadge } from '@/features/team/components/owner-badge'
 import { formatEnumLabel, relativeTime } from '@/lib/format'
 import type { LeadDetailDTO } from '../types'
 import type { EngagementScore } from '../utils/compute-engagement-score'
+import type { MemberSummary } from '@/features/team/server/assign-owner'
 import type { LeadStatus } from '@prisma/client'
 
 const TIER_CONFIG = {
@@ -39,9 +42,11 @@ interface LeadHeaderProps {
   lead: LeadDetailDTO
   statusOverride?: LeadStatus | null
   engagement?: EngagementScore | null
+  isAdmin: boolean
+  members: MemberSummary[]
 }
 
-export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps) {
+export function LeadHeader({ lead, statusOverride, engagement, isAdmin, members }: LeadHeaderProps) {
   const name =
     [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email
 
@@ -130,7 +135,14 @@ export function LeadHeader({ lead, statusOverride, engagement }: LeadHeaderProps
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-start gap-3 flex-shrink-0">
+          {isAdmin ? (
+            <div className="w-48">
+              <OwnerSelect endpoint={`/api/leads/${lead.id}/owner`} members={members} value={lead.ownerId} />
+            </div>
+          ) : (
+            <OwnerBadge name={lead.ownerName} />
+          )}
           <Button variant="outline" size="sm">
             <MoreHorizontal size={14} />
           </Button>

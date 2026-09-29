@@ -158,6 +158,9 @@ model Organization {
   // CASL: Canadian recipients need consent, so cold email to them is blocked
   // unless the org explicitly allows it (only with documented consent).
   allowCanadianRecipients Boolean @default(false)
+  // Rep ownership: CC the org escalation address on reps' reply alerts.
+  copyAdminOnReplies         Boolean   @default(true)
+  ownershipBannerDismissedAt DateTime?
   // Deliverability 2A: send to catch-all/unknown addresses unless this is on.
   blockRiskyEmails         Boolean   @default(false)
   // Set when a verification outage (no credits / bad key) was alerted; cleared
@@ -195,6 +198,18 @@ model OrgMember {
   role           String       @default("member")
   createdAt      DateTime     @default(now())
 
+  name            String?
+  email           String?
+  // Where this rep's reply alerts go; null → email.
+  escalationEmail String?
+  senderFirstName String?
+  senderLastName  String?
+  lastSeenAt      DateTime?
+
+  ownedCampaigns Campaign[] @relation("CampaignOwner")
+  ownedLeads     Lead[]     @relation("LeadOwner")
+  ownedMailboxes Mailbox[]  @relation("MailboxOwner")
+
   @@unique([clerkUserId, organizationId])
   @@index([organizationId])
   @@map("org_members")
@@ -208,6 +223,8 @@ model Lead {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   importBatchId  String?
   importBatch    ImportBatch? @relation(fields: [importBatchId], references: [id])
+  ownerId        String?
+  owner          OrgMember?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   email       String
   firstName   String?
@@ -252,6 +269,7 @@ model Lead {
   @@index([organizationId, scoredAt])
   @@index([importBatchId])
   @@index([emailCheck])
+  @@index([organizationId, ownerId])
   @@map("leads")
 }
 
@@ -310,6 +328,8 @@ model Campaign {
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   mailboxId      String?
   mailbox        Mailbox?       @relation(fields: [mailboxId], references: [id])
+  ownerId        String?
+  owner          OrgMember?     @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   name        String
   description String?
@@ -335,6 +355,7 @@ model Campaign {
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([ownerId])
   @@map("campaigns")
 }
 
@@ -466,6 +487,8 @@ model Mailbox {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerId        String?
+  owner          OrgMember?   @relation("MailboxOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   email       String
   displayName String
@@ -516,6 +539,7 @@ model Mailbox {
 
   @@unique([organizationId, email])
   @@index([organizationId])
+  @@index([ownerId])
   @@map("mailboxes")
 }
 

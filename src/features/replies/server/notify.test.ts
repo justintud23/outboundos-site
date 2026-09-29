@@ -8,9 +8,11 @@ vi.mock('@/lib/db/prisma', () => ({
   },
 }))
 vi.mock('@/lib/email/graph/mail', () => ({ sendMailAsText: vi.fn() }))
+vi.mock('@/features/team/server/alert-recipients', () => ({ resolveAlertRecipients: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
 import { sendMailAsText } from '@/lib/email/graph/mail'
+import { resolveAlertRecipients } from '@/features/team/server/alert-recipients'
 import { buildReplyNotification, notifyReply, notifyUnmatchedReply, sendOrgAlert } from './notify'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -20,18 +22,21 @@ const p = prisma as unknown as {
   unmatchedReply: { findUnique: Fn; update: Fn }
 }
 const send = sendMailAsText as Fn
+const resolveRecipients = resolveAlertRecipients as Fn
 
 beforeEach(() => {
   vi.resetAllMocks()
   process.env.MS_NOTIFY_MAILBOX = 'alerts@getacmesnow.com'
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.test'
-  p.organization.findUnique.mockResolvedValue({ escalationEmail: 'justin@work.com', msTenantId: 'tenant-1' })
+  p.organization.findUnique.mockResolvedValue({ msTenantId: 'tenant-1' })
+  resolveRecipients.mockResolvedValue({ to: 'justin@work.com', cc: null })
 })
 
 const reply = {
   id: 'r1',
   organizationId: 'org-1',
   leadId: 'lead-1',
+  mailboxId: 'mbx-1',
   notifiedAt: null,
   classification: 'POSITIVE',
   classificationConfidence: 0.92,
@@ -71,21 +76,28 @@ describe('buildReplyNotification', () => {
 })
 
 describe('notifyReply', () => {
-  it('sends from MS_NOTIFY_MAILBOX to escalationEmail and stamps notifiedAt', async () => {
+  it('resolves recipients with the reply leadId and mailboxId, sends and stamps notifiedAt', async () => {
     p.inboundReply.findUnique.mockResolvedValue(reply)
     expect(await notifyReply('r1')).toBe(true)
-    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'justin@work.com', expect.stringContaining('Jane Doe'), expect.stringContaining('https://app.test/leads/lead-1'))
+    expect(resolveRecipients).toHaveBeenCalledWith('org-1', { leadId: 'lead-1', mailboxId: 'mbx-1' })
+    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'justin@work.com', expect.stringContaining('Jane Doe'), expect.stringContaining('https://app.test/leads/lead-1'), null)
     expect(p.inboundReply.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { notifiedAt: expect.any(Date) } })
+  })
+  it('forwards the resolved cc to sendMailAsText', async () => {
+    p.inboundReply.findUnique.mockResolvedValue(reply)
+    resolveRecipients.mockResolvedValue({ to: 'rep@work.com', cc: 'org@work.com' })
+    expect(await notifyReply('r1')).toBe(true)
+    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'rep@work.com', expect.any(String), expect.any(String), 'org@work.com')
   })
   it('skips already-notified replies', async () => {
     p.inboundReply.findUnique.mockResolvedValue({ ...reply, notifiedAt: new Date() })
     expect(await notifyReply('r1')).toBe(false)
     expect(send).not.toHaveBeenCalled()
   })
-  it('returns false without throwing when escalationEmail is missing', async () => {
+  it('returns false without throwing when no recipient can be resolved (Review Focus #3)', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     p.inboundReply.findUnique.mockResolvedValue(reply)
-    p.organization.findUnique.mockResolvedValue({ escalationEmail: null, msTenantId: 'tenant-1' })
+    resolveRecipients.mockResolvedValue({ to: null, cc: null })
     expect(await notifyReply('r1')).toBe(false)
   })
   it('returns false and leaves notifiedAt null when Graph fails', async () => {
@@ -109,20 +121,23 @@ describe('notifyReply', () => {
 })
 
 describe('notifyUnmatchedReply', () => {
-  it('labels the notification UNMATCHED', async () => {
+  it('resolves recipients with only the mailboxId, and labels the notification UNMATCHED', async () => {
     p.unmatchedReply.findUnique.mockResolvedValue({
       id: 'u1', organizationId: 'org-1', notifiedAt: null, fromEmail: 'bob@acmepm.com', subject: 'Re: Snow plan',
-      bodyPreview: 'Jane is out, I handle this.', mailbox: { email: 'mike@getacmesnow.com' },
+      bodyPreview: 'Jane is out, I handle this.', mailboxId: 'mbx-1', mailbox: { email: 'mike@getacmesnow.com' },
     })
     expect(await notifyUnmatchedReply('u1')).toBe(true)
+    expect(resolveRecipients).toHaveBeenCalledWith('org-1', { mailboxId: 'mbx-1' })
     expect(send.mock.calls[0][3]).toBe('[Reply – UNMATCHED] bob@acmepm.com')
   })
 })
 
 describe('sendOrgAlert', () => {
-  it('prefixes the subject', async () => {
+  it('still sends to the org address only, with no cc', async () => {
+    resolveRecipients.mockResolvedValue({ to: 'org@work.com', cc: null })
     expect(await sendOrgAlert('org-1', 'Sending paused', 'why')).toBe(true)
-    expect(send.mock.calls[0][3]).toBe('[OutboundOS] Sending paused')
+    expect(resolveRecipients).toHaveBeenCalledWith('org-1', undefined)
+    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'org@work.com', '[OutboundOS] Sending paused', 'why', null)
   })
   it('returns false when prisma.organization.findUnique rejects', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

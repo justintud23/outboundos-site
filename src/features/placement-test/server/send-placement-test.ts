@@ -5,11 +5,14 @@ import { getAIProvider } from '@/lib/ai'
 import { renderTemplate, insertPersonalization, PERSONALIZATION_TOKEN } from '@/features/sequences/render-template'
 import { getLeadContext } from '@/features/business-profile/server/lead-context'
 import { templateLeadWithFacts } from '@/features/business-profile/lead-facts'
+import { getCampaignSender } from '@/features/team/server/campaign-sender'
+import { withSenderFields } from '@/features/team/sender-fields'
 import { checkGuardrails } from '@/features/drafts/guardrails'
 import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
 import { isDomainUsable } from '@/features/deliverability/readiness'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 import { DomainNotHealthyError } from '@/features/messages/types'
 
 export interface PlacementTestInput {
@@ -146,6 +149,13 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
   if (mailbox.provider !== 'MICROSOFT_GRAPH' || !mailbox.isActive || mailbox.autoPaused) {
     throw new PlacementTestError('MAILBOX_UNAVAILABLE', 'This mailbox is not available to send from right now.')
   }
+  // Rep ownership: a placement test may only use a mailbox in the campaign's
+  // own sending set (mailboxOwnerFilter for the campaign owner) — the same
+  // rule a real send follows. Applies to everyone, admins included.
+  const ownerFilter = await mailboxOwnerFilter(organizationId, campaign.ownerId)
+  if (mailbox.ownerId !== ownerFilter.ownerId) {
+    throw new PlacementTestError('MAILBOX_UNAVAILABLE', 'This campaign can only send from its owner’s mailboxes.')
+  }
   const domainHealth = await getDomainHealthMap(organizationId)
   const domain = domainOf(mailbox.email)
   const domainRow = domainHealth.get(domain) ?? null
@@ -178,7 +188,8 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
 
   // 6. Render, the same way run-sequence-step builds a first-step draft.
   const context = await getLeadContext(organizationId, lead.customFields)
-  const renderLead = templateLeadWithFacts(lead, context.facts)
+  const sender = await getCampaignSender(organizationId, campaignId)
+  const renderLead = withSenderFields(templateLeadWithFacts(lead, context.facts), sender)
   const subject = renderTemplate(step.subject, renderLead)
   let personalization: string | null = null
   let personalizationSkipped = false

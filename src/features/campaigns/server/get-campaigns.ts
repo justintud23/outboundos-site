@@ -13,15 +13,18 @@ export interface CampaignSummaryDTO {
   draftPendingCount: number
   draftApprovedCount: number
   replyCount: number
+  ownerName: string | null
 }
 
 export async function getCampaigns({
   organizationId,
+  ownerId,
 }: {
   organizationId: string
+  ownerId?: string
 }): Promise<{ campaigns: CampaignSummaryDTO[]; total: number }> {
   const rows = await prisma.campaign.findMany({
-    where: { organizationId },
+    where: { organizationId, ...(ownerId && { ownerId }) },
     orderBy: { createdAt: 'desc' },
     include: {
       _count: {
@@ -30,6 +33,7 @@ export async function getCampaigns({
           drafts: true,
         },
       },
+      owner: { select: { name: true, email: true } },
     },
   })
 
@@ -76,6 +80,7 @@ export async function getCampaigns({
     draftPendingCount: pendingMap.get(row.id) ?? 0,
     draftApprovedCount: approvedMap.get(row.id) ?? 0,
     replyCount: replyMap.get(row.id) ?? 0,
+    ownerName: row.owner?.name ?? row.owner?.email ?? null,
   }))
 
   return { campaigns, total: campaigns.length }
