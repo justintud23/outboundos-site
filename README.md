@@ -334,9 +334,9 @@ Organizations without a business profile use the original generic AI scoring (ba
 
 **Roles & Visibility**
 
-Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here); members cannot access Settings or make org-wide changes.
+Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members.
 
-All team members can view every campaign, lead, sequence, and reply, but reps can only change work they own. Unassigned items and all Settings pages (sending, business profile, mailboxes, deliverability, templates, team) are admin-only.
+All team members can view every campaign, lead, sequence, and reply, but reps can only change work they own. Unassigned items and admin-only settings are restricted to admins.
 
 **Ownership Model**
 
@@ -351,7 +351,7 @@ Admins see a banner until every campaign and mailbox has an owner (dismissible).
 When a rep owns a campaign:
 - Emails send from that rep's own mailboxes. If the rep owns none, emails use shared (unassigned) mailboxes.
 - If the rep's mailboxes are all paused or on failing domains, the email waits in queue — never falls back to shared or another rep's mailbox.
-- Manual send (Lead page) applies the same rules, keyed on the lead owner.
+- Manual send (Drafts page) applies the same rules, keyed on the lead owner.
 
 **Sender Fields & Templates**
 
