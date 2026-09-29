@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    lead: { findMany: vi.fn(), update: vi.fn(), createManyAndReturn: vi.fn() },
+    lead: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn(), createManyAndReturn: vi.fn() },
     importBatch: { create: vi.fn(), update: vi.fn() },
     orgMember: { findMany: vi.fn() },
+    salesforceConnection: { update: vi.fn() },
   },
 }))
-vi.mock('./connection', () => ({ getConnection: vi.fn() }))
+vi.mock('./connection', () => ({ getConnection: vi.fn(), isSalesforceActive: vi.fn() }))
+vi.mock('@/features/replies/server/notify', () => ({ sendOrgAlert: vi.fn() }))
 // Keep the real `chunk`/`soqlString` helpers (records.ts uses them for real
 // below) and only replace the network-backed client factory with a fake
 // object satisfying the SfClient interface.
@@ -22,25 +24,41 @@ vi.mock('./client', async (importOriginal) => {
 // raw SOQL rows via the fake client.
 vi.mock('./records', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./records')>()
-  return { ...actual, fetchPeople: vi.fn() }
+  return { ...actual, fetchPeople: vi.fn(), lookupByEmails: vi.fn() }
 })
 
 import { prisma } from '@/lib/db/prisma'
 import { getConnection } from './connection'
 import { getSalesforceClient, type SfClient } from './client'
-import { fetchPeople, type SfPerson } from './records'
+import { fetchPeople, lookupByEmails, type SfPerson } from './records'
+import { ensureSalesforceClear } from './check'
+import type { SfStatus } from '../classify'
 import { normalizeCountry } from '@/features/leads/canada'
 import { MAX_SF_IMPORT, importListView, listListViews, previewListView, PREVIEW_ROWS } from './import-list-view'
 
 type Fn = ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
-  lead: { findMany: Fn; update: Fn; createManyAndReturn: Fn }
+  lead: { findMany: Fn; update: Fn; updateMany: Fn; count: Fn; createManyAndReturn: Fn }
   importBatch: { create: Fn; update: Fn }
   orgMember: { findMany: Fn }
 }
 const mockGetConnection = vi.mocked(getConnection)
 const mockGetSalesforceClient = vi.mocked(getSalesforceClient)
 const mockFetchPeople = vi.mocked(fetchPeople)
+const mockLookupByEmails = vi.mocked(lookupByEmails)
+
+type LookupMap = Awaited<ReturnType<typeof lookupByEmails>>
+/** Every requested email is NOT_FOUND unless named in `overrides`. */
+function lookupReturning(overrides: Record<string, { status: SfStatus; detail?: string | null }> = {}) {
+  return async (_client: SfClient, emails: string[]): Promise<LookupMap> => {
+    const out: LookupMap = new Map()
+    for (const e of emails) {
+      const o = overrides[e.toLowerCase()]
+      out.set(e.toLowerCase(), { status: o?.status ?? 'NOT_FOUND', detail: o?.detail ?? null, person: null })
+    }
+    return out
+  }
+}
 
 const CONN = {
   id: 'conn-1',
@@ -96,6 +114,7 @@ beforeEach(() => {
   p.importBatch.update.mockResolvedValue({})
   p.orgMember.findMany.mockResolvedValue([])
   mockFetchPeople.mockResolvedValue([])
+  mockLookupByEmails.mockImplementation(lookupReturning())
 })
 
 describe('importListView — paging', () => {
@@ -449,6 +468,120 @@ describe('importListView — batch bookkeeping', () => {
       data: { successCount: 1, errorCount: 1, status: 'COMPLETED' },
     })
     expect(result.batchId).toBe('batch-1')
+  })
+})
+
+describe('importListView — cross-object check (C1)', () => {
+  const run = () => importListView({
+    organizationId: 'org-1', memberId: 'm-1', object: 'Lead',
+    listViewId: 'lv-1', listViewLabel: 'My List', useSalesforceOwners: false,
+  })
+
+  it('runs lookupByEmails over every grouped email with the org rules', async () => {
+    const client = fakeClient()
+    mockGetSalesforceClient.mockReturnValue(client)
+    mockFetchPeople.mockResolvedValue([
+      person({ id: 'sf-1', email: 'One@Acme.com' }),
+      person({ id: 'sf-2', email: 'two@acme.com', hasOptedOut: true }),
+    ])
+
+    await run()
+
+    expect(mockLookupByEmails).toHaveBeenCalledTimes(1)
+    const [c, emails, rules] = mockLookupByEmails.mock.calls[0]!
+    expect(c).toBe(client)
+    expect([...emails].sort()).toEqual(['one@acme.com', 'two@acme.com'])
+    expect(rules).toEqual({ customerAccountTypes: ['Customer'], blockOpenOpportunities: true })
+  })
+
+  it('a clear list-view Lead whose email is a CUSTOMER Contact in the lookup is skipped as customer and not created', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: '00Q1', email: 'cust@acme.com', type: 'LEAD' })])
+    mockLookupByEmails.mockImplementation(lookupReturning({ 'cust@acme.com': { status: 'CUSTOMER', detail: 'Acme Inc' } }))
+
+    const result = await run()
+
+    expect(result.skipped.customer).toBe(1)
+    expect(result.imported).toBe(0)
+    expect(p.lead.createManyAndReturn).not.toHaveBeenCalled()
+  })
+
+  it('an existing lead stored CONVERTED stays CONVERTED when the list view has a clear Contact and the lookup says CONVERTED, and is not linked', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([
+      person({ id: '0031', email: 'conv@acme.com', type: 'CONTACT', accountType: 'Prospect', accountId: 'acc-1', accountName: 'Acme' }),
+    ])
+    mockLookupByEmails.mockImplementation(lookupReturning({ 'conv@acme.com': { status: 'CONVERTED', detail: 'Acme' } }))
+    p.lead.findMany.mockResolvedValue([
+      {
+        id: 'lead-conv', email: 'conv@acme.com', salesforceId: null,
+        firstName: null, lastName: null, company: null, title: null, phone: null, country: null, customFields: null,
+      },
+    ])
+
+    const result = await run()
+
+    expect(p.lead.update).toHaveBeenCalledTimes(1)
+    const [{ data }] = p.lead.update.mock.calls[0]
+    expect(data.sfCheckStatus).toBe('CONVERTED')
+    expect(data.sfCheckDetail).toBe('Acme')
+    expect(result.linked).toBe(0)
+    expect(result.skipped.converted).toBe(1)
+  })
+
+  it('a clear lead stores the combined status and a fresh sfCheckedAt', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: '00Q1', email: 'ok@acme.com' })])
+
+    await run()
+
+    const [{ data }] = p.lead.createManyAndReturn.mock.calls[0]
+    expect(data[0]).toMatchObject({ sfCheckStatus: 'CLEAR', sfCheckDetail: null })
+    expect(data[0].sfCheckedAt).toBeInstanceOf(Date)
+  })
+
+  it('integration: the stored fields an import writes make ensureSalesforceClear block a Salesforce-blocked email', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: '00Q1', email: 'cust@acme.com', type: 'LEAD' })])
+    mockLookupByEmails.mockImplementation(lookupReturning({ 'cust@acme.com': { status: 'CUSTOMER', detail: 'Acme Inc' } }))
+    p.lead.findMany.mockResolvedValueOnce([
+      {
+        id: 'lead-cust', email: 'cust@acme.com', salesforceId: null,
+        firstName: null, lastName: null, company: null, title: null, phone: null, country: null, customFields: null,
+      },
+    ])
+
+    await run()
+
+    const [{ data }] = p.lead.update.mock.calls[0]
+    // Feed exactly what the import stored into the real send-time gate.
+    p.lead.findMany.mockResolvedValueOnce([
+      {
+        id: 'lead-cust', organizationId: 'org-1', email: 'cust@acme.com', salesforceId: data.salesforceId ?? null,
+        sfCheckStatus: data.sfCheckStatus, sfCheckDetail: data.sfCheckDetail, sfCheckedAt: data.sfCheckedAt,
+        sfBlockOverride: false, sfHeldSince: null,
+      },
+    ])
+    p.lead.updateMany.mockResolvedValue({ count: 0 })
+    mockLookupByEmails.mockClear()
+
+    const gate = await ensureSalesforceClear('org-1', ['lead-cust'], new Date(data.sfCheckedAt.getTime() + 60_000))
+
+    expect(gate.allowed.has('lead-cust')).toBe(false)
+    expect(gate.blocked.get('lead-cust')).toBe('Salesforce: customer (Acme Inc)')
+    expect(mockLookupByEmails).not.toHaveBeenCalled() // decided from the stored import check
+  })
+
+  it('a lookup failure rejects with the Salesforce error and writes nothing', async () => {
+    mockGetSalesforceClient.mockReturnValue(fakeClient())
+    mockFetchPeople.mockResolvedValue([person({ id: '00Q1', email: 'x@acme.com' })])
+    const err = new Error('Salesforce timed out')
+    mockLookupByEmails.mockRejectedValue(err)
+
+    await expect(run()).rejects.toBe(err)
+    expect(p.lead.update).not.toHaveBeenCalled()
+    expect(p.lead.createManyAndReturn).not.toHaveBeenCalled()
+    expect(p.importBatch.create).not.toHaveBeenCalled()
   })
 })
 

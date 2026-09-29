@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { normalizeCountry } from '@/features/leads/canada'
 import { getSalesforceClient, type SfClient } from './client'
-import { fetchPeople, type SfPerson } from './records'
+import { fetchPeople, lookupByEmails, type SfPerson } from './records'
 import { getConnection } from './connection'
 import { SalesforceAuthError } from './errors'
 import { classifySfRecord, mostRestrictive, BLOCKING, SKIP_KEY, type ClassifyRules, type SfStatus } from '../classify'
@@ -134,7 +134,6 @@ export async function importListView({
 
   const skipped = { customer: 0, openOpportunity: 0, optedOut: 0, converted: 0, noEmail: 0, invalid: 0 }
   const blockedMap = new Map<string, { status: SfStatus; detail: string | null; person: SfPerson }>()
-  const clearMap = new Map<string, SfPerson>()
 
   // Group by lower-cased email first: a list view can return two records
   // (e.g. a Contact and a Lead) for the same person, and if one is blocking
@@ -157,15 +156,29 @@ export async function importListView({
     else groups.set(key, [p])
   }
 
+  // The list view only returns one object type (Leads or Contacts), so a
+  // person who looks clear there can still be blocked elsewhere in Salesforce
+  // (e.g. a Contact on a customer Account). Run the same cross-object lookup
+  // the send-time check uses over every email, and decide each email by the
+  // most restrictive of the list-view records and the lookup. That combined
+  // result is what gets stored, so the stored check is as good as a send-time
+  // one. A lookup failure propagates before anything is written.
+  const lookup = groups.size > 0 ? await lookupByEmails(client, [...groups.keys()], rules) : new Map<string, { status: SfStatus; detail: string | null }>()
+
+  const clearMap = new Map<string, { status: SfStatus; detail: string | null; person: SfPerson }>()
   for (const [email, records] of groups) {
-    const combined = mostRestrictive(records.map((r) => classifySfRecord(r, rules)))
+    const looked = lookup.get(email)
+    const combined = mostRestrictive([
+      ...records.map((r) => classifySfRecord(r, rules)),
+      ...(looked ? [{ status: looked.status, detail: looked.detail }] : []),
+    ])
     const rep = pickRepresentative(records)
     if (BLOCKING.has(combined.status)) {
       const key = SKIP_KEY[combined.status]
       if (key) skipped[key]++
       blockedMap.set(email, { status: combined.status, detail: combined.detail, person: rep })
     } else {
-      clearMap.set(email, rep)
+      clearMap.set(email, { status: combined.status, detail: combined.detail, person: rep })
     }
   }
 
@@ -177,8 +190,7 @@ export async function importListView({
   let linked = 0
   for (const lead of existingLeads) {
     const blocked = blockedMap.get(lead.email)
-    const clearPerson = clearMap.get(lead.email)
-    const entry = blocked ?? (clearPerson ? { status: 'CLEAR' as const, detail: null, person: clearPerson } : null)
+    const entry = blocked ?? clearMap.get(lead.email) ?? null
     if (!entry) continue // every email queried came from blockedMap/clearMap, so this can't happen
     if (!blocked) linked++
 
@@ -233,7 +245,7 @@ export async function importListView({
     return match ?? memberId
   }
 
-  const data = newClearPeople.map(([email, p]) => {
+  const data = newClearPeople.map(([email, { status, detail, person: p }]) => {
     const cf: Record<string, string> = {}
     if (p.state) cf.state = p.state
     if (p.postalCode) cf.zip = p.postalCode
@@ -253,7 +265,8 @@ export async function importListView({
       salesforceId: p.id,
       salesforceType: p.type,
       salesforceAccountId: p.accountId,
-      sfCheckStatus: 'CLEAR' as const,
+      sfCheckStatus: status,
+      sfCheckDetail: detail,
       sfCheckedAt: now,
     }
   })
