@@ -43,6 +43,7 @@ vi.mock('@/features/salesforce/server/check', () => ({
   ensureSalesforceClear: vi.fn(),
   applySalesforceBlock: vi.fn(),
 }))
+vi.mock('@/features/salesforce/server/enqueue', () => ({ enqueueSendLog: vi.fn() }))
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
@@ -50,6 +51,7 @@ import { getEmailProvider } from '@/lib/email'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
 import { presetCapForDay } from '@/features/mailboxes/warmup'
 import { ensureSalesforceClear, applySalesforceBlock } from '@/features/salesforce/server/check'
+import { enqueueSendLog } from '@/features/salesforce/server/enqueue'
 import { sendDraft } from './send-draft'
 import {
   DraftNotApprovedError,
@@ -296,6 +298,7 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
     // No rollback on the happy path.
     expect(mockPrisma.outboundMessage.delete).not.toHaveBeenCalled()
+    expect(enqueueSendLog).toHaveBeenCalledWith('org-1', 'lead-1', result.id)
   })
 
   it('throws DraftNotFoundError when draft does not exist', async () => {
@@ -638,6 +641,7 @@ describe('sendDraft — atomic daily-limit reservation', () => {
     const out = await sendDraft(INPUT)
     expect(out.status).toBe('SENT')
     expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(enqueueSendLog).toHaveBeenCalledWith('org-1', 'lead-1', out.id)
   })
 
   // ─── Warmup ramp ──────────────────────────────────────────────────────────

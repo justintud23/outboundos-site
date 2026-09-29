@@ -24,10 +24,15 @@ vi.mock('@/features/salesforce/server/check', () => ({
   prefetchSalesforceChecks: vi.fn(),
 }))
 
+vi.mock('@/features/salesforce/server/process-jobs', () => ({
+  processSalesforceJobs: vi.fn(),
+}))
+
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { verifyPendingLeads } from '@/features/verification/server/verify-leads'
 import { prefetchSalesforceChecks } from '@/features/salesforce/server/check'
+import { processSalesforceJobs } from '@/features/salesforce/server/process-jobs'
 import { GET, maxDuration } from './route'
 
 const mockUpdateMany = prisma.sequenceEnrollment.updateMany as ReturnType<typeof vi.fn>
@@ -37,6 +42,8 @@ const mockRunSequenceStep = runSequenceStep as ReturnType<typeof vi.fn>
 const mockHeartbeat = prisma.cronHeartbeat.upsert as ReturnType<typeof vi.fn>
 const mockVerify = verifyPendingLeads as ReturnType<typeof vi.fn>
 const mockPrefetch = prefetchSalesforceChecks as ReturnType<typeof vi.fn>
+const mockProcessSalesforceJobs = processSalesforceJobs as ReturnType<typeof vi.fn>
+const SALESFORCE_RESULT = { done: 0, failed: 0, retried: 0, skippedOrgs: 0 }
 
 const CRON_SECRET = 'test-cron-secret'
 
@@ -52,6 +59,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
   mockVerify.mockResolvedValue({ checked: 0, retried: 0, accountError: null, skipped: true })
   mockPrefetch.mockResolvedValue(undefined)
+  mockProcessSalesforceJobs.mockResolvedValue(SALESFORCE_RESULT)
 })
 
 afterEach(() => {
@@ -111,6 +119,7 @@ describe('GET /api/cron/sequence-runner', () => {
       ],
       staleLockRecovery: true,
       verification: { checked: 0, retried: 0, accountError: null, skipped: true },
+      salesforce: SALESFORCE_RESULT,
     })
 
     // stale-lock recovery query ran
@@ -214,5 +223,42 @@ describe('GET /api/cron/sequence-runner', () => {
     const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
     expect(res.status).toBe(200)
     expect(mockRunSequenceStep).toHaveBeenCalledWith({ enrollmentId: 'enroll-1' })
+  })
+
+  it('runs Salesforce sync jobs after the step loop, with a 5s budget, and includes the result', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+    const result = { done: 2, failed: 0, retried: 1, skippedOrgs: 0 }
+    mockProcessSalesforceJobs.mockResolvedValue(result)
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+
+    expect(mockProcessSalesforceJobs).toHaveBeenCalledWith({ budgetMs: 5_000 })
+    expect((await res.json()).salesforce).toEqual(result)
+  })
+
+  it('a Salesforce jobs failure does not fail the cron run, and is reported as an error string', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+    mockProcessSalesforceJobs.mockRejectedValue(new Error('salesforce down'))
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).salesforce).toEqual({ error: 'Error: salesforce down' })
+  })
+
+  it('skips Salesforce jobs once the sequence-runner budget is already spent', async () => {
+    const t0 = 1_000_000
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(t0) // startedAt
+      .mockReturnValue(t0 + 26_000) // every subsequent check: over budget
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+
+    expect(mockProcessSalesforceJobs).not.toHaveBeenCalled()
+    expect((await res.json()).salesforce).toBeNull()
   })
 })

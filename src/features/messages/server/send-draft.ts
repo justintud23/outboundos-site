@@ -17,6 +17,7 @@ import {
   SalesforceCheckUnavailableError,
 } from '../types'
 import { ensureSalesforceClear, applySalesforceBlock } from '@/features/salesforce/server/check'
+import { enqueueSendLog } from '@/features/salesforce/server/enqueue'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES, LeadExcludedCanadaError } from '@/features/leads/types'
@@ -427,6 +428,8 @@ export async function sendDraft({
     return message
   })
 
+  await enqueueSendLog(organizationId, draft.leadId, finalized.id)
+
   // 6b. Auto-transition lead status: NEW → CONTACTED
   await transitionLeadStatus({
     organizationId,
@@ -522,6 +525,8 @@ async function resolveExistingClaim({
     where: { id: existing.id },
     data: { status: 'SENT', sentAt: existing.sentAt ?? new Date() },
   })
+
+  await enqueueSendLog(organizationId, leadId, reconciled.id)
 
   // Lead transition is idempotent (auto: trigger no-ops if already advanced),
   // so it is safe to (re)apply on reconciliation.

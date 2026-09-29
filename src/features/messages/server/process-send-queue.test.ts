@@ -26,6 +26,7 @@ vi.mock('@/features/salesforce/server/check', () => ({
   prefetchSalesforceChecks: vi.fn(),
   SF_HOLD_MS: 10 * 60 * 1000,
 }))
+vi.mock('@/features/salesforce/server/enqueue', () => ({ enqueueSendLog: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
@@ -34,6 +35,7 @@ import { reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/ser
 import { checkEnrollmentStop } from '@/features/sequences/server/check-enrollment-stop'
 import { sendOrgAlert } from '@/features/replies/server/notify'
 import { ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, SF_HOLD_MS } from '@/features/salesforce/server/check'
+import { enqueueSendLog } from '@/features/salesforce/server/enqueue'
 import { GraphAuthError, GraphThrottledError } from '@/lib/email/graph/client'
 import { processSendQueue } from './process-send-queue'
 
@@ -99,6 +101,7 @@ describe('processSendQueue', () => {
     const delta = paced.data.nextSendAt.getTime() - NOW.getTime()
     expect(delta).toBeGreaterThanOrEqual(12.6 * 60_000)
     expect(delta).toBeLessThanOrEqual(23.4 * 60_000)
+    expect(enqueueSendLog).toHaveBeenCalledWith('org-1', 'lead-1', 'msg-1')
   })
 
   it('does nothing outside business hours', async () => {

@@ -4,6 +4,7 @@ import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
 import { verifyPendingLeads, VERIFY_BUDGET_MS, type VerifyRunResult } from '@/features/verification/server/verify-leads'
 import { prefetchSalesforceChecks } from '@/features/salesforce/server/check'
+import { processSalesforceJobs, type ProcessJobsResult } from '@/features/salesforce/server/process-jobs'
 
 export const maxDuration = 60
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
   const results: { enrollmentId: string; result: string }[] = []
   let outOfBudget = false
   let verification: VerifyRunResult | { error: string } | null = null
+  let salesforce: ProcessJobsResult | { error: string } | null = null
 
   try {
     // 1. Recover stale locks
@@ -98,6 +100,17 @@ export async function GET(request: Request) {
         })
       }
     }
+
+    // 4. Run due Salesforce sync jobs (log sends/replies as Tasks, create+link
+    //    leads) with whatever's left of this tick's time. Never let a
+    //    Salesforce failure fail the whole cron run.
+    if (Date.now() - startedAt < SEQUENCE_RUNNER_BUDGET_MS) {
+      try {
+        salesforce = await processSalesforceJobs({ budgetMs: 5_000 })
+      } catch (err) {
+        salesforce = { error: String(err) }
+      }
+    }
   } finally {
     // Record the heartbeat even when the tick throws, so a broken runner shows
     // up as "ran" with its partial result instead of silently going stale.
@@ -109,6 +122,7 @@ export async function GET(request: Request) {
     results,
     staleLockRecovery: true,
     verification,
+    salesforce,
     ...(outOfBudget && { outOfBudget }),
   })
 }

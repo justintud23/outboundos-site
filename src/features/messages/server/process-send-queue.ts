@@ -14,6 +14,7 @@ import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { canadaExclusionReason } from '@/features/leads/canada'
 import { sendOrgAlert } from '@/features/replies/server/notify'
 import { ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, SF_HOLD_MS } from '@/features/salesforce/server/check'
+import { enqueueSendLog } from '@/features/salesforce/server/enqueue'
 import { isInSendWindow, mailboxSpacingMs, nextSendAt } from '../send-window'
 import { buildReplySubject } from '../threading'
 
@@ -453,6 +454,8 @@ async function finalizeSent(
     }
   }
   if (!persisted) return
+
+  await enqueueSendLog(organizationId, leadId, messageId)
 
   await prisma.auditLog.create({
     data: { organizationId, action: 'message.sent', entityType: 'OutboundMessage', entityId: messageId, metadata: { leadId, auto: true } },

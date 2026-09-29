@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { CLASSIFICATION_TO_STATUS } from '@/features/leads/types'
+import { enqueueReplyLog } from '@/features/salesforce/server/enqueue'
 
 export const FALLBACK_CLASSIFY_PROMPT = `You are an email reply classifier for a sales team.
 Classify the reply into exactly one category:
@@ -57,6 +58,8 @@ export async function recordReply(input: RecordReplyInput) {
       ...(input.subject && { subject: input.subject }),
     },
   })
+
+  await enqueueReplyLog(input.organizationId, input.leadId, reply.id)
 
   const targetStatus = CLASSIFICATION_TO_STATUS[classification]
   if (targetStatus) {

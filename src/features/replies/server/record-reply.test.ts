@@ -5,10 +5,12 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 vi.mock('@/lib/ai', () => ({ getAIProvider: vi.fn() }))
 vi.mock('@/features/leads/server/transition-lead-status', () => ({ transitionLeadStatus: vi.fn() }))
+vi.mock('@/features/salesforce/server/enqueue', () => ({ enqueueReplyLog: vi.fn() }))
 
 import { prisma } from '@/lib/db/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
+import { enqueueReplyLog } from '@/features/salesforce/server/enqueue'
 import { recordReply } from './record-reply'
 
 type Fn = ReturnType<typeof vi.fn>
@@ -37,6 +39,11 @@ describe('recordReply', () => {
       }),
     })
     expect(transitionLeadStatus).toHaveBeenCalledWith(expect.objectContaining({ leadId: 'lead-1', newStatus: 'INTERESTED' }))
+  })
+
+  it('enqueues Salesforce activity logging for the new reply', async () => {
+    await recordReply({ organizationId: 'org-1', leadId: 'lead-1', outboundMessageId: 'om-1', rawBody: 'Quote us please' })
+    expect(enqueueReplyLog).toHaveBeenCalledWith('org-1', 'lead-1', 'r1')
   })
 
   it('rejects bodies over 50,000 characters without calling AI', async () => {
