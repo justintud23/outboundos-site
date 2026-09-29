@@ -92,6 +92,17 @@ export async function updateSalesforceSettings(
   if (patch.blockOpenOpportunities !== undefined) data.blockOpenOpportunities = patch.blockOpenOpportunities
   if (patch.logActivity !== undefined) data.logActivity = patch.logActivity
 
-  const result = await prisma.salesforceConnection.updateMany({ where: { organizationId }, data })
-  return result.count === 1
+  // Changing the customer rules makes every cached check stale: a lead
+  // checked CLEAR an hour ago may now be blocked. Clearing sfCheckedAt forces
+  // a fresh lookup on each lead's next send. Stored statuses stay for
+  // display; until that lookup succeeds, the 7-day stale fallback no longer
+  // applies to these leads, so they are held if Salesforce is unreachable.
+  const rulesChanged = patch.customerAccountTypes !== undefined || patch.blockOpenOpportunities !== undefined
+
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.salesforceConnection.updateMany({ where: { organizationId }, data })
+    if (result.count !== 1) return false
+    if (rulesChanged) await tx.lead.updateMany({ where: { organizationId }, data: { sfCheckedAt: null } })
+    return true
+  })
 }

@@ -4,6 +4,8 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     salesforceSyncJob: { count: vi.fn(), findMany: vi.fn() },
     salesforceConnection: { updateMany: vi.fn() },
+    lead: { updateMany: vi.fn() },
+    $transaction: vi.fn(),
   },
 }))
 
@@ -19,6 +21,8 @@ type Fn = ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
   salesforceSyncJob: { count: Fn; findMany: Fn }
   salesforceConnection: { updateMany: Fn }
+  lead: { updateMany: Fn }
+  $transaction: Fn
 }
 const mockGetConnection = getConnection as unknown as Fn
 const mockGetAppConfig = getSalesforceAppConfig as unknown as Fn
@@ -40,6 +44,8 @@ beforeEach(() => {
   p.salesforceSyncJob.count.mockResolvedValue(0)
   p.salesforceSyncJob.findMany.mockResolvedValue([])
   p.salesforceConnection.updateMany.mockResolvedValue({ count: 1 })
+  p.lead.updateMany.mockResolvedValue({ count: 3 })
+  p.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma))
 })
 
 describe('getSalesforceStatus', () => {
@@ -159,5 +165,37 @@ describe('updateSalesforceSettings', () => {
 
     const call = p.salesforceConnection.updateMany.mock.calls[0][0]
     expect(call.data).toEqual({ customerAccountTypes: ['Customer', 'Key Account'], blockOpenOpportunities: false })
+  })
+})
+
+describe('updateSalesforceSettings - rule changes invalidate cached checks (I3)', () => {
+  const invalidate = { where: { organizationId: 'org-1' }, data: { sfCheckedAt: null } }
+
+  it('clears sfCheckedAt for the org when customerAccountTypes changes', async () => {
+    await updateSalesforceSettings('org-1', { customerAccountTypes: ['Customer', 'Partner'] })
+    expect(p.lead.updateMany).toHaveBeenCalledWith(invalidate)
+  })
+
+  it('clears sfCheckedAt for the org when blockOpenOpportunities changes', async () => {
+    await updateSalesforceSettings('org-1', { blockOpenOpportunities: false })
+    expect(p.lead.updateMany).toHaveBeenCalledWith(invalidate)
+  })
+
+  it('runs the settings update and the invalidation in one transaction', async () => {
+    await updateSalesforceSettings('org-1', { blockOpenOpportunities: true })
+    expect(p.$transaction).toHaveBeenCalledTimes(1)
+    expect(p.salesforceConnection.updateMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not touch leads for a logActivity-only patch', async () => {
+    await updateSalesforceSettings('org-1', { logActivity: false })
+    expect(p.lead.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('does not touch leads when there is no connection row', async () => {
+    p.salesforceConnection.updateMany.mockResolvedValue({ count: 0 })
+    const ok = await updateSalesforceSettings('org-1', { customerAccountTypes: ['Customer'] })
+    expect(ok).toBe(false)
+    expect(p.lead.updateMany).not.toHaveBeenCalled()
   })
 })
