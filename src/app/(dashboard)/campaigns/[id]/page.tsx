@@ -173,6 +173,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const placementTestOptions = await getPlacementTestOptions({
     organizationId: org.id,
     campaignId: campaign.id,
+    campaignOwnerId: campaign.ownerId,
     hasMsTenant: !!org.msTenantId,
   })
   const members = isAdmin ? await listMembers(org.id) : []

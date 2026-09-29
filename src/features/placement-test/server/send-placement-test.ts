@@ -12,6 +12,7 @@ import { effectiveDailyLimit } from '@/features/mailboxes/warmup'
 import { getDomainHealthMap, domainOf } from '@/features/deliverability/server/domain-health'
 import { isDomainUsable } from '@/features/deliverability/readiness'
 import { startOfDay, reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 import { DomainNotHealthyError } from '@/features/messages/types'
 
 export interface PlacementTestInput {
@@ -147,6 +148,13 @@ export async function sendPlacementTest(input: PlacementTestInput): Promise<Plac
   }
   if (mailbox.provider !== 'MICROSOFT_GRAPH' || !mailbox.isActive || mailbox.autoPaused) {
     throw new PlacementTestError('MAILBOX_UNAVAILABLE', 'This mailbox is not available to send from right now.')
+  }
+  // Rep ownership: a placement test may only use a mailbox in the campaign's
+  // own sending set (mailboxOwnerFilter for the campaign owner) — the same
+  // rule a real send follows. Applies to everyone, admins included.
+  const ownerFilter = await mailboxOwnerFilter(organizationId, campaign.ownerId)
+  if (mailbox.ownerId !== ownerFilter.ownerId) {
+    throw new PlacementTestError('MAILBOX_UNAVAILABLE', 'This campaign can only send from its owner’s mailboxes.')
   }
   const domainHealth = await getDomainHealthMap(organizationId)
   const domain = domainOf(mailbox.email)

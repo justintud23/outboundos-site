@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
+import { mailboxOwnerFilter } from '@/features/team/server/mailbox-owner'
 
 export interface PlacementTestOptions {
   sequences: { id: string; name: string }[]
@@ -9,26 +10,31 @@ export interface PlacementTestOptions {
 /**
  * Data the placement-test card needs, org-scoped. Mailboxes are only relevant
  * (and only queried) once the org has a Microsoft 365 tenant — auto-send goes
- * through Graph, and so does a placement test.
+ * through Graph, and so does a placement test. The list is further scoped to
+ * the campaign's own sending set (mailboxOwnerFilter for the campaign owner),
+ * matching the rule sendPlacementTest enforces on the chosen mailbox.
  */
 export async function getPlacementTestOptions({
   organizationId,
   campaignId,
+  campaignOwnerId,
   hasMsTenant,
 }: {
   organizationId: string
   campaignId: string
+  campaignOwnerId: string | null
   hasMsTenant: boolean
 }): Promise<PlacementTestOptions> {
+  const ownerFilter = hasMsTenant ? await mailboxOwnerFilter(organizationId, campaignOwnerId) : null
   const [sequences, mailboxes, enrollments] = await Promise.all([
     prisma.sequence.findMany({
       where: { organizationId, campaignId },
       select: { id: true, name: true },
       orderBy: { createdAt: 'asc' },
     }),
-    hasMsTenant
+    ownerFilter
       ? prisma.mailbox.findMany({
-          where: { organizationId, provider: 'MICROSOFT_GRAPH', isActive: true, autoPaused: false },
+          where: { organizationId, provider: 'MICROSOFT_GRAPH', isActive: true, autoPaused: false, ...ownerFilter },
           select: { id: true, email: true },
           orderBy: { email: 'asc' },
         })
