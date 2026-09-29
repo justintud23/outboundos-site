@@ -13,6 +13,8 @@ import {
   MissingPostalAddressError,
   DomainNotHealthyError,
   EmailNotVerifiedError,
+  LeadBlockedBySalesforceError,
+  SalesforceCheckUnavailableError,
 } from '@/features/messages/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
@@ -89,6 +91,15 @@ export async function POST(
     }
     if (err instanceof EmailNotVerifiedError) {
       return NextResponse.json({ code: 'EMAIL_NOT_VERIFIED', error: err.message, state: err.state }, { status: 422 })
+    }
+    if (err instanceof LeadBlockedBySalesforceError) {
+      return NextResponse.json({ code: 'SALESFORCE_BLOCKED', error: err.reason }, { status: 422 })
+    }
+    if (err instanceof SalesforceCheckUnavailableError) {
+      return NextResponse.json(
+        { code: 'SALESFORCE_UNAVAILABLE', error: "Couldn't check Salesforce; try again shortly." },
+        { status: 503 },
+      )
     }
     if (err instanceof LeadInTerminalStateError) {
       return NextResponse.json(

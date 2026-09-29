@@ -7,7 +7,13 @@ vi.mock('@/features/messages/server/send-draft', () => ({ sendDraft: vi.fn() }))
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { getDraftOwnerId } from '@/features/team/server/owners'
 import { sendDraft } from '@/features/messages/server/send-draft'
-import { DraftOnSendQueueError, DomainNotHealthyError, EmailNotVerifiedError } from '@/features/messages/types'
+import {
+  DraftOnSendQueueError,
+  DomainNotHealthyError,
+  EmailNotVerifiedError,
+  LeadBlockedBySalesforceError,
+  SalesforceCheckUnavailableError,
+} from '@/features/messages/types'
 import { POST } from './route'
 
 const rep = { org: { id: 'org-1' }, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
@@ -56,6 +62,18 @@ describe('POST /api/drafts/[id]/send', () => {
     const res = await call()
     expect(res.status).toBe(422)
     expect(await res.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED', state: 'stop' })
+  })
+  it('422 SALESFORCE_BLOCKED when the lead is blocked by Salesforce', async () => {
+    vi.mocked(sendDraft).mockRejectedValue(new LeadBlockedBySalesforceError('Salesforce: customer (Acme)'))
+    const res = await call()
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ code: 'SALESFORCE_BLOCKED', error: 'Salesforce: customer (Acme)' })
+  })
+  it('503 SALESFORCE_UNAVAILABLE when the Salesforce check cannot complete', async () => {
+    vi.mocked(sendDraft).mockRejectedValue(new SalesforceCheckUnavailableError())
+    const res = await call()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ code: 'SALESFORCE_UNAVAILABLE', error: "Couldn't check Salesforce; try again shortly." })
   })
 
   it.each([

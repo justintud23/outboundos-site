@@ -13,7 +13,10 @@ import {
   MissingPostalAddressError,
   DomainNotHealthyError,
   EmailNotVerifiedError,
+  LeadBlockedBySalesforceError,
+  SalesforceCheckUnavailableError,
 } from '../types'
+import { ensureSalesforceClear, applySalesforceBlock } from '@/features/salesforce/server/check'
 import { DraftNotFoundError } from '@/features/drafts/types'
 import { transitionLeadStatus } from '@/features/leads/server/transition-lead-status'
 import { TERMINAL_STATUSES, LeadExcludedCanadaError } from '@/features/leads/types'
@@ -77,7 +80,18 @@ export async function sendDraft({
     throw new LeadInTerminalStateError(draft.leadId, draft.lead.status)
   }
 
-  // 2c. A draft already on the automatic send queue is owned by the queue —
+  // 2c. Salesforce pre-send check — before any claim or send.
+  const sf = await ensureSalesforceClear(organizationId, [draft.leadId])
+  const sfReason = sf.blocked.get(draft.leadId)
+  if (sfReason) {
+    await applySalesforceBlock(organizationId, draft.leadId, sfReason)
+    throw new LeadBlockedBySalesforceError(sfReason)
+  }
+  if (sf.held.has(draft.leadId)) {
+    throw new SalesforceCheckUnavailableError()
+  }
+
+  // 2d. A draft already on the automatic send queue is owned by the queue —
   //     refuse up front (before any mailbox work) and leave its message alone.
   const queued = await prisma.outboundMessage.findUnique({
     where: { draftId },
@@ -98,7 +112,7 @@ export async function sendDraft({
     },
   })
 
-  // 2d. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
+  // 2e. Compliance gates (CAN-SPAM postal address, CASL Canadian recipients).
   const postalAddress = org?.postalAddress?.trim()
   if (!org || !postalAddress) {
     throw new MissingPostalAddressError()
@@ -108,7 +122,7 @@ export async function sendDraft({
     if (canadaReason) throw new LeadExcludedCanadaError(draft.leadId, canadaReason)
   }
 
-  // 2e. Email verification (first email to this lead only).
+  // 2f. Email verification (first email to this lead only).
   if (isVerificationConfigured()) {
     const emailedBefore = await prisma.outboundMessage.findFirst({
       where: { organizationId, leadId: draft.leadId, sentAt: { not: null } },

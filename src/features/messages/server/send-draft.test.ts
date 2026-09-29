@@ -39,11 +39,17 @@ vi.mock('@/features/leads/types', async (importOriginal) => {
   return { ...actual, TERMINAL_STATUSES: ['NOT_INTERESTED', 'UNSUBSCRIBED', 'BOUNCED'] }
 })
 
+vi.mock('@/features/salesforce/server/check', () => ({
+  ensureSalesforceClear: vi.fn(),
+  applySalesforceBlock: vi.fn(),
+}))
+
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
 import { assignEnrollmentMailbox } from '@/features/sequences/server/assign-mailbox'
 import { presetCapForDay } from '@/features/mailboxes/warmup'
+import { ensureSalesforceClear, applySalesforceBlock } from '@/features/salesforce/server/check'
 import { sendDraft } from './send-draft'
 import {
   DraftNotApprovedError,
@@ -55,6 +61,8 @@ import {
   MissingPostalAddressError,
   DomainNotHealthyError,
   EmailNotVerifiedError,
+  LeadBlockedBySalesforceError,
+  SalesforceCheckUnavailableError,
 } from '@/features/messages/types'
 import { LeadExcludedCanadaError } from '@/features/leads/types'
 import { DraftNotFoundError } from '@/features/drafts/types'
@@ -183,6 +191,7 @@ beforeEach(() => {
 
   mockPrisma.draft.findFirst.mockResolvedValue(fakeDraft)
   mockPrisma.organization.findUnique.mockResolvedValue({ msTenantId: null, businessName: 'Acme Snow', postalAddress: '1 Main St, Buffalo, NY 14201', allowCanadianRecipients: false })
+  ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(['lead-1']), held: new Set(), blocked: new Map() })
 
   // findMany returns CLONED snapshots (a read, not a live ref).
   mockPrisma.mailbox.findMany.mockImplementation(async ({ where }: FindManyArgs) =>
@@ -992,5 +1001,29 @@ describe('sendDraft — email verification gate (first email to a lead)', () => 
     mockPrisma.outboundMessage.findFirst.mockResolvedValue({ id: 'om-old' })
     const err = await sendDraft(INPUT).catch((e: unknown) => e)
     expect(err).not.toBeInstanceOf(EmailNotVerifiedError)
+  })
+})
+
+describe('sendDraft — Salesforce pre-send check (Task 7)', () => {
+  it('blocked: applies the block and throws LeadBlockedBySalesforceError before any claim or send', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({
+      allowed: new Set(),
+      held: new Set(),
+      blocked: new Map([['lead-1', 'Salesforce: customer (Acme)']]),
+    })
+    const err = await sendDraft(INPUT).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(LeadBlockedBySalesforceError)
+    expect((err as LeadBlockedBySalesforceError).reason).toBe('Salesforce: customer (Acme)')
+    expect(applySalesforceBlock).toHaveBeenCalledWith('org-1', 'lead-1', 'Salesforce: customer (Acme)')
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('held: throws SalesforceCheckUnavailableError, no claim or send', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(), held: new Set(['lead-1']), blocked: new Map() })
+    await expect(sendDraft(INPUT)).rejects.toBeInstanceOf(SalesforceCheckUnavailableError)
+    expect(applySalesforceBlock).not.toHaveBeenCalled()
+    expect(mockPrisma.outboundMessage.create).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 })

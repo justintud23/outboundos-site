@@ -15,6 +15,7 @@ import { queueApprovedDraft } from '@/features/messages/server/queue-draft'
 import { verificationGate } from '@/features/verification/gate'
 import { isVerificationConfigured } from '@/features/verification/server/get-verifier'
 import { queueLeadForVerification } from '@/features/verification/server/queue-verification'
+import { ensureSalesforceClear, applySalesforceBlock, SF_HOLD_MS } from '@/features/salesforce/server/check'
 import type { StepResult } from '../types'
 
 interface RunStepInput {
@@ -151,6 +152,18 @@ export async function runSequenceStep({ enrollmentId }: RunStepInput): Promise<S
       return defer(enrollmentId, VERIFY_WAIT_MS)
     }
   }
+
+  // 3c. Salesforce pre-send check — every step, before any AI spend or the
+  //     auto-send gates below. A confirmed block stops the enrollment
+  //     outright; an inconclusive check holds this step for a retry rather
+  //     than treating "not blocked" as allowed.
+  const sf = await ensureSalesforceClear(enrollment.organizationId, [enrollment.lead.id])
+  const sfReason = sf.blocked.get(enrollment.lead.id)
+  if (sfReason) {
+    await applySalesforceBlock(enrollment.organizationId, enrollment.lead.id, sfReason)
+    return 'STOPPED'
+  }
+  if (sf.held.has(enrollment.lead.id)) return defer(enrollmentId, SF_HOLD_MS)
 
   const campaign = enrollment.sequence.campaign
   const org = enrollment.organization

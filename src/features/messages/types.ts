@@ -139,3 +139,25 @@ export class EmailNotVerifiedError extends Error {
     Object.setPrototypeOf(this, EmailNotVerifiedError.prototype)
   }
 }
+
+// Raised when the Salesforce pre-send check finds this lead confirmed as a
+// customer, opted out, or otherwise blocking (see ensureSalesforceClear).
+// applySalesforceBlock has already been applied by the time this is thrown.
+export class LeadBlockedBySalesforceError extends Error {
+  constructor(public readonly reason: string) {
+    super(reason)
+    this.name = 'LeadBlockedBySalesforceError'
+    Object.setPrototypeOf(this, LeadBlockedBySalesforceError.prototype)
+  }
+}
+
+// Raised when the Salesforce pre-send check can't reach a decision (no fresh
+// or recent-enough cached result, and Salesforce is unreachable). The lead is
+// held, not blocked — retry shortly.
+export class SalesforceCheckUnavailableError extends Error {
+  constructor() {
+    super("Couldn't check Salesforce; try again shortly.")
+    this.name = 'SalesforceCheckUnavailableError'
+    Object.setPrototypeOf(this, SalesforceCheckUnavailableError.prototype)
+  }
+}

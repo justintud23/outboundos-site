@@ -20,9 +20,14 @@ vi.mock('@/features/verification/server/verify-leads', () => ({
   VERIFY_BUDGET_MS: 10_000,
 }))
 
+vi.mock('@/features/salesforce/server/check', () => ({
+  prefetchSalesforceChecks: vi.fn(),
+}))
+
 import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { verifyPendingLeads } from '@/features/verification/server/verify-leads'
+import { prefetchSalesforceChecks } from '@/features/salesforce/server/check'
 import { GET, maxDuration } from './route'
 
 const mockUpdateMany = prisma.sequenceEnrollment.updateMany as ReturnType<typeof vi.fn>
@@ -31,6 +36,7 @@ const mockUpdate = prisma.sequenceEnrollment.update as ReturnType<typeof vi.fn>
 const mockRunSequenceStep = runSequenceStep as ReturnType<typeof vi.fn>
 const mockHeartbeat = prisma.cronHeartbeat.upsert as ReturnType<typeof vi.fn>
 const mockVerify = verifyPendingLeads as ReturnType<typeof vi.fn>
+const mockPrefetch = prefetchSalesforceChecks as ReturnType<typeof vi.fn>
 
 const CRON_SECRET = 'test-cron-secret'
 
@@ -45,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.CRON_SECRET = CRON_SECRET
   mockVerify.mockResolvedValue({ checked: 0, retried: 0, accountError: null, skipped: true })
+  mockPrefetch.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -86,7 +93,7 @@ describe('GET /api/cron/sequence-runner', () => {
       .mockResolvedValueOnce({ count: 0 }) // stale-lock recovery
       .mockResolvedValueOnce({ count: 1 }) // atomic claim of enroll-1
       .mockResolvedValueOnce({ count: 1 }) // atomic claim of enroll-2
-    mockFindMany.mockResolvedValue([{ id: 'enroll-1' }, { id: 'enroll-2' }])
+    mockFindMany.mockResolvedValue([{ id: 'enroll-1', leadId: 'lead-1' }, { id: 'enroll-2', leadId: 'lead-2' }])
     mockUpdate.mockResolvedValue({})
     mockRunSequenceStep
       .mockResolvedValueOnce('DRAFT_GENERATED')
@@ -189,5 +196,23 @@ describe('GET /api/cron/sequence-runner', () => {
     const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
     expect(res.status).toBe(200)
     expect(mockRunSequenceStep).toHaveBeenCalledWith({ enrollmentId: 'e1' })
+  })
+
+  it('prefetches Salesforce checks for the due enrollments\' lead ids before processing', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockFindMany.mockResolvedValue([{ id: 'enroll-1', leadId: 'lead-1' }, { id: 'enroll-2', leadId: 'lead-2' }])
+    mockRunSequenceStep.mockResolvedValue('DRAFT_GENERATED')
+    await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+    expect(mockPrefetch).toHaveBeenCalledWith(['lead-1', 'lead-2'])
+  })
+
+  it('a Salesforce prefetch failure does not stop processing', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockFindMany.mockResolvedValue([{ id: 'enroll-1', leadId: 'lead-1' }])
+    mockRunSequenceStep.mockResolvedValue('DRAFT_GENERATED')
+    mockPrefetch.mockRejectedValue(new Error('db down'))
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+    expect(res.status).toBe(200)
+    expect(mockRunSequenceStep).toHaveBeenCalledWith({ enrollmentId: 'enroll-1' })
   })
 })

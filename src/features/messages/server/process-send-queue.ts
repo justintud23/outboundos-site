@@ -13,6 +13,7 @@ import { transitionLeadStatus } from '@/features/leads/server/transition-lead-st
 import { TERMINAL_STATUSES } from '@/features/leads/types'
 import { canadaExclusionReason } from '@/features/leads/canada'
 import { sendOrgAlert } from '@/features/replies/server/notify'
+import { ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, SF_HOLD_MS } from '@/features/salesforce/server/check'
 import { isInSendWindow, mailboxSpacingMs, nextSendAt } from '../send-window'
 import { buildReplySubject } from '../threading'
 
@@ -100,6 +101,21 @@ export async function processSendQueue(now: Date = new Date(), budgetMs = 25_000
     } catch (err) {
       console.error(`[send-queue] org ${org.id}: failed to load mailboxes or domain health, skipping this org for the tick:`, err)
       continue
+    }
+
+    // Warm the Salesforce pre-send cache for this org's due leads ahead of
+    // the per-message check in sendOne below. Best-effort: never let a
+    // prefetch failure stop the tick from processing this org's queue.
+    try {
+      const dueLeads = await prisma.outboundMessage.findMany({
+        where: { organizationId: org.id, status: 'QUEUED', scheduledFor: { lte: now } },
+        select: { leadId: true },
+        distinct: ['leadId'],
+        take: 200,
+      })
+      await prefetchSalesforceChecks(dueLeads.map((m) => m.leadId))
+    } catch (err) {
+      console.error(`[send-queue] org ${org.id}: salesforce prefetch failed`, err)
     }
 
     for (const mailbox of mailboxes) {
@@ -214,6 +230,30 @@ async function sendOne(
         data: { status: 'CANCELLED', processing: false, lastError: cancelReason },
       })
       return 'cancelled'
+    }
+
+    // Salesforce pre-send check. Skipped when graphMessageId is already set:
+    // a previous attempt may already have sent this message, so crash
+    // recovery below must reconcile against Graph rather than being
+    // short-circuited here.
+    if (!message.graphMessageId) {
+      const sf = await ensureSalesforceClear(message.organizationId, [message.leadId])
+      const sfReason = sf.blocked.get(message.leadId)
+      if (sfReason) {
+        await applySalesforceBlock(message.organizationId, message.leadId, sfReason, { exceptMessageId: messageId })
+        await prisma.outboundMessage.update({
+          where: { id: messageId },
+          data: { status: 'CANCELLED', processing: false, lastError: sfReason },
+        })
+        return 'cancelled'
+      }
+      if (sf.held.has(message.leadId)) {
+        await prisma.outboundMessage.update({
+          where: { id: messageId },
+          data: { processing: false, processingStartedAt: null, scheduledFor: new Date(now.getTime() + SF_HOLD_MS) },
+        })
+        return 'deferred'
+      }
     }
 
     const limitToday = effectiveDailyLimit(mailbox, now, domain)

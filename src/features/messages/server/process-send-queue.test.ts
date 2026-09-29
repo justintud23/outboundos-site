@@ -20,6 +20,12 @@ vi.mock('@/features/sequences/server/check-enrollment-stop', () => ({ checkEnrol
 vi.mock('@/features/leads/server/transition-lead-status', () => ({ transitionLeadStatus: vi.fn() }))
 vi.mock('@/features/replies/server/notify', () => ({ sendOrgAlert: vi.fn() }))
 vi.mock('@/lib/email/unsubscribe-token', () => ({ signUnsubscribeToken: () => 'tok' }))
+vi.mock('@/features/salesforce/server/check', () => ({
+  ensureSalesforceClear: vi.fn(),
+  applySalesforceBlock: vi.fn(),
+  prefetchSalesforceChecks: vi.fn(),
+  SF_HOLD_MS: 10 * 60 * 1000,
+}))
 
 import { prisma } from '@/lib/db/prisma'
 import { getEmailProvider } from '@/lib/email'
@@ -27,6 +33,7 @@ import { getMessageState, sendDraftMessage } from '@/lib/email/graph/mail'
 import { reserveMailboxSlot, releaseMailboxSlot } from '@/features/mailboxes/server/mailbox-slots'
 import { checkEnrollmentStop } from '@/features/sequences/server/check-enrollment-stop'
 import { sendOrgAlert } from '@/features/replies/server/notify'
+import { ensureSalesforceClear, applySalesforceBlock, prefetchSalesforceChecks, SF_HOLD_MS } from '@/features/salesforce/server/check'
 import { GraphAuthError, GraphThrottledError } from '@/lib/email/graph/client'
 import { processSendQueue } from './process-send-queue'
 
@@ -72,6 +79,8 @@ beforeEach(() => {
   ;(reserveMailboxSlot as Fn).mockResolvedValue(true)
   ;(checkEnrollmentStop as Fn).mockResolvedValue({ shouldStop: false })
   p.domainHealth.findMany.mockResolvedValue([{ domain: 'getacmesnow.com', status: 'HEALTHY', registeredAt: new Date('2025-01-01') }])
+  ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(['lead-1']), held: new Set(), blocked: new Map() })
+  ;(prefetchSalesforceChecks as Fn).mockResolvedValue(undefined)
 })
 
 describe('processSendQueue', () => {
@@ -375,5 +384,60 @@ describe('processSendQueue', () => {
       expect.objectContaining({ where: expect.objectContaining({ mailboxId: 'mb-bad' }) }),
     )
     expect(p.outboundMessage.findFirst).toHaveBeenCalledTimes(1)
+  })
+
+  // ─── Salesforce pre-send check (Task 7) ──────────────────────
+
+  it('prefetches Salesforce checks for the org\'s due QUEUED leads before processing', async () => {
+    await processSendQueue(NOW)
+    expect(p.outboundMessage.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', status: 'QUEUED', scheduledFor: { lte: NOW } },
+      select: { leadId: true },
+      distinct: ['leadId'],
+      take: 200,
+    })
+    expect(prefetchSalesforceChecks).toHaveBeenCalled()
+  })
+
+  it('a Salesforce prefetch failure does not abort the org tick', async () => {
+    p.outboundMessage.findMany.mockRejectedValueOnce(new Error('db down'))
+    const res = await processSendQueue(NOW)
+    expect(res.sent).toBe(1)
+  })
+
+  it('Salesforce block: cancels the message, applies the block elsewhere, no send', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({
+      allowed: new Set(),
+      held: new Set(),
+      blocked: new Map([['lead-1', 'Salesforce: customer (Acme)']]),
+    })
+    const res = await processSendQueue(NOW)
+    expect(res.cancelled).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(applySalesforceBlock).toHaveBeenCalledWith('org-1', 'lead-1', 'Salesforce: customer (Acme)', { exceptMessageId: 'msg-1' })
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { status: 'CANCELLED', processing: false, lastError: 'Salesforce: customer (Acme)' },
+    })
+  })
+
+  it('Salesforce hold: releases the message for retry after SF_HOLD_MS, no send, no slot reserved', async () => {
+    ;(ensureSalesforceClear as Fn).mockResolvedValue({ allowed: new Set(), held: new Set(['lead-1']), blocked: new Map() })
+    const res = await processSendQueue(NOW)
+    expect(res.deferred).toBe(1)
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(reserveMailboxSlot).not.toHaveBeenCalled()
+    expect(p.outboundMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { processing: false, processingStartedAt: null, scheduledFor: new Date(NOW.getTime() + SF_HOLD_MS) },
+    })
+  })
+
+  it('Salesforce check is skipped when graphMessageId is already set (crash recovery reconciles instead)', async () => {
+    p.outboundMessage.findUnique.mockResolvedValue(queued({ graphMessageId: 'g-prev' }))
+    ;(getMessageState as Fn).mockResolvedValue({ state: 'SENT', conversationId: 'conv-9' })
+    const res = await processSendQueue(NOW)
+    expect(res.reconciled).toBe(1)
+    expect(ensureSalesforceClear).not.toHaveBeenCalled()
   })
 })

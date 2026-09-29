@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma'
 import { runSequenceStep } from '@/features/sequences/server/run-sequence-step'
 import { isAuthorizedCron, recordHeartbeat } from '@/lib/cron'
 import { verifyPendingLeads, VERIFY_BUDGET_MS, type VerifyRunResult } from '@/features/verification/server/verify-leads'
+import { prefetchSalesforceChecks } from '@/features/salesforce/server/check'
 
 export const maxDuration = 60
 
@@ -53,8 +54,18 @@ export async function GET(request: Request) {
       },
       orderBy: { nextDueAt: 'asc' },
       take: BATCH_SIZE,
-      select: { id: true },
+      select: { id: true, leadId: true },
     })
+
+    // 2b. Warm the Salesforce pre-send cache for this batch ahead of time so
+    //     each step's own check (in runSequenceStep) is more likely to hit a
+    //     fresh cached result. Best-effort: never let a prefetch failure stop
+    //     the tick from processing enrollments.
+    try {
+      await prefetchSalesforceChecks(dueEnrollments.map((e) => e.leadId))
+    } catch (err) {
+      console.error('[sequence-runner] salesforce prefetch failed', err)
+    }
 
     // 3. Process each enrollment
     for (const { id } of dueEnrollments) {
