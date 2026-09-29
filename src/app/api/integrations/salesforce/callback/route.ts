@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { loginHostFor } from '@/features/salesforce/config'
-import { verifyState, exchangeCode, fetchIdentity, SF_PKCE_COOKIE } from '@/features/salesforce/server/oauth'
+import { verifyState, exchangeCode, fetchIdentity, SF_PKCE_COOKIE, SF_PKCE_COOKIE_PATH } from '@/features/salesforce/server/oauth'
 import { saveConnection } from '@/features/salesforce/server/connection'
 
 function settingsError(request: Request, reason: string) {
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const jar = await cookies()
 
   const fail = (reason: string) => {
-    jar.delete(SF_PKCE_COOKIE)
+    jar.delete({ name: SF_PKCE_COOKIE, path: SF_PKCE_COOKIE_PATH })
     return settingsError(request, reason)
   }
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (!ctx || !ctx.isAdmin) return fail('not_admin')
 
   const state = verifyState(params.get('state') ?? '')
-  if (!state || state.orgId !== ctx.org.id) return fail('state')
+  if (!state || state.orgId !== ctx.org.id || state.memberId !== ctx.member.id) return fail('state')
 
   const verifier = jar.get(SF_PKCE_COOKIE)?.value
   if (!verifier) return fail('pkce')
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
       sfUserEmail: identity.email,
       refreshToken,
     })
-    jar.delete(SF_PKCE_COOKIE)
+    jar.delete({ name: SF_PKCE_COOKIE, path: SF_PKCE_COOKIE_PATH })
     return NextResponse.redirect(
       new URL(`/settings?salesforce=${orgChanged ? 'connected_new_org' : 'connected'}`, request.url),
     )

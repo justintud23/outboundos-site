@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
 
@@ -13,6 +13,7 @@ vi.mock('@/features/salesforce/server/oauth', () => ({
   exchangeCode: vi.fn(),
   fetchIdentity: vi.fn(),
   SF_PKCE_COOKIE: 'sf_pkce',
+  SF_PKCE_COOKIE_PATH: '/api/integrations/salesforce/callback',
 }))
 
 vi.mock('@/features/salesforce/server/connection', () => ({
@@ -37,6 +38,7 @@ const mockSaveConnection = saveConnection as unknown as ReturnType<typeof vi.fn>
 const fakeOrg = { id: 'org-1' }
 const admin = { org: fakeOrg, member: { id: 'mem-admin' }, isAdmin: true }
 const rep = { org: fakeOrg, member: { id: 'mem-rep' }, isAdmin: false }
+const EXPECTED_DELETE_ARGS = { name: 'sf_pkce', path: '/api/integrations/salesforce/callback' }
 
 function makeRequest(query: string): Request {
   return new Request(`https://app.test/api/integrations/salesforce/callback${query}`)
@@ -62,19 +64,23 @@ beforeEach(() => {
   mockSaveConnection.mockResolvedValue({ orgChanged: false })
 })
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('GET /api/integrations/salesforce/callback', () => {
-  it('redirects to reason=denied when the query has an error, and deletes the PKCE cookie', async () => {
+  it('redirects to reason=denied when the query has an error, and deletes the PKCE cookie at its scoped path', async () => {
     const res = await GET(makeRequest('?error=access_denied'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=denied')
-    expect(mockCookieDelete).toHaveBeenCalledWith('sf_pkce')
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
     expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 
-  it('redirects to reason=not_admin when there is no active org', async () => {
+  it('redirects to reason=not_admin when there is no active org, and deletes the cookie at its scoped path', async () => {
     mockResolveMember.mockResolvedValue(null)
     const res = await GET(makeRequest('?code=abc&state=st'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=not_admin')
-    expect(mockCookieDelete).toHaveBeenCalledWith('sf_pkce')
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
   })
 
   it('redirects to reason=not_admin for a non-admin member', async () => {
@@ -84,10 +90,11 @@ describe('GET /api/integrations/salesforce/callback', () => {
     expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 
-  it('redirects to reason=state when verifyState returns null', async () => {
+  it('redirects to reason=state when verifyState returns null, and deletes the cookie at its scoped path', async () => {
     mockVerifyState.mockReturnValue(null)
     const res = await GET(makeRequest('?code=abc&state=bad-state'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=state')
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
     expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 
@@ -98,20 +105,28 @@ describe('GET /api/integrations/salesforce/callback', () => {
     expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 
-  it('redirects to reason=pkce when the cookie is missing', async () => {
-    mockCookieGet.mockReturnValue(undefined)
+  it('redirects to reason=state when state.memberId does not match ctx.member.id', async () => {
+    mockVerifyState.mockReturnValue({ orgId: 'org-1', memberId: 'some-other-member', env: 'production', nonce: 'n', exp: 0 })
     const res = await GET(makeRequest('?code=abc&state=st'))
-    expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=pkce')
+    expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=state')
     expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 
-  it('redirects to reason=exchange and logs when exchangeCode throws', async () => {
+  it('redirects to reason=pkce when the cookie is missing, and deletes the cookie at its scoped path', async () => {
+    mockCookieGet.mockReturnValue(undefined)
+    const res = await GET(makeRequest('?code=abc&state=st'))
+    expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=pkce')
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
+    expect(mockExchangeCode).not.toHaveBeenCalled()
+  })
+
+  it('redirects to reason=exchange, logs, and deletes the cookie when exchangeCode throws', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     mockExchangeCode.mockRejectedValue(new Error('boom'))
     const res = await GET(makeRequest('?code=abc&state=st'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=exchange')
     expect(consoleSpy).toHaveBeenCalled()
-    consoleSpy.mockRestore()
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
   })
 
   it('redirects to reason=exchange when fetchIdentity throws', async () => {
@@ -128,7 +143,7 @@ describe('GET /api/integrations/salesforce/callback', () => {
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=error&reason=exchange')
   })
 
-  it('calls saveConnection with the mapped values and redirects to connected on success', async () => {
+  it('calls saveConnection with the mapped values, redirects to connected, and deletes the cookie at its scoped path', async () => {
     const res = await GET(makeRequest('?code=abc&state=st'))
 
     expect(mockSaveConnection).toHaveBeenCalledWith('org-1', 'mem-admin', {
@@ -141,18 +156,12 @@ describe('GET /api/integrations/salesforce/callback', () => {
       refreshToken: 'rt-1',
     })
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=connected')
-    expect(mockCookieDelete).toHaveBeenCalledWith('sf_pkce')
+    expect(mockCookieDelete).toHaveBeenCalledWith(EXPECTED_DELETE_ARGS)
   })
 
   it('redirects to connected_new_org when saveConnection reports orgChanged', async () => {
     mockSaveConnection.mockResolvedValue({ orgChanged: true })
     const res = await GET(makeRequest('?code=abc&state=st'))
     expect(res.headers.get('location')).toBe('https://app.test/settings?salesforce=connected_new_org')
-  })
-
-  it('a member never reaches exchangeCode', async () => {
-    mockResolveMember.mockResolvedValue(rep as never)
-    await GET(makeRequest('?code=abc&state=st'))
-    expect(mockExchangeCode).not.toHaveBeenCalled()
   })
 })

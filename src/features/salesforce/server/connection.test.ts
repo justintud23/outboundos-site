@@ -140,7 +140,7 @@ describe('getAccessToken', () => {
     conn.refreshTokenEnc = ''
   })
 
-  it('calls refreshAccessToken once, then serves the cached token on the second call', async () => {
+  it('calls refreshAccessToken once, then serves the cached token on the second call when the row is unchanged', async () => {
     // Encrypt a real refresh token so decryptToken succeeds inside getAccessToken.
     const { encryptToken } = await import('@/lib/crypto/token-cipher')
     p.salesforceConnection.findUnique.mockResolvedValue({ ...conn, refreshTokenEnc: encryptToken('rt-1') })
@@ -150,20 +150,43 @@ describe('getAccessToken', () => {
     const second = await getAccessToken('org-1')
 
     expect(mockRefreshAccessToken).toHaveBeenCalledTimes(1)
-    expect(first).toEqual({ accessToken: 'at-1', instanceUrl: 'https://my.salesforce.com', at: expect.any(Number) })
+    // Row is read on every call (cheap, unique-indexed) so a multi-instance
+    // deploy notices a reconnect/disconnect within one call, not up to 50 min.
+    expect(p.salesforceConnection.findUnique).toHaveBeenCalledTimes(2)
     expect(second).toEqual(first)
   })
 
-  it('refreshes again after invalidateAccessToken', async () => {
+  it('the returned object has no `at` field (only accessToken and instanceUrl)', async () => {
     const { encryptToken } = await import('@/lib/crypto/token-cipher')
     p.salesforceConnection.findUnique.mockResolvedValue({ ...conn, refreshTokenEnc: encryptToken('rt-1') })
     mockRefreshAccessToken.mockResolvedValue({ accessToken: 'at-1', instanceUrl: 'https://my.salesforce.com' })
 
-    await getAccessToken('org-1')
-    invalidateAccessToken('org-1')
+    const result = await getAccessToken('org-1')
+
+    expect(result).toEqual({ accessToken: 'at-1', instanceUrl: 'https://my.salesforce.com' })
+    expect(Object.keys(result).sort()).toEqual(['accessToken', 'instanceUrl'])
+  })
+
+  it('refreshes again when the row refreshTokenEnc changed (a reconnect happened elsewhere)', async () => {
+    const { encryptToken } = await import('@/lib/crypto/token-cipher')
+    p.salesforceConnection.findUnique.mockResolvedValueOnce({ ...conn, refreshTokenEnc: encryptToken('rt-1') })
+    mockRefreshAccessToken.mockResolvedValueOnce({ accessToken: 'at-1', instanceUrl: 'https://my.salesforce.com' })
     await getAccessToken('org-1')
 
+    // A reconnect (possibly on a different instance) replaced the stored refresh token.
+    p.salesforceConnection.findUnique.mockResolvedValueOnce({ ...conn, refreshTokenEnc: encryptToken('rt-2') })
+    mockRefreshAccessToken.mockResolvedValueOnce({ accessToken: 'at-2', instanceUrl: 'https://my.salesforce.com' })
+    const second = await getAccessToken('org-1')
+
     expect(mockRefreshAccessToken).toHaveBeenCalledTimes(2)
+    expect(second).toEqual({ accessToken: 'at-2', instanceUrl: 'https://my.salesforce.com' })
+  })
+
+  it('throws SalesforceAuthError when the row is gone (a disconnect happened elsewhere), without calling refreshAccessToken', async () => {
+    p.salesforceConnection.findUnique.mockResolvedValue(null)
+
+    await expect(getAccessToken('org-1')).rejects.toThrow(SalesforceAuthError)
+    expect(mockRefreshAccessToken).not.toHaveBeenCalled()
   })
 
   it('calls markNeedsReconnect and rethrows on a SalesforceAuthError', async () => {

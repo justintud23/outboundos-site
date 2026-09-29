@@ -42,7 +42,13 @@ describe('signState / verifyState', () => {
     const now = Date.now()
     const token = signState({ orgId: 'org-1', memberId: 'mem-1', env: 'production' }, now)
     const [body, sig] = token.split('.')
-    const tampered = body.slice(0, -1) + (body.at(-1) === 'a' ? 'b' : 'a')
+    // Tamper a character strictly inside the body (never the last one): every
+    // non-final base64url character encodes a full, un-truncated 6-bit group,
+    // so swapping its symbol is guaranteed to change the decoded bytes. (The
+    // *last* character of a base64url group can have padding bits the decoder
+    // ignores, which made an earlier version of this test flaky — about 6% of
+    // random tamperings of the last character decoded to the same bytes.)
+    const tampered = tamperNonFinalChar(body)
     expect(verifyState(`${tampered}.${sig}`, now)).toBeNull()
   })
 
@@ -51,7 +57,7 @@ describe('signState / verifyState', () => {
     const now = Date.now()
     const token = signState({ orgId: 'org-1', memberId: 'mem-1', env: 'production' }, now)
     const [body, sig] = token.split('.')
-    const tampered = sig.slice(0, -1) + (sig.at(-1) === 'a' ? 'b' : 'a')
+    const tampered = tamperNonFinalChar(sig)
     expect(verifyState(`${body}.${tampered}`, now)).toBeNull()
   })
 
@@ -60,7 +66,25 @@ describe('signState / verifyState', () => {
     expect(verifyState('not-a-real-token', Date.now())).toBeNull()
     expect(verifyState('', Date.now())).toBeNull()
   })
+
+  it('returns null for a token that does not split into exactly 2 segments', async () => {
+    const { signState, verifyState } = await import('./oauth')
+    const now = Date.now()
+    const token = signState({ orgId: 'org-1', memberId: 'mem-1', env: 'production' }, now)
+    // A naive `[body, sig] = token.split('.')` destructure silently ignores
+    // extra segments, so a trailing `.anything` would otherwise still verify.
+    expect(verifyState(`${token}.extra`, now)).toBeNull()
+    expect(verifyState('only-one-segment', now)).toBeNull()
+  })
 })
+
+/** Flips a non-final character (index 10) to a symbol guaranteed to differ, deterministically. */
+function tamperNonFinalChar(s: string): string {
+  const index = 10
+  const ch = s[index]
+  const replacement = ch === 'A' ? 'B' : 'A'
+  return s.slice(0, index) + replacement + s.slice(index + 1)
+}
 
 describe('createPkcePair', () => {
   it('the challenge equals base64url(sha256(verifier)), and the verifier is 43+ chars', async () => {
@@ -172,6 +196,22 @@ describe('fetchIdentity', () => {
       username: 'admin@example.com',
       email: 'admin@example.com',
     })
+  })
+
+  it('throws SalesforceApiError(502, IDENTITY_FAILED) when user_id or organization_id is missing', async () => {
+    const { fetchIdentity } = await import('./oauth')
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ username: 'admin@example.com', email: 'admin@example.com' }),
+    })
+
+    await expect(fetchIdentity('https://login.salesforce.com/id/00D/005', 'at-1')).rejects.toThrow(
+      SalesforceApiError,
+    )
+    await expect(fetchIdentity('https://login.salesforce.com/id/00D/005', 'at-1')).rejects.toThrow(
+      'Salesforce did not return the user or org id',
+    )
   })
 })
 

@@ -3,6 +3,11 @@ import { getSalesforceAppConfig, loginHostFor, salesforceCallbackUrl, type SfEnv
 import { SalesforceApiError, SalesforceAuthError } from './errors'
 
 export const SF_PKCE_COOKIE = 'sf_pkce'
+// Scoped to the callback path only — the connect route sets it here, and the
+// callback route must delete it with this exact path or the browser keeps
+// the original cookie (a delete with a mismatched path sets a *second*,
+// already-expired cookie rather than removing the live one).
+export const SF_PKCE_COOKIE_PATH = '/api/integrations/salesforce/callback'
 const STATE_TTL_MS = 10 * 60 * 1000
 
 export interface ConnectState { orgId: string; memberId: string; env: SfEnv; nonce: string; exp: number }
@@ -21,7 +26,9 @@ export function signState(s: { orgId: string; memberId: string; env: SfEnv }, no
 }
 
 export function verifyState(token: string, now = Date.now()): ConnectState | null {
-  const [body, sig] = token.split('.')
+  const parts = token.split('.')
+  if (parts.length !== 2) return null
+  const [body, sig] = parts
   if (!body || !sig) return null
   const expected = crypto.createHmac('sha256', stateKey()).update(body).digest()
   const given = Buffer.from(sig, 'base64url')
@@ -89,7 +96,10 @@ export async function fetchIdentity(idUrl: string, accessToken: string) {
   const res = await fetch(idUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
   const data = (await res.json().catch(() => ({}))) as Record<string, string>
   if (!res.ok) throw new SalesforceApiError(res.status, 'IDENTITY_FAILED', 'Could not read the Salesforce user')
-  return { userId: data.user_id ?? '', orgId: data.organization_id ?? '', username: data.username ?? '', email: data.email ?? null }
+  if (!data.user_id || !data.organization_id) {
+    throw new SalesforceApiError(502, 'IDENTITY_FAILED', 'Salesforce did not return the user or org id')
+  }
+  return { userId: data.user_id, orgId: data.organization_id, username: data.username ?? '', email: data.email ?? null }
 }
 
 export async function refreshAccessToken(loginHost: string, refreshToken: string) {

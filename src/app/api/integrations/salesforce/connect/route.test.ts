@@ -7,6 +7,7 @@ vi.mock('@/features/salesforce/server/oauth', () => ({
   signState: vi.fn(),
   buildAuthorizeUrl: vi.fn(),
   SF_PKCE_COOKIE: 'sf_pkce',
+  SF_PKCE_COOKIE_PATH: '/api/integrations/salesforce/callback',
 }))
 
 vi.mock('@/features/salesforce/config', () => ({
@@ -95,7 +96,9 @@ describe('GET /api/integrations/salesforce/connect', () => {
 
     const setCookie = res.headers.get('set-cookie') ?? ''
     expect(setCookie).toContain('sf_pkce=the-verifier')
-    expect(setCookie).toContain('Path=/api/integrations/salesforce')
+    // Scoped to the callback path exactly, not the wider /api/integrations/salesforce
+    // prefix — the callback route deletes with this same path (see Important #1).
+    expect(setCookie).toContain('Path=/api/integrations/salesforce/callback')
     expect(setCookie).toContain('HttpOnly')
     expect(setCookie).toContain('Secure')
     expect(setCookie.toLowerCase()).toContain('samesite=lax')

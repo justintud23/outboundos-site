@@ -6,7 +6,13 @@ import { refreshAccessToken } from './oauth'
 import { SalesforceAuthError } from './errors'
 
 const TOKEN_TTL_MS = 50 * 60 * 1000 // Salesforce sessions last >= 2h by default; refresh well before.
-const tokenCache = new Map<string, { accessToken: string; instanceUrl: string; at: number }>()
+// Keyed by organizationId. `refreshTokenEnc` pins the entry to the connection
+// row it was minted from: on a multi-instance deploy, another instance's
+// reconnect (new refresh token) or disconnect (row gone) is invisible to this
+// process's cache, so every read is validated against the current row rather
+// than trusted for up to TOKEN_TTL_MS.
+interface TokenCacheEntry { accessToken: string; instanceUrl: string; refreshTokenEnc: string; at: number }
+const tokenCache = new Map<string, TokenCacheEntry>()
 
 export const CLEARED_LEAD_LINK = {
   salesforceId: null, salesforceType: null, salesforceAccountId: null,
@@ -50,15 +56,27 @@ export function invalidateAccessToken(organizationId: string): void {
 }
 
 export async function getAccessToken(organizationId: string): Promise<{ accessToken: string; instanceUrl: string }> {
-  const cached = tokenCache.get(organizationId)
-  if (cached && Date.now() - cached.at < TOKEN_TTL_MS) return cached
   const conn = await getConnection(organizationId)
-  if (!conn) throw new SalesforceAuthError('Salesforce is not connected.')
+  if (!conn) {
+    tokenCache.delete(organizationId)
+    throw new SalesforceAuthError('Salesforce is not connected.')
+  }
+
+  const cached = tokenCache.get(organizationId)
+  if (cached && cached.refreshTokenEnc === conn.refreshTokenEnc && Date.now() - cached.at < TOKEN_TTL_MS) {
+    return { accessToken: cached.accessToken, instanceUrl: cached.instanceUrl }
+  }
+
   try {
     const t = await refreshAccessToken(conn.loginHost, decryptToken(conn.refreshTokenEnc))
-    const entry = { accessToken: t.accessToken, instanceUrl: t.instanceUrl || conn.instanceUrl, at: Date.now() }
+    const entry: TokenCacheEntry = {
+      accessToken: t.accessToken,
+      instanceUrl: t.instanceUrl || conn.instanceUrl,
+      refreshTokenEnc: conn.refreshTokenEnc,
+      at: Date.now(),
+    }
     tokenCache.set(organizationId, entry)
-    return entry
+    return { accessToken: entry.accessToken, instanceUrl: entry.instanceUrl }
   } catch (err) {
     if (err instanceof SalesforceAuthError) await markNeedsReconnect(organizationId, err.message)
     throw err

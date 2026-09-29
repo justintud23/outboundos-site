@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { resolveMember } from '@/lib/auth/resolve-member'
 import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 import { getSalesforceAppConfig } from '@/features/salesforce/config'
-import { createPkcePair, signState, buildAuthorizeUrl, SF_PKCE_COOKIE } from '@/features/salesforce/server/oauth'
+import { createPkcePair, signState, buildAuthorizeUrl, SF_PKCE_COOKIE, SF_PKCE_COOKIE_PATH } from '@/features/salesforce/server/oauth'
 import type { SfEnv } from '@/features/salesforce/config'
 
 function parseEnv(value: string | null): SfEnv {
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     secure: true,
     sameSite: 'lax',
     maxAge: 600,
-    path: '/api/integrations/salesforce',
+    path: SF_PKCE_COOKIE_PATH,
   })
   return res
 }
