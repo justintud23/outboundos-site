@@ -334,7 +334,7 @@ Organizations without a business profile use the original generic AI scoring (ba
 
 **Roles & Visibility**
 
-Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members. Connecting Microsoft 365 (Settings → Connect Microsoft 365) is admin-only.
+Reps appear in Settings → Team after they sign in once. Admin or member status comes from your Clerk organization role (Clerk "Admin" → admin here). Members can access Settings → My settings (to set their escalation email and sender names) and see the Team list read-only; sending, business profile, mailboxes, deliverability, templates, and team-wide options show as read-only or "Ask an admin…" for members. Connecting Microsoft 365 (Settings → Connect Microsoft 365) is admin-only. Members do see the Salesforce status card in Settings (connection status and recent sync counts, read-only); connecting, disconnecting, changing Salesforce settings, and retrying failed jobs are admin-only.
 
 All team members can view every campaign, lead, sequence, and reply, but reps can only change work they own. Unassigned items and admin-only settings are restricted to admins.
 
@@ -371,6 +371,64 @@ Additionally, if **Copy admin on reps' replies** is on (Settings → Team, on by
 **Views & Preferences**
 
 Use the **Mine / Team toggle** on Leads, Pipeline, Campaigns, Sequences, Drafts, Inbox, Replies, and Dashboard to switch between your work and the full team view. Your last choice is remembered. Reps default to Mine; admins default to Team.
+
+---
+
+## Salesforce
+
+OutboundOS can connect to a Salesforce org to check leads against Salesforce before sending, import leads and contacts from Salesforce list views, and log sent emails and replies back to Salesforce as activity.
+
+### Setup, once per deployment
+
+1. In a Salesforce org you control, go to Setup → External Client App Manager → New.
+2. Enable OAuth and add the scopes `api`, `refresh_token`, and `id`.
+3. Set the callback URL to `https://<your-app>/api/integrations/salesforce/callback`.
+4. Require PKCE.
+5. Set `SALESFORCE_CLIENT_ID` and `SALESFORCE_CLIENT_SECRET` in Vercel.
+6. Generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -base64 32` and set it in Vercel (it also encrypts stored Salesforce refresh tokens).
+
+If any of these are missing, the Salesforce card in Settings just says "Salesforce isn't configured on this server," and nothing else changes.
+
+### Connecting
+
+- An admin connects from Settings → Salesforce → Connect Salesforce, choosing Production or Sandbox.
+- Connect with a Salesforce user that has API access, ideally a dedicated integration user rather than a real rep's login.
+- Ask your Salesforce admin two things first: which edition you're on (Enterprise and Unlimited include API access; Professional may need the API add-on), and to approve the OutboundOS connected app when prompted.
+- The OAuth flow uses PKCE. The code verifier is held in a cookie scoped to the callback path (`/api/integrations/salesforce/callback`) only.
+- Reconnecting to a different Salesforce org than the one already connected clears every lead's existing Salesforce link (id, type, account, and check status), so nothing keeps pointing at the old org's records.
+
+### Importing
+
+- From the Leads page, any member can open Import from Salesforce, pick Leads or Contacts and a Salesforce list view, and preview the first rows before importing.
+- Up to 2,000 records import per run. If the list view has more, the dialog warns that only the first 2,000 will be imported.
+- Records are skipped and counted separately by reason: customer, open opportunity, opted out, converted lead, no email, or invalid email.
+- Re-running the same import only adds leads that don't already exist. Existing leads matched by email are updated and linked instead of duplicated.
+- Admins get an extra option, "Use Salesforce owners where they match a rep," which assigns each imported lead to the team member whose email matches the Salesforce record's owner. Otherwise, and always for members, the importing user becomes the owner.
+- Importing is refused with a clear message while Salesforce isn't connected, needs reconnecting, or is paused for the day under the API limit below.
+
+### Activity logging
+
+- Once a lead is linked to Salesforce, every send and every reply is logged as a completed Salesforce Task (subject, body, activity date, and owner when it can be resolved). Turn this off per org with the "Log emails and replies to Salesforce" setting.
+- A reply from a lead that isn't linked to Salesforce yet creates a new Salesforce Lead first (matching an existing Contact or Lead by email when one exists), then logs the reply against it.
+- Failed logging jobs retry automatically: 5 minutes, 30 minutes, 2 hours, 12 hours, then 12 hours again, and are marked failed after 6 attempts.
+- Failed jobs show up in Settings → Salesforce with a Retry button, visible to admins.
+- If the Salesforce record a lead is linked to gets deleted, the next reply from that lead recreates the Salesforce Lead and re-logs its send and reply history against the new record.
+
+### Pre-send check
+
+Before OutboundOS emails a lead in a connected org, it checks Salesforce and holds or blocks the send based on the org's rules: opted out, a converted lead, a customer (by the account types configured in Settings → Salesforce), or, optionally, an open opportunity.
+
+- A check is cached for 24 hours. A cached check that recent decides the send without a new Salesforce call.
+- If Salesforce can't be reached, a cached check less than 7 days old is still used to decide.
+- Otherwise the send is held, not blocked, and retried about every 10 minutes until Salesforce answers or a still-usable cached check exists.
+- If sends stay held for more than 24 hours, admins get one alert email a day until checks start succeeding again.
+- The same hold-and-retry behavior applies while the connection needs reconnecting, not only when a single lookup fails.
+- An admin can clear a block from the lead page with "Allow anyway." This doesn't restart a sequence that already stopped because of the block; the lead has to be re-enrolled to keep sending.
+
+### Limits
+
+- Every Salesforce request times out after 10 seconds.
+- Salesforce work (checks, imports, activity logging) pauses once the org has used 80% of its daily Salesforce API limit, and resumes automatically after midnight UTC.
 
 ---
 
