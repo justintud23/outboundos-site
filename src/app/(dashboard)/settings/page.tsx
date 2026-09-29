@@ -7,6 +7,7 @@ import { getSendingSettings } from '@/features/settings/server/sending-settings'
 import { getBusinessProfile } from '@/features/business-profile/server/profile'
 import { listMembers } from '@/features/team/server/assign-owner'
 import { getTeam } from '@/features/team/server/team-settings'
+import { getSalesforceStatus } from '@/features/salesforce/server/settings'
 
 export default async function SettingsPage() {
   const ctx = await resolveMember()
@@ -16,12 +17,13 @@ export default async function SettingsPage() {
   }
 
   const { org, member, isAdmin } = ctx
-  const [mailboxes, sendingSettings, businessProfile, members, team] = await Promise.all([
+  const [mailboxes, sendingSettings, businessProfile, members, team, salesforceStatus] = await Promise.all([
     isAdmin ? getMailboxes(org.id) : Promise.resolve([]),
     isAdmin ? getSendingSettings(org.id) : Promise.resolve(null),
     isAdmin ? getBusinessProfile(org.id) : Promise.resolve(null),
     isAdmin ? listMembers(org.id) : Promise.resolve([]),
     getTeam(org.id),
+    getSalesforceStatus(org.id),
   ])
 
   return (
@@ -35,6 +37,7 @@ export default async function SettingsPage() {
           isAdmin={isAdmin}
           members={members}
           team={team}
+          salesforceStatus={salesforceStatus}
           currentMember={{
             id: member.id,
             escalationEmail: member.escalationEmail,

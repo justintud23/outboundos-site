@@ -1,0 +1,163 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: {
+    salesforceSyncJob: { count: vi.fn(), findMany: vi.fn() },
+    salesforceConnection: { updateMany: vi.fn() },
+  },
+}))
+
+vi.mock('./connection', () => ({ getConnection: vi.fn() }))
+vi.mock('../config', () => ({ getSalesforceAppConfig: vi.fn() }))
+
+import { prisma } from '@/lib/db/prisma'
+import { getConnection } from './connection'
+import { getSalesforceAppConfig } from '../config'
+import { getSalesforceStatus, updateSalesforceSettings } from './settings'
+
+type Fn = ReturnType<typeof vi.fn>
+const p = prisma as unknown as {
+  salesforceSyncJob: { count: Fn; findMany: Fn }
+  salesforceConnection: { updateMany: Fn }
+}
+const mockGetConnection = getConnection as unknown as Fn
+const mockGetAppConfig = getSalesforceAppConfig as unknown as Fn
+
+const baseConn = {
+  sfUsername: 'admin@example.com',
+  instanceUrl: 'https://my.salesforce.com',
+  status: 'CONNECTED' as const,
+  lastError: null,
+  rateLimitedUntil: null,
+  customerAccountTypes: ['Customer', 'Key Account'],
+  blockOpenOpportunities: true,
+  logActivity: true,
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockGetAppConfig.mockReturnValue({ clientId: 'id', clientSecret: 'secret' })
+  p.salesforceSyncJob.count.mockResolvedValue(0)
+  p.salesforceSyncJob.findMany.mockResolvedValue([])
+  p.salesforceConnection.updateMany.mockResolvedValue({ count: 1 })
+})
+
+describe('getSalesforceStatus', () => {
+  it('reports configured: false when Salesforce app config is missing', async () => {
+    mockGetAppConfig.mockReturnValue(null)
+    mockGetConnection.mockResolvedValue(null)
+
+    const status = await getSalesforceStatus('org-1')
+
+    expect(status.configured).toBe(false)
+  })
+
+  it('returns not-connected defaults when there is no connection row', async () => {
+    mockGetConnection.mockResolvedValue(null)
+
+    const status = await getSalesforceStatus('org-1')
+
+    expect(status.connected).toBe(false)
+    expect(status.status).toBeNull()
+    expect(status.username).toBeNull()
+    expect(status.customerAccountTypes).toEqual(['Customer'])
+    expect(status.blockOpenOpportunities).toBe(true)
+    expect(status.logActivity).toBe(true)
+    expect(status.counts).toEqual({ synced24h: 0, pending: 0, failed: 0 })
+    expect(status.recentFailures).toEqual([])
+    // No connection means we never hit the sync job table.
+    expect(p.salesforceSyncJob.count).not.toHaveBeenCalled()
+    expect(p.salesforceSyncJob.findMany).not.toHaveBeenCalled()
+  })
+
+  it('queries synced24h as DONE jobs updated within the last 24h, pending as PENDING, and failed as FAILED', async () => {
+    mockGetConnection.mockResolvedValue(baseConn)
+    p.salesforceSyncJob.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2).mockResolvedValueOnce(1)
+
+    const status = await getSalesforceStatus('org-1')
+
+    expect(status.counts).toEqual({ synced24h: 5, pending: 2, failed: 1 })
+
+    const doneCall = p.salesforceSyncJob.count.mock.calls[0][0]
+    expect(doneCall.where.organizationId).toBe('org-1')
+    expect(doneCall.where.status).toBe('DONE')
+    expect(doneCall.where.updatedAt.gte).toBeInstanceOf(Date)
+
+    const pendingCall = p.salesforceSyncJob.count.mock.calls[1][0]
+    expect(pendingCall.where).toEqual({ organizationId: 'org-1', status: 'PENDING' })
+
+    const failedCall = p.salesforceSyncJob.count.mock.calls[2][0]
+    expect(failedCall.where).toEqual({ organizationId: 'org-1', status: 'FAILED' })
+  })
+
+  it('returns the last 10 FAILED jobs ordered by updatedAt desc with the lead email', async () => {
+    mockGetConnection.mockResolvedValue(baseConn)
+    const updatedAt = new Date('2026-09-28T12:00:00.000Z')
+    p.salesforceSyncJob.findMany.mockResolvedValue([
+      { id: 'job-1', type: 'LOG_SEND', lastError: 'boom', updatedAt, lead: { email: 'a@b.com' } },
+    ])
+
+    const status = await getSalesforceStatus('org-1')
+
+    const call = p.salesforceSyncJob.findMany.mock.calls[0][0]
+    expect(call.where).toEqual({ organizationId: 'org-1', status: 'FAILED' })
+    expect(call.orderBy).toEqual({ updatedAt: 'desc' })
+    expect(call.take).toBe(10)
+
+    expect(status.recentFailures).toEqual([
+      { id: 'job-1', type: 'LOG_SEND', leadEmail: 'a@b.com', lastError: 'boom', updatedAt: updatedAt.toISOString() },
+    ])
+  })
+
+  it('maps connection fields onto the DTO when connected', async () => {
+    mockGetConnection.mockResolvedValue(baseConn)
+
+    const status = await getSalesforceStatus('org-1')
+
+    expect(status.connected).toBe(true)
+    expect(status.status).toBe('CONNECTED')
+    expect(status.username).toBe('admin@example.com')
+    expect(status.instanceUrl).toBe('https://my.salesforce.com')
+    expect(status.customerAccountTypes).toEqual(['Customer', 'Key Account'])
+  })
+
+  it('serializes rateLimitedUntil to an ISO string when present', async () => {
+    const rateLimitedUntil = new Date('2026-09-30T00:00:00.000Z')
+    mockGetConnection.mockResolvedValue({ ...baseConn, status: 'RATE_LIMITED', rateLimitedUntil })
+
+    const status = await getSalesforceStatus('org-1')
+
+    expect(status.rateLimitedUntil).toBe(rateLimitedUntil.toISOString())
+  })
+})
+
+describe('updateSalesforceSettings', () => {
+  it('returns false when there is no connection row (updateMany matches nothing)', async () => {
+    p.salesforceConnection.updateMany.mockResolvedValue({ count: 0 })
+
+    const ok = await updateSalesforceSettings('org-1', { logActivity: false })
+
+    expect(ok).toBe(false)
+  })
+
+  it('returns true and updates only the given keys', async () => {
+    p.salesforceConnection.updateMany.mockResolvedValue({ count: 1 })
+
+    const ok = await updateSalesforceSettings('org-1', { logActivity: false })
+
+    expect(ok).toBe(true)
+    const call = p.salesforceConnection.updateMany.mock.calls[0][0]
+    expect(call.where).toEqual({ organizationId: 'org-1' })
+    expect(call.data).toEqual({ logActivity: false })
+  })
+
+  it('passes through customerAccountTypes and blockOpenOpportunities together', async () => {
+    await updateSalesforceSettings('org-1', {
+      customerAccountTypes: ['Customer', 'Key Account'],
+      blockOpenOpportunities: false,
+    })
+
+    const call = p.salesforceConnection.updateMany.mock.calls[0][0]
+    expect(call.data).toEqual({ customerAccountTypes: ['Customer', 'Key Account'], blockOpenOpportunities: false })
+  })
+})

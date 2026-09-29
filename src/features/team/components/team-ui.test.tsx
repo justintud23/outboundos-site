@@ -4,12 +4,17 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const openOrganizationProfile = vi.fn()
 vi.mock('@clerk/nextjs', () => ({ useClerk: () => ({ openOrganizationProfile }) }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 import { TeamSection } from './team-section'
 import { MySettings } from './my-settings'
 import { OwnershipBanner } from './ownership-banner'
 import { SettingsClient } from '@/app/(dashboard)/settings/settings-client'
 import type { TeamDTO } from '@/features/team/server/team-settings'
+import type { SalesforceStatusDTO } from '@/features/salesforce/server/settings'
 
 const fetchMock = vi.fn()
 
@@ -192,6 +197,21 @@ describe('OwnershipBanner', () => {
 describe('SettingsClient — non-admin', () => {
   const currentMember = { id: 'm-2', escalationEmail: 'bob-alerts@x.com', senderFirstName: null, senderLastName: null }
 
+  const salesforceStatus: SalesforceStatusDTO = {
+    configured: false,
+    connected: false,
+    status: null,
+    username: null,
+    instanceUrl: null,
+    lastError: null,
+    rateLimitedUntil: null,
+    customerAccountTypes: ['Customer'],
+    blockOpenOpportunities: true,
+    logActivity: true,
+    counts: { synced24h: 0, pending: 0, failed: 0 },
+    recentFailures: [],
+  }
+
   it('shows the sending, business-profile and mailbox sections read-only or hidden, with no errors', () => {
     render(
       <SettingsClient
@@ -201,6 +221,7 @@ describe('SettingsClient — non-admin', () => {
         isAdmin={false}
         members={[]}
         team={team}
+        salesforceStatus={salesforceStatus}
         currentMember={currentMember}
       />,
     )
