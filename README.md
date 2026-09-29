@@ -395,14 +395,16 @@ If any of these are missing, the Salesforce card in Settings just says "Salesfor
 - Connect with a Salesforce user that has API access, ideally a dedicated integration user rather than a real rep's login.
 - Ask your Salesforce admin two things first: which edition you're on (Enterprise and Unlimited include API access; Professional may need the API add-on), and to approve the OutboundOS connected app when prompted.
 - The OAuth flow uses PKCE. The code verifier is held in a cookie scoped to the callback path (`/api/integrations/salesforce/callback`) only.
+- Reconnect sends a sandbox connection back to the sandbox login page, and a production connection to the production one.
 - Reconnecting to a different Salesforce org than the one already connected clears every lead's existing Salesforce link (id, type, account, and check status), so nothing keeps pointing at the old org's records.
 
 ### Importing
 
 - From the Leads page, any member can open Import from Salesforce, pick Leads or Contacts and a Salesforce list view, and preview the first rows before importing.
 - Up to 2,000 records import per run. If the list view has more, the dialog warns that only the first 2,000 will be imported.
+- Every email in the list view is checked against all of Salesforce, not just the list view itself. A Lead that looks clear in a Lead list view is still skipped if the same email is, for example, a Contact on a customer account. The result of that full check is what gets cached for the lead.
 - Records are skipped and counted separately by reason: customer, open opportunity, opted out, converted lead, no email, or invalid email.
-- Re-running the same import only adds leads that don't already exist. Existing leads matched by email are updated and linked instead of duplicated.
+- Re-running the same import only adds leads that don't already exist. Existing leads matched by email (ignoring case) are updated and linked instead of duplicated.
 - Admins get an extra option, "Use Salesforce owners where they match a rep," which assigns each imported lead to the team member whose email matches the Salesforce record's owner. Otherwise, and always for members, the importing user becomes the owner.
 - Importing is refused with a clear message while Salesforce isn't connected, needs reconnecting, or is paused for the day under the API limit below.
 
@@ -421,13 +423,15 @@ Before OutboundOS emails a lead in a connected org, it checks Salesforce and hol
 - A check is cached for 24 hours. A cached check that recent decides the send without a new Salesforce call.
 - If Salesforce can't be reached, a cached check less than 7 days old is still used to decide.
 - Otherwise the send is held, not blocked, and retried about every 10 minutes until Salesforce answers or a still-usable cached check exists.
+- After a failed lookup, checks for that org pause for about a minute and go straight to the cached-check-or-hold rule above, so one org's Salesforce outage doesn't slow sending for anyone else.
+- Changing the customer rules (the customer account types or the open-opportunity setting) clears every lead's cached check, so each lead is re-checked against the new rules on its next send. Until that re-check succeeds, those leads are held if Salesforce can't be reached.
 - If sends stay held for more than 24 hours, admins get one alert email a day until checks start succeeding again.
 - The same hold-and-retry behavior applies while the connection needs reconnecting, not only when a single lookup fails.
 - An admin can clear a block from the lead page with "Allow anyway." This doesn't restart a sequence that already stopped because of the block; the lead has to be re-enrolled to keep sending.
 
 ### Limits
 
-- Every Salesforce request times out after 10 seconds.
+- Every Salesforce request, including sign-in and token refresh, times out after 10 seconds.
 - Salesforce work (checks, imports, activity logging) pauses once the org has used 80% of its daily Salesforce API limit, and resumes automatically after midnight UTC.
 
 ---
