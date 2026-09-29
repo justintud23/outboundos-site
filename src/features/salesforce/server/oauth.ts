@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { getSalesforceAppConfig, loginHostFor, salesforceCallbackUrl, type SfEnv } from '../config'
+import { SF_FETCH_TIMEOUT_MS, getSalesforceAppConfig, loginHostFor, salesforceCallbackUrl, type SfEnv } from '../config'
 import { SalesforceApiError, SalesforceAuthError } from './errors'
 
 export const SF_PKCE_COOKIE = 'sf_pkce'
@@ -75,6 +75,7 @@ async function tokenRequest(host: string, params: Record<string, string>) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
+    signal: AbortSignal.timeout(SF_FETCH_TIMEOUT_MS),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, string>
   return { ok: res.ok, status: res.status, data }
@@ -93,7 +94,10 @@ export async function exchangeCode({ env, code, verifier }: { env: SfEnv; code: 
 }
 
 export async function fetchIdentity(idUrl: string, accessToken: string) {
-  const res = await fetch(idUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+  const res = await fetch(idUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(SF_FETCH_TIMEOUT_MS),
+  })
   const data = (await res.json().catch(() => ({}))) as Record<string, string>
   if (!res.ok) throw new SalesforceApiError(res.status, 'IDENTITY_FAILED', 'Could not read the Salesforce user')
   if (!data.user_id || !data.organization_id) {
@@ -119,5 +123,6 @@ export async function revokeToken(loginHost: string, token: string): Promise<voi
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token }).toString(),
+    signal: AbortSignal.timeout(SF_FETCH_TIMEOUT_MS),
   }).catch(() => undefined)
 }

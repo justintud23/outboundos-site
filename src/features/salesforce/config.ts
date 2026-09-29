@@ -1,4 +1,6 @@
 export const SF_API_VERSION = 'v62.0'
+/** Timeout for every outbound Salesforce fetch (REST and OAuth). */
+export const SF_FETCH_TIMEOUT_MS = 10_000
 export type SfEnv = 'production' | 'sandbox'
 
 export function getSalesforceAppConfig(): { clientId: string; clientSecret: string } | null {

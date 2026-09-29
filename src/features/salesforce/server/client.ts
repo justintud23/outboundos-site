@@ -1,9 +1,9 @@
-import { SF_API_VERSION } from '../config'
+import { SF_API_VERSION, SF_FETCH_TIMEOUT_MS } from '../config'
 import { getAccessToken, invalidateAccessToken, markNeedsReconnect, markRateLimited } from './connection'
 import { SalesforceApiError, SalesforceAuthError, SalesforceRateLimitError } from './errors'
 
 const RATE_LIMIT_THRESHOLD = 0.8
-export const SF_FETCH_TIMEOUT_MS = 10_000
+export { SF_FETCH_TIMEOUT_MS }
 
 export function soqlString(v: string): string {
   const escaped = v.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')

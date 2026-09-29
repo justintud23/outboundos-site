@@ -189,6 +189,7 @@ describe('fetchIdentity', () => {
 
     expect(mockFetch).toHaveBeenCalledWith('https://login.salesforce.com/id/00D/005', {
       headers: { Authorization: 'Bearer at-1' },
+      signal: expect.any(AbortSignal),
     })
     expect(result).toEqual({
       userId: '005xx',
@@ -239,5 +240,37 @@ describe('refreshAccessToken', () => {
 
     const result = await refreshAccessToken('https://login.salesforce.com', 'rt-1')
     expect(result).toEqual({ accessToken: 'at-2', instanceUrl: 'https://my.salesforce.com' })
+  })
+})
+
+describe('OAuth fetch timeouts (I1)', () => {
+  const okJson = (body: Record<string, string>) => ({ ok: true, status: 200, json: async () => body })
+
+  it('the token exchange passes an AbortSignal', async () => {
+    const { exchangeCode } = await import('./oauth')
+    mockFetch.mockResolvedValueOnce(okJson({ access_token: 'at', refresh_token: 'rt', instance_url: 'https://x.my.salesforce.com', id: 'https://login.salesforce.com/id/00D/005' }))
+    await exchangeCode({ env: 'production', code: 'c', verifier: 'v' })
+    expect(mockFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('the token refresh passes an AbortSignal', async () => {
+    const { refreshAccessToken } = await import('./oauth')
+    mockFetch.mockResolvedValueOnce(okJson({ access_token: 'at', instance_url: 'https://x.my.salesforce.com' }))
+    await refreshAccessToken('https://login.salesforce.com', 'rt')
+    expect(mockFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('the identity fetch passes an AbortSignal', async () => {
+    const { fetchIdentity } = await import('./oauth')
+    mockFetch.mockResolvedValueOnce(okJson({ user_id: '005', organization_id: '00D', username: 'u@x.com' }))
+    await fetchIdentity('https://login.salesforce.com/id/00D/005', 'at')
+    expect(mockFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('the revoke passes an AbortSignal', async () => {
+    const { revokeToken } = await import('./oauth')
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200 })
+    await revokeToken('https://login.salesforce.com', 'rt')
+    expect(mockFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
   })
 })
