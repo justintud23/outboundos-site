@@ -1,18 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: vi.fn(),
-}))
+vi.mock('@/lib/auth/resolve-member', () => ({ resolveMember: vi.fn() }))
 
 const mockCookieGet = vi.fn()
 const mockCookieDelete = vi.fn()
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: mockCookieGet, delete: mockCookieDelete }),
-}))
-
-vi.mock('@/lib/auth/resolve-organization', () => ({
-  resolveOrganization: vi.fn(),
 }))
 
 const { actualSaveTenant } = vi.hoisted(() => ({
@@ -28,16 +22,16 @@ vi.mock('@/features/integrations/server/microsoft', async (importOriginal) => {
   }
 })
 
-import { auth } from '@clerk/nextjs/server'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
+import { resolveMember } from '@/lib/auth/resolve-member'
 import { saveTenant } from '@/features/integrations/server/microsoft'
 import { GET } from './route'
 
-const mockAuth = auth as unknown as ReturnType<typeof vi.fn>
-const mockResolveOrganization = resolveOrganization as unknown as ReturnType<typeof vi.fn>
+const mockResolveMember = resolveMember as unknown as ReturnType<typeof vi.fn>
 const mockSaveTenant = saveTenant as unknown as ReturnType<typeof vi.fn>
 
 const fakeOrg = { id: 'internal-org-id', clerkId: 'clerk-org-id' }
+const admin = { org: fakeOrg, member: { id: 'm-admin', clerkUserId: 'user_admin' }, isAdmin: true }
+const rep = { org: fakeOrg, member: { id: 'm-rep', clerkUserId: 'user_rep' }, isAdmin: false }
 
 function makeRequest(query: string): Request {
   return new Request(`https://app.test/api/integrations/microsoft/callback${query}`)
@@ -45,11 +39,26 @@ function makeRequest(query: string): Request {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockAuth.mockResolvedValue({ orgId: 'clerk-org-id' })
-  mockResolveOrganization.mockResolvedValue(fakeOrg)
+  mockResolveMember.mockResolvedValue(admin as never)
 })
 
 describe('GET /api/integrations/microsoft/callback', () => {
+  it('403 without an active org', async () => {
+    mockResolveMember.mockResolvedValue(null)
+    const res = await GET(makeRequest('?state=st8&admin_consent=True&tenant=72f988bf-86f1-41af-91ab-2d7cd011db47'))
+    expect(res.status).toBe(403)
+    expect(mockSaveTenant).not.toHaveBeenCalled()
+  })
+
+  it('403 ADMIN_ONLY for a non-admin member, and does not save the tenant', async () => {
+    mockResolveMember.mockResolvedValue(rep as never)
+    mockCookieGet.mockReturnValue({ value: 'st8' })
+    const res = await GET(makeRequest('?state=st8&admin_consent=True&tenant=72f988bf-86f1-41af-91ab-2d7cd011db47'))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('ADMIN_ONLY')
+    expect(mockSaveTenant).not.toHaveBeenCalled()
+  })
+
   it('redirects to state_mismatch and does not save tenant when state does not match the cookie', async () => {
     mockCookieGet.mockReturnValue({ value: 'expected-state' })
 

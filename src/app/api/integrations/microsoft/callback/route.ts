@@ -1,16 +1,18 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { resolveOrganization } from '@/lib/auth/resolve-organization'
 import { saveTenant, CONNECT_STATE_COOKIE, TenantMismatchError } from '@/features/integrations/server/microsoft'
+import { resolveMember } from '@/lib/auth/resolve-member'
+import { denyUnlessAdmin } from '@/lib/auth/permission-response'
 
 function settingsRedirect(request: Request, status: string) {
   return NextResponse.redirect(new URL(`/settings?microsoft=${status}`, request.url))
 }
 
 export async function GET(request: Request) {
-  const { orgId } = await auth()
-  if (!orgId) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const ctx = await resolveMember()
+  if (!ctx) return NextResponse.json({ error: 'No active organization.' }, { status: 403 })
+  const denied = denyUnlessAdmin(ctx)
+  if (denied) return denied
 
   const params = new URL(request.url).searchParams
   const jar = await cookies()
@@ -24,8 +26,7 @@ export async function GET(request: Request) {
   if (!tenant) return settingsRedirect(request, 'denied')
 
   try {
-    const org = await resolveOrganization(orgId)
-    await saveTenant(org.id, tenant)
+    await saveTenant(ctx.org.id, tenant)
   } catch (err) {
     console.error('[microsoft callback]', err)
     if (err instanceof TenantMismatchError) return settingsRedirect(request, 'tenant_mismatch')
