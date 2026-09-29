@@ -261,4 +261,31 @@ describe('GET /api/cron/sequence-runner', () => {
     expect(mockProcessSalesforceJobs).not.toHaveBeenCalled()
     expect((await res.json()).salesforce).toBeNull()
   })
+
+  it('skips Salesforce jobs once fewer than 10s of headroom remain, even though the 25s budget is not yet spent', async () => {
+    const t0 = 1_000_000
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(t0) // startedAt
+      .mockReturnValue(t0 + 16_000) // elapsed 16s: under the 25s budget, but only 9s of headroom left
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+
+    expect(mockProcessSalesforceJobs).not.toHaveBeenCalled()
+    expect((await res.json()).salesforce).toBeNull()
+  })
+
+  it('starts Salesforce jobs once at least 10s of headroom remains', async () => {
+    const t0 = 1_000_000
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(t0) // startedAt
+      .mockReturnValue(t0 + 14_000) // elapsed 14s: 11s of headroom left
+    mockUpdateMany.mockResolvedValue({ count: 0 })
+    mockFindMany.mockResolvedValue([])
+
+    await GET(makeRequest(`Bearer ${CRON_SECRET}`))
+
+    expect(mockProcessSalesforceJobs).toHaveBeenCalledWith({ budgetMs: 5_000 })
+  })
 })

@@ -103,8 +103,10 @@ export async function GET(request: Request) {
 
     // 4. Run due Salesforce sync jobs (log sends/replies as Tasks, create+link
     //    leads) with whatever's left of this tick's time. Never let a
-    //    Salesforce failure fail the whole cron run.
-    if (Date.now() - startedAt < SEQUENCE_RUNNER_BUDGET_MS) {
+    //    Salesforce failure fail the whole cron run. Require at least 10s of
+    //    headroom so a job's own network calls can't push the tick past
+    //    cron-job.org's ~30s timeout (or maxDuration) and skip the heartbeat.
+    if (Date.now() - startedAt < SEQUENCE_RUNNER_BUDGET_MS - 10_000) {
       try {
         salesforce = await processSalesforceJobs({ budgetMs: 5_000 })
       } catch (err) {

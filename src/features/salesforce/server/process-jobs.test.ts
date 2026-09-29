@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    salesforceSyncJob: { findMany: vi.fn(), update: vi.fn(), createMany: vi.fn() },
+    salesforceSyncJob: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), createMany: vi.fn(), create: vi.fn() },
     lead: { findUnique: vi.fn(), updateMany: vi.fn() },
     outboundMessage: { findMany: vi.fn() },
     inboundReply: { findMany: vi.fn() },
@@ -10,7 +10,6 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 vi.mock('./connection', () => ({
   releaseExpiredRateLimits: vi.fn(),
-  CLEARED_LEAD_LINK: { salesforceId: null, salesforceType: null, salesforceAccountId: null },
 }))
 vi.mock('./client', () => ({ getSalesforceClient: vi.fn() }))
 vi.mock('./owner-match', () => ({ resolveSfUserId: vi.fn() }))
@@ -21,13 +20,13 @@ import { releaseExpiredRateLimits } from './connection'
 import { getSalesforceClient } from './client'
 import { resolveSfUserId } from './owner-match'
 import { fetchPeople } from './records'
-import { SalesforceApiError, SalesforceAuthError } from './errors'
+import { SalesforceApiError, SalesforceAuthError, SalesforceRateLimitError } from './errors'
 import type { SfClient } from './client'
 import { processSalesforceJobs, BACKOFF_MS, MAX_ATTEMPTS } from './process-jobs'
 
 type Fn = ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
-  salesforceSyncJob: { findMany: Fn; update: Fn; createMany: Fn }
+  salesforceSyncJob: { findMany: Fn; update: Fn; updateMany: Fn; createMany: Fn; create: Fn }
   lead: { findUnique: Fn; updateMany: Fn }
   outboundMessage: { findMany: Fn }
   inboundReply: { findMany: Fn }
@@ -76,7 +75,9 @@ beforeEach(() => {
   mockFetchPeople.mockResolvedValue([])
   p.salesforceSyncJob.findMany.mockResolvedValue([])
   p.salesforceSyncJob.update.mockResolvedValue({})
+  p.salesforceSyncJob.updateMany.mockResolvedValue({ count: 0 })
   p.salesforceSyncJob.createMany.mockResolvedValue({ count: 0 })
+  p.salesforceSyncJob.create.mockResolvedValue({})
   p.lead.findUnique.mockResolvedValue({ salesforceId: '00Qxxx', ownerId: 'mem-1' })
   p.lead.updateMany.mockResolvedValue({ count: 1 })
   p.outboundMessage.findMany.mockResolvedValue([])
@@ -280,12 +281,76 @@ describe('processSalesforceJobs', () => {
       expect(create).toHaveBeenCalledTimes(1)
       expect(result.done).toBe(2)
     })
+
+    it('linking a lead (found or created) resets its prior DONE/FAILED LOG_SEND/LOG_REPLY jobs to PENDING for re-logging on the new record', async () => {
+      p.lead.findUnique.mockResolvedValue({
+        id: 'lead-1', organizationId: 'org-1', email: 'jane@acme.com', firstName: 'Jane', lastName: 'Doe',
+        company: 'Acme', title: 'VP Ops', phone: '555-1000', ownerId: 'mem-1', salesforceId: null,
+      })
+      mockFetchPeople.mockResolvedValue([])
+      const create = vi.fn().mockResolvedValue('00QNEW')
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.lead.updateMany.mockResolvedValue({ count: 1 })
+      p.salesforceSyncJob.findMany.mockResolvedValue([createLeadJob()])
+
+      await processSalesforceJobs({ now: NOW })
+
+      expect(p.salesforceSyncJob.updateMany).toHaveBeenCalledWith({
+        where: { leadId: 'lead-1', type: { in: ['LOG_SEND', 'LOG_REPLY'] }, status: { in: ['DONE', 'FAILED'] } },
+        data: { status: 'PENDING', attempts: 0, sfTaskId: null, lastError: null, nextAttemptAt: NOW },
+      })
+    })
+
+    it('does not reset LOG jobs when the lead was already linked (nothing was just linked)', async () => {
+      p.lead.findUnique.mockResolvedValue({
+        id: 'lead-1', organizationId: 'org-1', email: 'jane@acme.com', firstName: 'Jane', lastName: 'Doe',
+        company: 'Acme', title: 'VP Ops', phone: '555-1000', ownerId: 'mem-1', salesforceId: '00QEXIST',
+      })
+      p.salesforceSyncJob.findMany.mockResolvedValue([createLeadJob()])
+
+      await processSalesforceJobs({ now: NOW })
+
+      expect(p.salesforceSyncJob.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('warns (with the new Salesforce id) when a created Lead ends up orphaned because the link write matched 0 rows', async () => {
+      p.lead.findUnique.mockResolvedValue({
+        id: 'lead-1', organizationId: 'org-1', email: 'jane@acme.com', firstName: 'Jane', lastName: 'Doe',
+        company: 'Acme', title: 'VP Ops', phone: '555-1000', ownerId: 'mem-1', salesforceId: null,
+      })
+      mockFetchPeople.mockResolvedValue([])
+      const create = vi.fn().mockResolvedValue('00QORPHAN')
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.lead.updateMany.mockResolvedValue({ count: 0 }) // linked concurrently by something else
+      p.salesforceSyncJob.findMany.mockResolvedValue([createLeadJob()])
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await processSalesforceJobs({ now: NOW })
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('00QORPHAN'))
+      expect(p.salesforceSyncJob.updateMany).not.toHaveBeenCalled()
+      consoleWarnSpy.mockRestore()
+    })
   })
 
   it('an auth error leaves the job PENDING with attempts unchanged, and skips the rest of the org\'s jobs', async () => {
     const create = vi.fn().mockRejectedValue(new SalesforceAuthError())
     mockGetSalesforceClient.mockReturnValue(fakeClient(create))
     p.salesforceSyncJob.findMany.mockResolvedValue([job({ id: 'job-1' }), job({ id: 'job-2', outboundMessageId: 'om-2' })])
+
+    const result = await processSalesforceJobs({ now: NOW })
+
+    expect(p.salesforceSyncJob.update).not.toHaveBeenCalled()
+    expect(result.skippedOrgs).toBe(1)
+    expect(result.done).toBe(0)
+    expect(result.failed).toBe(0)
+    expect(result.retried).toBe(0)
+  })
+
+  it('a rate-limit error leaves the job PENDING with attempts unchanged, and skips the rest of the org\'s jobs', async () => {
+    const create = vi.fn().mockRejectedValue(new SalesforceRateLimitError())
+    mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+    p.salesforceSyncJob.findMany.mockResolvedValue([job({ id: 'job-1', attempts: 2 }), job({ id: 'job-2', outboundMessageId: 'om-2' })])
 
     const result = await processSalesforceJobs({ now: NOW })
 
@@ -325,63 +390,106 @@ describe('processSalesforceJobs', () => {
     expect(result.failed).toBe(1)
   })
 
-  it('ENTITY_IS_DELETED on a LOG_REPLY Task create clears the lead link and turns the job into CREATE_LEAD', async () => {
-    const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'ENTITY_IS_DELETED', 'entity is deleted'))
-    mockGetSalesforceClient.mockReturnValue(fakeClient(create))
-    p.salesforceSyncJob.findMany.mockResolvedValue([
-      job({ type: 'LOG_REPLY', outboundMessageId: null, inboundReplyId: 'ir-1', outboundMessage: null,
-        inboundReply: { subject: 'Re: Hello', rawBody: 'ok', receivedAt: new Date('2026-09-21T09:00:00Z'), createdAt: new Date('2026-09-21T09:00:01Z') } }),
-    ])
+  describe('deleted-record path (ENTITY_IS_DELETED / INVALID_CROSS_REFERENCE_KEY / NOT_FOUND on a Task create)', () => {
+    it('clears only salesforceId/Type/AccountId, scoped to the stale id — sfCheckStatus and sfBlockOverride are never touched', async () => {
+      const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'NOT_FOUND', 'not found'))
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.lead.findUnique.mockResolvedValue({ salesforceId: '00STALE', ownerId: 'mem-1' })
+      p.salesforceSyncJob.findMany.mockResolvedValue([job()])
 
-    const result = await processSalesforceJobs({ now: NOW })
+      await processSalesforceJobs({ now: NOW })
 
-    expect(p.lead.updateMany).toHaveBeenCalledWith({
-      where: { id: 'lead-1' },
-      data: { salesforceId: null, salesforceType: null, salesforceAccountId: null },
+      expect(p.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: 'lead-1', salesforceId: '00STALE' },
+        data: { salesforceId: null, salesforceType: null, salesforceAccountId: null },
+      })
+      const data = p.lead.updateMany.mock.calls[0]![0].data as Record<string, unknown>
+      expect(data).not.toHaveProperty('sfCheckStatus')
+      expect(data).not.toHaveProperty('sfCheckedAt')
+      expect(data).not.toHaveProperty('sfCheckDetail')
+      expect(data).not.toHaveProperty('sfBlockOverride')
+      expect(data).not.toHaveProperty('sfHeldSince')
     })
-    expect(p.salesforceSyncJob.update).toHaveBeenCalledWith({
-      where: { id: 'job-1' },
-      data: { type: 'CREATE_LEAD', attempts: 0, nextAttemptAt: NOW, lastError: 'ENTITY_IS_DELETED: entity is deleted' },
+
+    it('on a LOG_SEND Task create: clears the link and marks the job FAILED with the Salesforce error', async () => {
+      const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'NOT_FOUND', 'not found'))
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.salesforceSyncJob.findMany.mockResolvedValue([job()])
+
+      const result = await processSalesforceJobs({ now: NOW })
+
+      expect(p.salesforceSyncJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { status: 'FAILED', lastError: 'NOT_FOUND: not found' },
+      })
+      expect(result.failed).toBe(1)
     })
-    expect(result.retried).toBe(1)
+
+    it('on a LOG_REPLY Task create: fails that job (never converts it in place) and ensures a CREATE_LEAD job for the same reply', async () => {
+      const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'ENTITY_IS_DELETED', 'entity is deleted'))
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.salesforceSyncJob.findMany.mockResolvedValue([
+        job({ type: 'LOG_REPLY', outboundMessageId: null, inboundReplyId: 'ir-1', outboundMessage: null,
+          inboundReply: { subject: 'Re: Hello', rawBody: 'ok', receivedAt: new Date('2026-09-21T09:00:00Z'), createdAt: new Date('2026-09-21T09:00:01Z') } }),
+      ])
+      p.salesforceSyncJob.updateMany.mockResolvedValue({ count: 0 }) // no existing CREATE_LEAD row for ir-1
+
+      const result = await processSalesforceJobs({ now: NOW })
+
+      expect(p.salesforceSyncJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { status: 'FAILED', lastError: 'Salesforce record deleted; recreating the lead' },
+      })
+      expect(p.salesforceSyncJob.updateMany).toHaveBeenCalledWith({
+        where: { type: 'CREATE_LEAD', inboundReplyId: 'ir-1' },
+        data: { status: 'PENDING', attempts: 0, nextAttemptAt: NOW, lastError: null },
+      })
+      expect(p.salesforceSyncJob.create).toHaveBeenCalledWith({
+        data: { organizationId: 'org-1', leadId: 'lead-1', type: 'CREATE_LEAD', inboundReplyId: 'ir-1', status: 'PENDING', attempts: 0, nextAttemptAt: NOW },
+      })
+      expect(result.failed).toBe(1)
+    })
+
+    it('resets an existing CREATE_LEAD row for the same reply instead of creating a second one (no unique violation)', async () => {
+      const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'ENTITY_IS_DELETED', 'entity is deleted'))
+      mockGetSalesforceClient.mockReturnValue(fakeClient(create))
+      p.salesforceSyncJob.findMany.mockResolvedValue([
+        job({ type: 'LOG_REPLY', outboundMessageId: null, inboundReplyId: 'ir-1', outboundMessage: null,
+          inboundReply: { subject: 'Re: Hello', rawBody: 'ok', receivedAt: new Date('2026-09-21T09:00:00Z'), createdAt: new Date('2026-09-21T09:00:01Z') } }),
+      ])
+      p.salesforceSyncJob.updateMany.mockResolvedValue({ count: 1 }) // an existing CREATE_LEAD row for ir-1 was reset
+
+      const result = await processSalesforceJobs({ now: NOW })
+
+      expect(p.salesforceSyncJob.updateMany).toHaveBeenCalledWith({
+        where: { type: 'CREATE_LEAD', inboundReplyId: 'ir-1' },
+        data: { status: 'PENDING', attempts: 0, nextAttemptAt: NOW, lastError: null },
+      })
+      expect(p.salesforceSyncJob.create).not.toHaveBeenCalled()
+      expect(result.failed).toBe(1)
+    })
   })
 
-  it('ENTITY_IS_DELETED on a LOG_SEND Task create clears the link and marks the job FAILED', async () => {
-    const create = vi.fn().mockRejectedValue(new SalesforceApiError(400, 'NOT_FOUND', 'not found'))
-    mockGetSalesforceClient.mockReturnValue(fakeClient(create))
-    p.salesforceSyncJob.findMany.mockResolvedValue([job()])
-
-    const result = await processSalesforceJobs({ now: NOW })
-
-    expect(p.lead.updateMany).toHaveBeenCalledWith({
-      where: { id: 'lead-1' },
-      data: { salesforceId: null, salesforceType: null, salesforceAccountId: null },
+  it('stops processing once the budget is spent (driven by a virtual clock advanced only by actual Salesforce calls)', async () => {
+    let virtualNow = 1_000_000
+    const clock = () => virtualNow
+    const create = vi.fn().mockImplementation(async () => {
+      virtualNow += 700 // simulate this job's Task create taking 700ms
+      return '00Txxx'
     })
-    expect(p.salesforceSyncJob.update).toHaveBeenCalledWith({
-      where: { id: 'job-1' },
-      data: { status: 'FAILED', lastError: 'NOT_FOUND: not found' },
-    })
-    expect(result.failed).toBe(1)
-  })
-
-  it('stops processing once the budget is spent', async () => {
-    const create = vi.fn().mockResolvedValue('00Txxx')
     mockGetSalesforceClient.mockReturnValue(fakeClient(create))
     p.salesforceSyncJob.findMany.mockResolvedValue([
       job({ id: 'job-1', organizationId: 'org-1' }),
       job({ id: 'job-2', organizationId: 'org-2', outboundMessageId: 'om-2' }),
+      job({ id: 'job-3', organizationId: 'org-3', outboundMessageId: 'om-3' }),
     ])
 
-    const t0 = 1_000_000
-    vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(t0) // startedAt
-      .mockReturnValueOnce(t0) // org-1 pre-check
-      .mockReturnValueOnce(t0) // job-1 pre-check
-      .mockReturnValue(t0 + 999_999) // over budget from here on
+    const result = await processSalesforceJobs({ now: NOW, budgetMs: 1_000, clock })
 
-    const result = await processSalesforceJobs({ now: NOW, budgetMs: 1_000 })
-
-    expect(create).toHaveBeenCalledTimes(1)
-    expect(result.done).toBe(1)
+    // After org-1 (700ms) and org-2 (1400ms, over the 1000ms budget), org-3
+    // is never reached — regardless of how many times the budget check
+    // itself calls the clock.
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(result.done).toBe(2)
   })
 })
