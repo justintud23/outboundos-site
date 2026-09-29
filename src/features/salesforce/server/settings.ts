@@ -40,7 +40,15 @@ const NOT_CONNECTED_DEFAULTS = {
   recentFailures: [],
 }
 
-export async function getSalesforceStatus(organizationId: string): Promise<SalesforceStatusDTO> {
+/**
+ * `includeDetails` (admins only) adds `lastError` and `recentFailures`, which
+ * carry lead emails and raw Salesforce error text. Members get them blanked
+ * server-side so they never reach the RSC payload. Defaults to hidden.
+ */
+export async function getSalesforceStatus(
+  organizationId: string,
+  { includeDetails = false }: { includeDetails?: boolean } = {},
+): Promise<SalesforceStatusDTO> {
   const configured = !!getSalesforceAppConfig()
   const conn = await getConnection(organizationId)
 
@@ -55,12 +63,14 @@ export async function getSalesforceStatus(organizationId: string): Promise<Sales
     }),
     prisma.salesforceSyncJob.count({ where: { organizationId, status: 'PENDING' } }),
     prisma.salesforceSyncJob.count({ where: { organizationId, status: 'FAILED' } }),
-    prisma.salesforceSyncJob.findMany({
-      where: { organizationId, status: 'FAILED' },
-      orderBy: { updatedAt: 'desc' },
-      take: 10,
-      select: { id: true, type: true, lastError: true, updatedAt: true, lead: { select: { email: true } } },
-    }),
+    includeDetails
+      ? prisma.salesforceSyncJob.findMany({
+          where: { organizationId, status: 'FAILED' },
+          orderBy: { updatedAt: 'desc' },
+          take: 10,
+          select: { id: true, type: true, lastError: true, updatedAt: true, lead: { select: { email: true } } },
+        })
+      : Promise.resolve([]),
   ])
 
   return {
@@ -70,7 +80,7 @@ export async function getSalesforceStatus(organizationId: string): Promise<Sales
     username: conn.sfUsername,
     instanceUrl: conn.instanceUrl,
     loginHost: conn.loginHost,
-    lastError: conn.lastError,
+    lastError: includeDetails ? conn.lastError : null,
     rateLimitedUntil: conn.rateLimitedUntil ? conn.rateLimitedUntil.toISOString() : null,
     customerAccountTypes: conn.customerAccountTypes,
     blockOpenOpportunities: conn.blockOpenOpportunities,

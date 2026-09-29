@@ -23,7 +23,7 @@ export default async function SettingsPage() {
     isAdmin ? getBusinessProfile(org.id) : Promise.resolve(null),
     isAdmin ? listMembers(org.id) : Promise.resolve([]),
     getTeam(org.id),
-    getSalesforceStatus(org.id),
+    getSalesforceStatus(org.id, { includeDetails: isAdmin }),
   ])
 
   return (

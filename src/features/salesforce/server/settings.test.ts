@@ -104,7 +104,7 @@ describe('getSalesforceStatus', () => {
       { id: 'job-1', type: 'LOG_SEND', lastError: 'boom', updatedAt, lead: { email: 'a@b.com' } },
     ])
 
-    const status = await getSalesforceStatus('org-1')
+    const status = await getSalesforceStatus('org-1', { includeDetails: true })
 
     const call = p.salesforceSyncJob.findMany.mock.calls[0][0]
     expect(call.where).toEqual({ organizationId: 'org-1', status: 'FAILED' })
@@ -142,6 +142,38 @@ describe('getSalesforceStatus', () => {
     const status = await getSalesforceStatus('org-1')
 
     expect(status.rateLimitedUntil).toBe(rateLimitedUntil.toISOString())
+  })
+})
+
+describe('getSalesforceStatus - member payload (M2)', () => {
+  it('without includeDetails, recentFailures is empty and lastError is null, and failed jobs are never read', async () => {
+    mockGetConnection.mockResolvedValue({ ...baseConn, lastError: 'INVALID_SESSION_ID: expired' })
+    p.salesforceSyncJob.findMany.mockResolvedValue([
+      { id: 'job-1', type: 'LOG_SEND', lastError: 'boom', updatedAt: new Date(), lead: { email: 'a@b.com' } },
+    ])
+
+    const status = await getSalesforceStatus('org-1', { includeDetails: false })
+
+    expect(status.recentFailures).toEqual([])
+    expect(status.lastError).toBeNull()
+    expect(p.salesforceSyncJob.findMany).not.toHaveBeenCalled()
+  })
+
+  it('defaults to hiding details when no option is given', async () => {
+    mockGetConnection.mockResolvedValue({ ...baseConn, lastError: 'boom' })
+    const status = await getSalesforceStatus('org-1')
+    expect(status.lastError).toBeNull()
+    expect(status.recentFailures).toEqual([])
+  })
+
+  it('with includeDetails, lastError and recentFailures are returned', async () => {
+    mockGetConnection.mockResolvedValue({ ...baseConn, lastError: 'boom' })
+    p.salesforceSyncJob.findMany.mockResolvedValue([
+      { id: 'job-1', type: 'LOG_SEND', lastError: 'x', updatedAt: new Date('2026-09-28T00:00:00.000Z'), lead: { email: 'a@b.com' } },
+    ])
+    const status = await getSalesforceStatus('org-1', { includeDetails: true })
+    expect(status.lastError).toBe('boom')
+    expect(status.recentFailures).toHaveLength(1)
   })
 })
 
