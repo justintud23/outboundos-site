@@ -93,7 +93,7 @@ export function SalesforceImportDialog({ isAdmin, onImported }: SalesforceImport
       }
       setListViews(data?.listViews ?? [])
     } catch {
-      setError('Network error — please try again.')
+      setError('Network error. Please try again.')
       setListViews([])
     } finally {
       setBusy(false)
@@ -113,7 +113,7 @@ export function SalesforceImportDialog({ isAdmin, onImported }: SalesforceImport
       }
       setPreview(data)
     } catch {
-      setError('Network error — please try again.')
+      setError('Network error. Please try again.')
       setPreview(null)
     } finally {
       setBusy(false)
@@ -170,7 +170,7 @@ export function SalesforceImportDialog({ isAdmin, onImported }: SalesforceImport
       setResult(summarize(data as ImportResult))
       onImported()
     } catch {
-      setError('Network error — please try again.')
+      setError('Network error. Please try again.')
     } finally {
       setBusy(false)
       setImporting(false)
