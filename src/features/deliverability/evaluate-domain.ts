@@ -56,7 +56,7 @@ function mxCheck(domain: string, mx: string[]): DomainCheck {
   if (mx.length === 0) return { record: 'MX', result: 'fail', found: null, fix }
   const found = mx.join(', ')
   if (mx.every((h) => M365_MX.test(h))) return { record: 'MX', result: 'pass', found, fix: null }
-  return { record: 'MX', result: 'fail', found, fix: `${fix} Remove the other MX records — replies sent to them never reach OutboundOS.` }
+  return { record: 'MX', result: 'fail', found, fix: `${fix} Remove the other MX records — replies sent to them never reach Outwyn.` }
 }
 
 function dmarcCheck(domain: string, dmarc: string[]): DomainCheck {

@@ -500,7 +500,7 @@ async function handleSendError(
     })
     await pauseOrgSending(
       organizationId,
-      `${MS_AUTH_PAUSE_PREFIX} rejected OutboundOS (HTTP ${err.status}: ${err.message}). Check the app registration's admin consent, client secret expiry, and the Sending Mailboxes access policy.`,
+      `${MS_AUTH_PAUSE_PREFIX} rejected Outwyn (HTTP ${err.status}: ${err.message}). Check the app registration's admin consent, client secret expiry, and the Sending Mailboxes access policy.`,
     )
     return 'failed'
   }

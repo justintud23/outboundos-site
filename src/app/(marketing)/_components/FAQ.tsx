@@ -6,11 +6,11 @@ import { ChevronDown } from 'lucide-react'
 const QUESTIONS = [
   {
     q: 'How is this different from Smartlead or Instantly?',
-    a: 'Smartlead and Instantly are great at sending email at scale — but they leave you alone with the inbox. OutboundOS is the layer on top: a Decision Engine that ranks every action across drafts, replies, and stale leads, plus a Lead Command Center to execute without leaving the page. Think of us as the cockpit, not another sending tool.',
+    a: 'Smartlead and Instantly are great at sending email at scale — but they leave you alone with the inbox. Outwyn is the layer on top: a Decision Engine that ranks every action across drafts, replies, and stale leads, plus a Lead Command Center to execute without leaving the page. Think of us as the cockpit, not another sending tool.',
   },
   {
     q: 'Do you handle deliverability and inbox warmup?',
-    a: 'Today we recommend pairing OutboundOS with your existing sending infrastructure (Smartlead, Instantly, or your own SMTP setup). Native multi-inbox sending and warmup are on our roadmap — we want to do them right rather than bolt on a half-measure.',
+    a: 'Today we recommend pairing Outwyn with your existing sending infrastructure (Smartlead, Instantly, or your own SMTP setup). Native multi-inbox sending and warmup are on our roadmap — we want to do them right rather than bolt on a half-measure.',
   },
   {
     q: 'Can I import my existing lead lists?',

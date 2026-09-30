@@ -241,7 +241,7 @@ async function processCreateLead(client: SfClient, job: JobRow, now: Date): Prom
         Email: lead.email,
         Title: lead.title,
         Phone: lead.phone,
-        LeadSource: 'OutboundOS',
+        LeadSource: 'Outwyn',
         ...(ownerId ? { OwnerId: ownerId } : {}),
       })
       salesforceType = 'LEAD'

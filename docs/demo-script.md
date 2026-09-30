@@ -1,4 +1,4 @@
-# OutboundOS — Demo Script
+# Outwyn — Demo Script
 
 > Loom-style walkthrough. Target runtime: 60–90 seconds.
 > Record at 1.0x speed with browser dev tools closed.
@@ -7,7 +7,7 @@
 
 ## Opening (5 sec)
 
-> "This is OutboundOS — a multi-tenant outbound sales platform I built with Next.js, Prisma, and OpenAI. Let me walk you through it."
+> "This is Outwyn — a multi-tenant outbound sales platform I built with Next.js, Prisma, and OpenAI. Let me walk you through it."
 
 Start on the dashboard, already signed in to an organization.
 
@@ -27,7 +27,7 @@ Upload a CSV. Show the lead list populating.
 
 Navigate to **Campaigns → Drafts**.
 
-> "OutboundOS uses OpenAI to generate personalized email drafts for each lead. The prompt template is configurable per org — organizations can bring their own messaging style."
+> "Outwyn uses OpenAI to generate personalized email drafts for each lead. The prompt template is configurable per org — organizations can bring their own messaging style."
 
 Trigger draft generation. Show one or two drafts appear with subject line and body.
 

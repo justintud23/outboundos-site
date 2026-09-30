@@ -11,7 +11,7 @@ function makeDraft(overrides: Partial<DraftWithLeadDTO> = {}): DraftWithLeadDTO 
     id:                 overrides.id          ?? 'draft-1',
     organizationId:     'org-1',
     leadId:             'lead-1',
-    subject:            overrides.subject      ?? 'Hello from OutboundOS',
+    subject:            overrides.subject      ?? 'Hello from Outwyn',
     body:               'Hi Jane, ...',
     status:             overrides.status       ?? 'PENDING_REVIEW',
     promptTemplateId:   null,
@@ -48,7 +48,7 @@ describe('DraftsTable', () => {
 
   it('renders the subject', () => {
     render(<DraftsTable drafts={[makeDraft()]} onReview={vi.fn()} />)
-    expect(screen.getByText('Hello from OutboundOS')).toBeDefined()
+    expect(screen.getByText('Hello from Outwyn')).toBeDefined()
   })
 
   it('renders amber "Pending Review" badge for PENDING_REVIEW status', () => {

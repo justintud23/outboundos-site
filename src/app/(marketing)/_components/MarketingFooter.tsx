@@ -60,7 +60,7 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-16 flex flex-col items-start justify-between gap-4 border-t border-[var(--border-default)] pt-8 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center">
-          <p>© 2026 OutboundOS. Built in Chicago.</p>
+          <p>© 2026 Outwyn. Built in Chicago.</p>
         </div>
       </div>
     </footer>

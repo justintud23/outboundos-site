@@ -12,7 +12,7 @@ import { FinalCTA } from './(marketing)/_components/FinalCTA'
 import { MarketingFooter } from './(marketing)/_components/MarketingFooter'
 
 const TITLE =
-  'OutboundOS — Outbound sales automation that tells you what to do next'
+  'Outwyn — Outbound sales automation that tells you what to do next'
 const DESCRIPTION =
   'AI-powered outbound platform for B2B agencies and sales teams. Decision engine prioritizes every action. Inline execution. No more dashboards.'
 

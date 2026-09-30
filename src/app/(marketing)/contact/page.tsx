@@ -4,8 +4,8 @@ import { ArrowRight, Mail } from 'lucide-react'
 import { MarketingPage, PRIMARY_BUTTON } from '../_components/MarketingPage'
 
 export const metadata: Metadata = {
-  title: 'Contact | OutboundOS',
-  description: 'Get in touch with the OutboundOS team.',
+  title: 'Contact | Outwyn',
+  description: 'Get in touch with the Outwyn team.',
 }
 
 const CONTACT_EMAIL = 'justin.tudhope@gmail.com'
@@ -15,10 +15,10 @@ export default function ContactPage() {
     <MarketingPage
       eyebrow="Contact"
       title="Talk to us"
-      intro="Questions about OutboundOS, pricing, or whether it fits your team? Send an email and you'll hear back from a real person."
+      intro="Questions about Outwyn, pricing, or whether it fits your team? Send an email and you'll hear back from a real person."
     >
       <a
-        href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('OutboundOS question')}`}
+        href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Outwyn question')}`}
         className="flex items-center gap-4 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
       >
         <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-indigo)]/10 text-[var(--accent-indigo)]">

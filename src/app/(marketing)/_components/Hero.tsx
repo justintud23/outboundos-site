@@ -71,7 +71,7 @@ export function Hero() {
             </h1>
 
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--text-secondary)]">
-              OutboundOS reads your whole pipeline and tells your team the single
+              Outwyn reads your whole pipeline and tells your team the single
               best action to take next — with the reasoning, executable in one click.
               No more dashboards, no more guesswork.
             </p>

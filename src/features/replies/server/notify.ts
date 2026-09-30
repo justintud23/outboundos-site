@@ -39,7 +39,7 @@ export function buildReplyNotification(i: ReplyNotificationInput): { subject: st
     `Classification: ${i.classification}${i.confidence !== null ? ` (${Math.round(i.confidence * 100)}% confidence)` : ''}`,
     ...(i.campaignName ? [`Campaign: ${i.campaignName}`] : []),
     ...(i.mailboxEmail ? [`Answer from this mailbox in Outlook: ${i.mailboxEmail}`] : []),
-    ...(i.leadUrl ? [`Lead in OutboundOS: ${i.leadUrl}`] : []),
+    ...(i.leadUrl ? [`Lead in Outwyn: ${i.leadUrl}`] : []),
     '',
     quoted,
   ]
@@ -143,7 +143,7 @@ export async function notifyUnmatchedReply(unmatchedId: string): Promise<boolean
 
 export async function sendOrgAlert(organizationId: string, subject: string, text: string): Promise<boolean> {
   try {
-    return await deliver(organizationId, `[OutboundOS] ${subject}`, text)
+    return await deliver(organizationId, `[Outwyn] ${subject}`, text)
   } catch (err) {
     console.error(`[notify] org ${organizationId}: alert failed`, err)
     return false

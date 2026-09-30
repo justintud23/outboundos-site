@@ -19,7 +19,7 @@ export function MarketingHeader() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link
           href="/"
-          aria-label="OutboundOS home"
+          aria-label="Outwyn home"
           className="rounded-lg outline-none focus-visible:shadow-[var(--focus-ring)]"
         >
           <Logo size="sm" />

@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { MarketingPage, Prose } from '../../_components/MarketingPage'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | OutboundOS',
-  description: 'How OutboundOS collects, uses and protects data.',
+  title: 'Privacy Policy | Outwyn',
+  description: 'How Outwyn collects, uses and protects data.',
 }
 
 // Plain-language policy based on how the app handles data today. Have it
@@ -17,8 +17,8 @@ export default function PrivacyPage() {
     <MarketingPage eyebrow="Legal" title="Privacy Policy" intro={`Last updated ${LAST_UPDATED}`}>
       <Prose>
         <p>
-          This policy explains what information OutboundOS collects, how it is used,
-          and the choices you have. It covers people who use the OutboundOS app
+          This policy explains what information Outwyn collects, how it is used,
+          and the choices you have. It covers people who use the Outwyn app
           (&ldquo;customers&rdquo;) and the prospects our customers contact through it.
         </p>
 
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
             location, plus any extra columns you upload.
           </li>
           <li>
-            <strong>Email activity.</strong> The emails you send through OutboundOS,
+            <strong>Email activity.</strong> The emails you send through Outwyn,
             replies you receive, and delivery events such as bounces and
             unsubscribes.
           </li>
@@ -61,7 +61,7 @@ export default function PrivacyPage() {
         <p>We do not sell personal information, and we do not use your lead data to market to those leads ourselves.</p>
 
         <h2>Service providers</h2>
-        <p>We rely on these providers to run OutboundOS. Each processes data only to provide its service to us:</p>
+        <p>We rely on these providers to run Outwyn. Each processes data only to provide its service to us:</p>
         <ul>
           <li>Vercel (application hosting) and Neon (database)</li>
           <li>Clerk (sign-in and organization management)</li>
@@ -71,13 +71,13 @@ export default function PrivacyPage() {
           <li>Salesforce (optional, only if you connect it)</li>
         </ul>
 
-        <h2>If you received an email sent with OutboundOS</h2>
+        <h2>If you received an email sent with Outwyn</h2>
         <p>
-          Our customers use OutboundOS to send business email from their own
+          Our customers use Outwyn to send business email from their own
           mailboxes. The sending company is responsible for that message and for
           having a lawful reason to contact you. Every message includes an
           unsubscribe link. Using it stops further emails from that sender through
-          OutboundOS. You can also contact us at the address below.
+          Outwyn. You can also contact us at the address below.
         </p>
 
         <h2>Keeping and deleting data</h2>

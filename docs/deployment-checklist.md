@@ -1,4 +1,4 @@
-# OutboundOS Deployment Checklist
+# Outwyn Deployment Checklist
 
 Vercel (web) + Neon (PostgreSQL). Estimated time: ~20 minutes.
 
@@ -96,7 +96,7 @@ In the Vercel project → Settings → Environment Variables, add all of the fol
 ### App
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_APP_URL` | Your Vercel deployment URL (e.g. `https://outboundos.vercel.app`) |
+| `NEXT_PUBLIC_APP_URL` | Your Vercel deployment URL (e.g. `https://outwyn.com`) |
 
 ---
 

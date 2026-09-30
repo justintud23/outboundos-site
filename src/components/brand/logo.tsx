@@ -18,7 +18,7 @@ export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoPro
   const textColor = variant === 'light' ? 'text-white' : 'text-[var(--text-primary)]'
   // On a dark/brand surface the indigo "OS" would vanish — use a light peach
   // accent from the Prism spectrum; on light surfaces keep the indigo signal.
-  const osColor = variant === 'light' ? 'text-[#ffb3a6]' : 'text-[var(--accent-indigo)]'
+  const accentColor = variant === 'light' ? 'text-[#ffb3a6]' : 'text-[var(--accent-indigo)]'
 
   return (
     <div className={`flex items-center ${s.gap}`}>
@@ -52,7 +52,7 @@ export function Logo({ size = 'md', variant = 'dark', showText = true }: LogoPro
       </div>
       {showText && (
         <span className={`${s.text} font-display font-semibold tracking-tight ${textColor}`}>
-          Outbound<span className={osColor}>OS</span>
+          Out<span className={accentColor}>wyn</span>
         </span>
       )}
     </div>

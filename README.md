@@ -1,8 +1,8 @@
-# OutboundOS
+# Outwyn
 
 **Outbound sales automation that tells you what to do next — and lets you do it.**
 
-Most outbound tools show you dashboards. OutboundOS shows you the next best action, explains why, and lets you execute it without leaving the page.
+Most outbound tools show you dashboards. Outwyn shows you the next best action, explains why, and lets you execute it without leaving the page.
 
 **[Live Demo](https://outboundos-site.vercel.app)**
 
@@ -193,7 +193,7 @@ Automated outbound email requires a dedicated Microsoft 365 tenant with sending 
 2. **Create the tenant:** a new Microsoft 365 tenant, with the domains added and verified.
 3. **DNS:** SPF, DKIM (enabled in Defender), and DMARC (`p=none` to start) on every domain.
 4. **Mailboxes:** 2–3 licensed mailboxes per domain, 7 total to start, with realistic names. Outlook signatures are **not** applied to mail sent through Microsoft Graph — put the signature in your sequence templates instead.
-5. **Grant access:** give the user Full Access and Send As on every sending mailbox so they auto-map in Outlook. Then, in **Exchange Online PowerShell**, make every sending mailbox keep a copy of what is sent as/on behalf of it — OutboundOS detects that you've already handled a reply by looking for your answer in the sending mailbox's Sent Items:
+5. **Grant access:** give the user Full Access and Send As on every sending mailbox so they auto-map in Outlook. Then, in **Exchange Online PowerShell**, make every sending mailbox keep a copy of what is sent as/on behalf of it — Outwyn detects that you've already handled a reply by looking for your answer in the sending mailbox's Sent Items:
    ```powershell
    Set-Mailbox <mailbox> -MessageCopyForSentAsEnabled $true -MessageCopyForSendOnBehalfEnabled $true
    ```
@@ -204,11 +204,11 @@ Automated outbound email requires a dedicated Microsoft 365 tenant with sending 
    - Redirect URI: `https://<app>/api/integrations/microsoft/callback` (Web).
    - Grant application permissions: `Mail.Send`, `Mail.ReadWrite`, `User.Read.All`.
    - Click **Grant admin consent** to approve these permissions for the entire tenant.
-   - Copy the **Directory (tenant) ID** from the app's Overview page into `MS_GRAPH_TENANT_ID`. OutboundOS only accepts a Microsoft 365 connection from this tenant; connecting is refused while it is unset.
+   - Copy the **Directory (tenant) ID** from the app's Overview page into `MS_GRAPH_TENANT_ID`. Outwyn only accepts a Microsoft 365 connection from this tenant; connecting is refused while it is unset.
    - Create a mail-enabled security group "Sending Mailboxes" containing all sending mailboxes and the alerts shared mailbox.
    - In **Exchange Online PowerShell**, run:
      ```powershell
-     New-ApplicationAccessPolicy -AppId <MS_GRAPH_CLIENT_ID> -PolicyScopeGroupId sending-mailboxes@<domain> -AccessRight RestrictAccess -Description "OutboundOS"
+     New-ApplicationAccessPolicy -AppId <MS_GRAPH_CLIENT_ID> -PolicyScopeGroupId sending-mailboxes@<domain> -AccessRight RestrictAccess -Description "Outwyn"
      ```
    - Verify it with:
      ```powershell
@@ -219,7 +219,7 @@ Automated outbound email requires a dedicated Microsoft 365 tenant with sending 
    - `https://<app>/api/cron/send-queue`
    - `https://<app>/api/cron/inbox-monitor`
    
-   Enable **"notify on failure"** on all three jobs. The send-queue and inbox-monitor jobs deliberately return HTTP 503 when Microsoft 365 rejects OutboundOS (expired client secret, revoked consent — sending is paused) or mailboxes fail to poll, because the in-app alert email can't get out through the same broken credentials; cron-job.org's failure email is the alert. cron-job.org auto-disables a job after repeated failures: once you've fixed the cause (and resumed sending in Settings), re-enable any job it disabled.
+   Enable **"notify on failure"** on all three jobs. The send-queue and inbox-monitor jobs deliberately return HTTP 503 when Microsoft 365 rejects Outwyn (expired client secret, revoked consent — sending is paused) or mailboxes fail to poll, because the in-app alert email can't get out through the same broken credentials; cron-job.org's failure email is the alert. cron-job.org auto-disables a job after repeated failures: once you've fixed the cause (and resumed sending in Settings), re-enable any job it disabled.
 9. **Warmup:** Plan 2–4 weeks before full volume. The app's warmup ramp starts low automatically. A peer-warmup service is recommended during this period.
 
 ### In-App Setup
@@ -376,7 +376,7 @@ Use the **Mine / Team toggle** on Leads, Pipeline, Campaigns, Sequences, Drafts,
 
 ## Salesforce
 
-OutboundOS can connect to a Salesforce org to check leads against Salesforce before sending, import leads and contacts from Salesforce list views, and log sent emails and replies back to Salesforce as activity.
+Outwyn can connect to a Salesforce org to check leads against Salesforce before sending, import leads and contacts from Salesforce list views, and log sent emails and replies back to Salesforce as activity.
 
 ### Setup, once per deployment
 
@@ -393,7 +393,7 @@ If any of these are missing, the Salesforce card in Settings just says "Salesfor
 
 - An admin connects from Settings → Salesforce → Connect Salesforce, choosing Production or Sandbox.
 - Connect with a Salesforce user that has API access, ideally a dedicated integration user rather than a real rep's login.
-- Ask your Salesforce admin two things first: which edition you're on (Enterprise and Unlimited include API access; Professional may need the API add-on), and to approve the OutboundOS connected app when prompted.
+- Ask your Salesforce admin two things first: which edition you're on (Enterprise and Unlimited include API access; Professional may need the API add-on), and to approve the Outwyn connected app when prompted.
 - The OAuth flow uses PKCE. The code verifier is held in a cookie scoped to the callback path (`/api/integrations/salesforce/callback`) only.
 - Reconnect sends a sandbox connection back to the sandbox login page, and a production connection to the production one.
 - Reconnecting to a different Salesforce org than the one already connected clears every lead's existing Salesforce link (id, type, account, and check status), so nothing keeps pointing at the old org's records.
@@ -418,7 +418,7 @@ If any of these are missing, the Salesforce card in Settings just says "Salesfor
 
 ### Pre-send check
 
-Before OutboundOS emails a lead in a connected org, it checks Salesforce and holds or blocks the send based on the org's rules: opted out, a converted lead, a customer (by the account types configured in Settings → Salesforce), or, optionally, an open opportunity.
+Before Outwyn emails a lead in a connected org, it checks Salesforce and holds or blocks the send based on the org's rules: opted out, a converted lead, a customer (by the account types configured in Settings → Salesforce), or, optionally, an open opportunity.
 
 - A check is cached for 24 hours. A cached check that recent decides the send without a new Salesforce call.
 - If Salesforce can't be reached, a cached check less than 7 days old is still used to decide.
@@ -498,7 +498,7 @@ Every email step and subject variant gets a **Low / Medium / High** risk score, 
 
 ### Placement tests and blocklist alerts
 
-The **Placement test** card on a campaign's page (once Microsoft 365 is connected) sends the campaign's real first email, from a mailbox you choose, to seed addresses from a free placement tester — [unspam.email](https://unspam.email) or [EmailConsul](https://www.emailconsul.com) both work. Paste the seed addresses the tester gives you, pick a sequence, mailbox, and optionally a real enrolled lead (or use the built-in sample), and send. Read the inbox-placement results on the tester's own site — OutboundOS doesn't store or poll them.
+The **Placement test** card on a campaign's page (once Microsoft 365 is connected) sends the campaign's real first email, from a mailbox you choose, to seed addresses from a free placement tester — [unspam.email](https://unspam.email) or [EmailConsul](https://www.emailconsul.com) both work. Paste the seed addresses the tester gives you, pick a sequence, mailbox, and optionally a real enrolled lead (or use the built-in sample), and send. Read the inbox-placement results on the tester's own site — Outwyn doesn't store or poll them.
 
 - Test sends count toward that mailbox's daily limit, exactly like a real send, so they respect warmup ramps and domain health.
 - Run a test before each new campaign goes live, and weekly while a domain is still ramping.
@@ -508,4 +508,4 @@ The **Placement test** card on a campaign's page (once Microsoft 365 is connecte
 
 ### What We Don't Do
 
-OutboundOS does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means careful real sending: a slow volume ramp on correctly authenticated domains, with bounce and complaint monitoring.
+Outwyn does not automate opens, replies, or spam rescue — that violates Google's and Microsoft's terms. Warmup here means careful real sending: a slow volume ramp on correctly authenticated domains, with bounce and complaint monitoring.

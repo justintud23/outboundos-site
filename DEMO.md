@@ -1,4 +1,4 @@
-# OutboundOS — Demo Script
+# Outwyn — Demo Script
 
 **Duration:** 5–7 minutes
 **Setup:** Open https://outboundos-site.vercel.app, signed in, on Dashboard.
@@ -7,7 +7,7 @@
 
 ## Opening (30 seconds)
 
-> "Most outbound tools show you data — open rates, reply counts, pipeline charts. OutboundOS does something different. It tells you what to do next, explains why, and lets you do it without leaving the page."
+> "Most outbound tools show you data — open rates, reply counts, pipeline charts. Outwyn does something different. It tells you what to do next, explains why, and lets you do it without leaving the page."
 
 ---
 
@@ -115,7 +115,7 @@
 
 > "The core loop is simple: the system surfaces what matters, explains why, and gives you a one-click path to execute. Insight to action to execution — without leaving the page."
 
-> "That's OutboundOS."
+> "That's Outwyn."
 
 ---
 

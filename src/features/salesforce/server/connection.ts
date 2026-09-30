@@ -91,7 +91,7 @@ export async function markNeedsReconnect(organizationId: string, message: string
   })
   if (res.count === 1) {
     await sendOrgAlert(organizationId, 'Salesforce disconnected',
-      `OutboundOS lost access to Salesforce (${message}).\n\nActivity logging is paused, and emails to leads without a Salesforce check in the last 7 days are held until an admin reconnects in Settings → Salesforce.`)
+      `Outwyn lost access to Salesforce (${message}).\n\nActivity logging is paused, and emails to leads without a Salesforce check in the last 7 days are held until an admin reconnects in Settings → Salesforce.`)
   }
 }
 
@@ -102,7 +102,7 @@ export async function markRateLimited(organizationId: string, until: Date): Prom
   })
   if (res.count === 1) {
     await sendOrgAlert(organizationId, 'Salesforce API limit reached',
-      `Your Salesforce org has used 80% of today's API calls, so OutboundOS paused its Salesforce work until ${until.toISOString()}.\n\nSends to leads with a recent Salesforce check continue.`)
+      `Your Salesforce org has used 80% of today's API calls, so Outwyn paused its Salesforce work until ${until.toISOString()}.\n\nSends to leads with a recent Salesforce check continue.`)
   }
 }
 

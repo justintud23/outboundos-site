@@ -9,53 +9,53 @@ type Cell =
 
 type Row = {
   feature: string
-  outboundos: Cell
+  outwyn: Cell
   smartlead: Cell
   instantly: Cell
   apollo: Cell
 }
 
-const COLUMNS = ['OutboundOS', 'Smartlead', 'Instantly', 'Apollo'] as const
+const COLUMNS = ['Outwyn', 'Smartlead', 'Instantly', 'Apollo'] as const
 
 const ROWS: Row[] = [
   {
     feature: 'Decision Engine',
-    outboundos: { kind: 'yes' },
+    outwyn: { kind: 'yes' },
     smartlead: { kind: 'no' },
     instantly: { kind: 'no' },
     apollo: { kind: 'no' },
   },
   {
     feature: 'AI Reply Classification',
-    outboundos: { kind: 'yes' },
+    outwyn: { kind: 'yes' },
     smartlead: { kind: 'yes' },
     instantly: { kind: 'partial' },
     apollo: { kind: 'partial' },
   },
   {
     feature: 'Inline Execution UX',
-    outboundos: { kind: 'yes' },
+    outwyn: { kind: 'yes' },
     smartlead: { kind: 'no' },
     instantly: { kind: 'no' },
     apollo: { kind: 'no' },
   },
   {
     feature: 'Lead Command Center',
-    outboundos: { kind: 'yes' },
+    outwyn: { kind: 'yes' },
     smartlead: { kind: 'no' },
     instantly: { kind: 'no' },
     apollo: { kind: 'no' },
   },
   {
     feature: 'Multi-Inbox Sending',
-    outboundos: { kind: 'soon' },
+    outwyn: { kind: 'soon' },
     smartlead: { kind: 'yes' },
     instantly: { kind: 'yes' },
     apollo: { kind: 'yes' },
   },
   {
     feature: 'Pricing',
-    outboundos: { kind: 'text', value: 'Starts at $97/mo' },
+    outwyn: { kind: 'text', value: 'Starts at $97/mo' },
     smartlead: { kind: 'text', value: '$94/mo' },
     instantly: { kind: 'text', value: '$87/mo' },
     apollo: { kind: 'text', value: '$99/mo' },
@@ -129,7 +129,7 @@ export function ComparisonTable() {
                       key={col}
                       scope="col"
                       className={`px-6 py-4 text-xs font-semibold uppercase tracking-wider ${
-                        col === 'OutboundOS'
+                        col === 'Outwyn'
                           ? 'text-[var(--accent-indigo)]'
                           : 'text-[var(--text-muted)]'
                       }`}
@@ -156,7 +156,7 @@ export function ComparisonTable() {
                       {row.feature}
                     </th>
                     <td className="bg-[var(--accent-indigo-glow)] px-6 py-5">
-                      <CellContent cell={row.outboundos} />
+                      <CellContent cell={row.outwyn} />
                     </td>
                     <td className="px-6 py-5">
                       <CellContent cell={row.smartlead} />

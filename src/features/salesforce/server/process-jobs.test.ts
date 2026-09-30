@@ -240,7 +240,7 @@ describe('processSalesforceJobs', () => {
         Email: 'jane@acme.com',
         Title: 'VP Ops',
         Phone: '555-1000',
-        LeadSource: 'OutboundOS',
+        LeadSource: 'Outwyn',
         OwnerId: '005OWNER',
       })
       expect(p.lead.updateMany).toHaveBeenCalledWith({

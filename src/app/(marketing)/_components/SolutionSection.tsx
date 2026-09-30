@@ -23,7 +23,7 @@ export function SolutionSection() {
             Always prioritized.
           </h2>
           <p className="mt-8 text-lg leading-relaxed text-[var(--text-secondary)]">
-            OutboundOS continuously scans your entire pipeline — drafts, replies,
+            Outwyn continuously scans your entire pipeline — drafts, replies,
             stale leads, hot prospects — and surfaces a single ranked list of what
             to do next. Each action explains why it matters, how urgent it is, and
             lets you execute it in one click without leaving the page.
@@ -44,7 +44,7 @@ export function SolutionSection() {
                 <span className="h-3 w-3 rounded-full bg-[#23c08a]" />
               </div>
               <div className="ml-3 flex-1 truncate rounded-md bg-[var(--bg-base)] px-3 py-1 text-xs text-[var(--text-muted)]">
-                app.outboundos.com/action-center
+                app.outwyn.com/action-center
               </div>
             </div>
 
