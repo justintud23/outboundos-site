@@ -17,16 +17,16 @@ export function FinalCTA() {
           </span>
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[var(--text-secondary)]">
-          Book a 30-minute demo. We&apos;ll show you how the Action Center works
-          on your specific use case.
+          Create an account and see how the Action Center works on your own
+          pipeline.
         </p>
 
         <div className="mt-10 flex justify-center">
           <Link
-            href="/demo"
+            href="/sign-up"
             className="group inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] px-8 text-base font-semibold text-[var(--text-inverse)] shadow-[0_14px_34px_rgba(91,84,240,0.34)] transition-all hover:bg-[var(--accent-indigo-hover)] hover:shadow-[0_16px_40px_rgba(91,84,240,0.48)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
           >
-            Book a Demo
+            Start free trial
             <ArrowRight size={20} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>

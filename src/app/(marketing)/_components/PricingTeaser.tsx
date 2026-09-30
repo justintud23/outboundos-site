@@ -10,7 +10,7 @@ const TIERS = [
 
 export function PricingTeaser() {
   return (
-    <section id="pricing" className="border-t border-[var(--border-subtle)] py-24 md:py-32">
+    <section id="pricing" className="scroll-mt-20 border-t border-[var(--border-subtle)] py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] md:text-4xl lg:text-5xl">
@@ -48,10 +48,10 @@ export function PricingTeaser() {
 
         <div className="mt-12 flex justify-center">
           <Link
-            href="/pricing"
+            href="/sign-up"
             className="group inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-btn)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-7 text-base font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-colors hover:border-[var(--text-muted)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
           >
-            View All Plans
+            Start free trial
             <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
