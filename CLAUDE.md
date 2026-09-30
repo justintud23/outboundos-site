@@ -7,7 +7,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 /codex, /cso, /autoplan, /pair-agent, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
 
 ## Project context
-OutboundOS — multi-tenant SaaS for AI-powered outbound sales automation.
+Outwyn — multi-tenant SaaS for AI-powered outbound sales automation.
 Stack: Next.js 16, TypeScript strict, Postgres/Prisma, Clerk Organizations, SendGrid, OpenAI gpt-4o.
 ICP: B2B marketing/growth agencies, 3-25 employees, doing cold outbound.
 Wedge: Action Center — AI prioritizes every pipeline action with reasoning, executable inline.

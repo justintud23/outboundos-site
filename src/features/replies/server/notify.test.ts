@@ -137,7 +137,7 @@ describe('sendOrgAlert', () => {
     resolveRecipients.mockResolvedValue({ to: 'org@work.com', cc: null })
     expect(await sendOrgAlert('org-1', 'Sending paused', 'why')).toBe(true)
     expect(resolveRecipients).toHaveBeenCalledWith('org-1', undefined)
-    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'org@work.com', '[OutboundOS] Sending paused', 'why', null)
+    expect(send).toHaveBeenCalledWith('tenant-1', 'alerts@getacmesnow.com', 'org@work.com', '[Outwyn] Sending paused', 'why', null)
   })
   it('returns false when prisma.organization.findUnique rejects', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

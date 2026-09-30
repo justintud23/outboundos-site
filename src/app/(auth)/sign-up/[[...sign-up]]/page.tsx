@@ -151,7 +151,7 @@ export default function SignUpPage() {
         </h1>
         <p className="text-[var(--text-muted)] text-sm mt-1.5">
           {step === 'form'
-            ? 'Get started with OutboundOS.'
+            ? 'Get started with Outwyn.'
             : `We sent a code to ${email}`}
         </p>
       </div>

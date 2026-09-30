@@ -217,7 +217,7 @@ export function SalesforceCard({ status, isAdmin }: SalesforceCardProps) {
             </a>
             <p className="text-[var(--text-muted)] text-xs">
               Connect with a Salesforce user that has API access. A dedicated integration user works best. If
-              you&apos;re not sure, ask your Salesforce admin which edition you have and to allow the OutboundOS
+              you&apos;re not sure, ask your Salesforce admin which edition you have and to allow the Outwyn
               app.
             </p>
           </div>

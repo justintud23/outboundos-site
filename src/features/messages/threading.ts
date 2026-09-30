@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 // email and use the chain of prior Message-IDs in the same sequence thread to set
 // In-Reply-To / References on follow-ups, so step 2+ lands as a reply to step 1.
 
-const MESSAGE_ID_DOMAIN_FALLBACK = 'outboundos.app'
+const MESSAGE_ID_DOMAIN_FALLBACK = 'outwyn.com'
 
 /**
  * Domain used in the right-hand side of generated Message-IDs. It only needs to

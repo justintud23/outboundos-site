@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { MarketingPage, Prose } from '../../_components/MarketingPage'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | OutboundOS',
-  description: 'The terms for using OutboundOS.',
+  title: 'Terms of Service | Outwyn',
+  description: 'The terms for using Outwyn.',
 }
 
 // Plain-language terms. Have them reviewed by someone qualified before relying
@@ -16,7 +16,7 @@ export default function TermsPage() {
     <MarketingPage eyebrow="Legal" title="Terms of Service" intro={`Last updated ${LAST_UPDATED}`}>
       <Prose>
         <p>
-          These terms apply when you create an account or use OutboundOS. By using
+          These terms apply when you create an account or use Outwyn. By using
           the service, you agree to them.
         </p>
 
@@ -28,7 +28,7 @@ export default function TermsPage() {
         </p>
 
         <h2>Sending email responsibly</h2>
-        <p>OutboundOS sends email from mailboxes you own. You agree that you will:</p>
+        <p>Outwyn sends email from mailboxes you own. You agree that you will:</p>
         <ul>
           <li>
             Follow the laws that apply to your email, such as CAN-SPAM in the United
@@ -47,7 +47,7 @@ export default function TermsPage() {
 
         <h2>Your data</h2>
         <p>
-          You own the leads, messages and other content you put into OutboundOS. You
+          You own the leads, messages and other content you put into Outwyn. You
           give us permission to process it only to provide the service, as described
           in our <a href="/legal/privacy">Privacy Policy</a>. You are responsible for
           having the right to use the data you import.
@@ -68,14 +68,14 @@ export default function TermsPage() {
 
         <h2>Availability and changes</h2>
         <p>
-          We work to keep OutboundOS available and reliable, but the service is
+          We work to keep Outwyn available and reliable, but the service is
           provided &ldquo;as is&rdquo;, without guarantees of uninterrupted
           operation. We may change or improve features over time.
         </p>
 
         <h2>Limitation of liability</h2>
         <p>
-          To the extent the law allows, OutboundOS is not liable for indirect or
+          To the extent the law allows, Outwyn is not liable for indirect or
           consequential losses, such as lost sales or lost data, and our total
           liability is limited to the amount you paid us in the twelve months before
           the claim.
@@ -83,7 +83,7 @@ export default function TermsPage() {
 
         <h2>Ending your account</h2>
         <p>
-          You can stop using OutboundOS at any time. We may end or suspend access if
+          You can stop using Outwyn at any time. We may end or suspend access if
           these terms are broken. After an account ends, you can ask us to delete its
           data.
         </p>

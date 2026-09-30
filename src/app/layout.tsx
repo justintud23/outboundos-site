@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'OutboundOS',
+  title: 'Outwyn',
   description: 'AI-assisted sales outreach platform',
 }
 

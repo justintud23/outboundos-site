@@ -30,7 +30,7 @@ Swap `DATABASE_URL` in your hosting environment's secrets — no code changes re
 
 ## Deploying to Vercel
 
-OutboundOS is built for Vercel (Next.js App Router, no custom server).
+Outwyn is built for Vercel (Next.js App Router, no custom server).
 
 ```bash
 vercel deploy

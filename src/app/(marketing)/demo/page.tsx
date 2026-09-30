@@ -4,8 +4,8 @@ import { ArrowRight, PlayCircle } from 'lucide-react'
 import { MarketingPage, PRIMARY_BUTTON, SECONDARY_BUTTON } from '../_components/MarketingPage'
 
 export const metadata: Metadata = {
-  title: 'Demo | OutboundOS',
-  description: 'See how OutboundOS turns your pipeline into a prioritized list of next actions.',
+  title: 'Demo | Outwyn',
+  description: 'See how Outwyn turns your pipeline into a prioritized list of next actions.',
 }
 
 // Paste an embeddable video URL here (e.g. a Loom or YouTube "embed" link) and
@@ -31,14 +31,14 @@ export default function DemoPage() {
   return (
     <MarketingPage
       eyebrow="Demo"
-      title="See OutboundOS in two minutes"
-      intro="A quick tour of how OutboundOS decides what your team should do next, and lets them do it in one click."
+      title="See Outwyn in two minutes"
+      intro="A quick tour of how Outwyn decides what your team should do next, and lets them do it in one click."
     >
       <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-card)]">
         {DEMO_VIDEO_URL ? (
           <iframe
             src={DEMO_VIDEO_URL}
-            title="OutboundOS demo video"
+            title="Outwyn demo video"
             className="aspect-video w-full"
             allow="autoplay; fullscreen; picture-in-picture"
             allowFullScreen

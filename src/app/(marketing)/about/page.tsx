@@ -4,8 +4,8 @@ import { ArrowRight } from 'lucide-react'
 import { MarketingPage, PRIMARY_BUTTON, Prose } from '../_components/MarketingPage'
 
 export const metadata: Metadata = {
-  title: 'About | OutboundOS',
-  description: 'Why OutboundOS exists and who it is built for.',
+  title: 'About | Outwyn',
+  description: 'Why Outwyn exists and who it is built for.',
 }
 
 export default function AboutPage() {
@@ -13,7 +13,7 @@ export default function AboutPage() {
     <MarketingPage
       eyebrow="About"
       title="Outbound that tells you what to do next"
-      intro="Most sales tools show you dashboards. OutboundOS tells your team the single best action to take next, and lets them take it in one click."
+      intro="Most sales tools show you dashboards. Outwyn tells your team the single best action to take next, and lets them take it in one click."
     >
       <Prose>
         <h2>Why we built it</h2>
@@ -24,7 +24,7 @@ export default function AboutPage() {
           organized around what to do about it.
         </p>
         <p>
-          OutboundOS reads every lead, email and reply, ranks the actions that
+          Outwyn reads every lead, email and reply, ranks the actions that
           matter most, explains why, and puts the button to do each one right next
           to it.
         </p>

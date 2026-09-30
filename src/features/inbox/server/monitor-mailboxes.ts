@@ -60,7 +60,7 @@ export async function monitorMailboxes(now: Date = new Date(), budgetMs = 25_000
       if (err instanceof GraphAuthError) {
         await pauseOrgSending(
           mailbox.organizationId,
-          `${MS_AUTH_PAUSE_PREFIX} denied OutboundOS access to ${mailbox.email} (HTTP ${err.status}: ${err.message}). Check admin consent and the Sending Mailboxes access policy.`,
+          `${MS_AUTH_PAUSE_PREFIX} denied Outwyn access to ${mailbox.email} (HTTP ${err.status}: ${err.message}). Check admin consent and the Sending Mailboxes access policy.`,
         )
       } else if (err instanceof GraphError && err.status === 410) {
         await prisma.mailbox.update({ where: { id: mailbox.id }, data: { inboxDeltaLink: null, sentDeltaLink: null } })

@@ -6,7 +6,7 @@ import { getSalesforceClient } from './client'
 import { lookupByEmails, type SfPerson } from './records'
 import { BLOCKING, blockReason, type SfStatus } from '../classify'
 
-// Pre-send safety check: decides whether OutboundOS may email a lead, per
+// Pre-send safety check: decides whether Outwyn may email a lead, per
 // spec §5. A cached, recent Salesforce check decides instantly; otherwise
 // one batched lookup covers the whole call. If Salesforce is unreachable,
 // leads fall back to a stale-but-recent stored result, or are held (paused,
