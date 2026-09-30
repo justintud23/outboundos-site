@@ -6,8 +6,8 @@ import { Menu, X } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
 
 const NAV_LINKS = [
-  { href: '/features', label: 'Features' },
-  { href: '/pricing', label: 'Pricing' },
+  { href: '/#features', label: 'Features' },
+  { href: '/#pricing', label: 'Pricing' },
   { href: '/demo', label: 'Demo' },
 ]
 
@@ -45,7 +45,7 @@ export function MarketingHeader() {
             Sign In
           </Link>
           <Link
-            href="/demo"
+            href="/sign-up"
             className="inline-flex h-9 items-center justify-center rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] px-4 text-sm font-semibold text-[var(--text-inverse)] shadow-[0_6px_16px_rgba(91,84,240,0.30)] transition-all hover:bg-[var(--accent-indigo-hover)] hover:shadow-[0_8px_22px_rgba(91,84,240,0.42)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
           >
             Get Started
@@ -89,7 +89,7 @@ export function MarketingHeader() {
                 Sign In
               </Link>
               <Link
-                href="/demo"
+                href="/sign-up"
                 onClick={() => setOpen(false)}
                 className="inline-flex h-11 items-center justify-center rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] px-4 text-base font-semibold text-[var(--text-inverse)] shadow-[0_6px_16px_rgba(91,84,240,0.30)]"
               >

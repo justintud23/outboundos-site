@@ -133,6 +133,11 @@ h1, h2, h3, h4, .font-display {
   font-family: var(--font-mono);
 }
 
+/* In-page links (/#features, /#pricing) glide instead of jumping. */
+html {
+  scroll-behavior: smooth;
+}
+
 /* ── Accessibility: reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   *,

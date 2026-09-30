@@ -78,14 +78,14 @@ export function Hero() {
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/demo"
+                href="/sign-up"
                 className="group inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-btn)] bg-[var(--accent-indigo)] px-7 text-base font-semibold text-[var(--text-inverse)] shadow-[0_10px_24px_rgba(91,84,240,0.32)] transition-all hover:bg-[var(--accent-indigo-hover)] hover:shadow-[0_12px_30px_rgba(91,84,240,0.45)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
               >
                 Start free trial
                 <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
-                href="/sign-in"
+                href="/demo"
                 className="inline-flex h-12 items-center justify-center rounded-[var(--radius-btn)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-7 text-base font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-colors hover:border-[var(--text-muted)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
               >
                 Watch 2-min demo

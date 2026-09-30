@@ -54,7 +54,7 @@ const FEATURES = [
 
 export function FeatureGrid() {
   return (
-    <section id="features" className="border-t border-[var(--border-subtle)] py-24 md:py-32">
+    <section id="features" className="scroll-mt-20 border-t border-[var(--border-subtle)] py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-indigo)]">
